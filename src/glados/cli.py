@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 from pathlib import Path
+import asyncio
 
 import requests
 import sounddevice as sd  # type: ignore
@@ -8,6 +9,7 @@ import sounddevice as sd  # type: ignore
 from .engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
+from .twitch import start_twitch_stream, start_twitch_bot
 
 DEFAULT_CONFIG = Path("configs/glados_config.yaml")
 
@@ -28,7 +30,6 @@ MODEL_URLS = {
     "models/TTS/kokoro-voices-v1.0.bin": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/kokoro-voices-v1.0.bin",
     "models/TTS/phomenizer_en.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/phomenizer_en.onnx",
 }
-
 
 assert MODEL_CHECKSUMS.keys() == MODEL_URLS.keys()
 
@@ -114,7 +115,9 @@ def download_models() -> None:
         file.seek(0)
         return sha.hexdigest()
 
-    def download_with_progress(url: str, path: Path, expected_hash: str, max_retries: int = 3) -> None:
+    def download_with_progress(
+        url: str, path: Path, expected_hash: str, max_retries: int = 3
+    ) -> None:
         """Download a file with progress tracking and retry logic."""
         retry_count = 0
         temp_path = path.with_suffix(path.suffix + ".tmp")
@@ -134,7 +137,9 @@ def download_models() -> None:
                     if total_size == 0:
                         print(f"\nDownloading {path.name} (size unknown)")
                     else:
-                        print(f"\nDownloading {path.name} ({total_size / 1024 / 1024:.1f} MB)")
+                        print(
+                            f"\nDownloading {path.name} ({total_size / 1024 / 1024:.1f} MB)"
+                        )
 
                     downloaded_size = 0
                     for chunk in response.iter_content(chunk_size=8192):
@@ -166,10 +171,14 @@ def download_models() -> None:
                 if retry_count < max_retries:
                     wait_time = 2**retry_count  # Exponential backoff
                     print(f"\nError downloading {path.name}: {e!s}")
-                    print(f"Retrying in {wait_time} seconds... (Attempt {retry_count + 1}/{max_retries})")
+                    print(
+                        f"Retrying in {wait_time} seconds... (Attempt {retry_count + 1}/{max_retries})"
+                    )
                     sleep(wait_time)
                 else:
-                    print(f"\nFailed to download {path.name} after {max_retries} attempts: {e!s}")
+                    print(
+                        f"\nFailed to download {path.name} after {max_retries} attempts: {e!s}"
+                    )
                     raise
 
     # Download each model file
@@ -177,7 +186,9 @@ def download_models() -> None:
     for path, is_valid in checksums.items():
         if not is_valid:
             try:
-                download_with_progress(MODEL_URLS[path], Path(path), MODEL_CHECKSUMS[path])
+                download_with_progress(
+                    MODEL_URLS[path], Path(path), MODEL_CHECKSUMS[path]
+                )
             except Exception as e:
                 print(f"Error: Failed to download {path}: {e!s}")
                 sys.exit(1)
@@ -212,7 +223,7 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
     sd.wait()
 
 
-def start(config_path: str | Path = "glados_config.yaml") -> None:
+def start(config_path: str | Path = "glados_config.yaml", mode: str = "audio") -> None:
     """
     Start the GLaDOS voice assistant and initialize its listening event loop.
 
@@ -222,36 +233,89 @@ def start(config_path: str | Path = "glados_config.yaml") -> None:
     Parameters:
         config_path (str | Path, optional): Path to the configuration YAML file.
             Defaults to "glados_config.yaml" in the current directory.
+        mode (str, optional): Interaction mode, either "audio" or "text". Defaults to "audio".
 
     Raises:
         FileNotFoundError: If the specified configuration file cannot be found.
         ValueError: If the configuration file is invalid or cannot be parsed.
 
     Example:
-        start()  # Uses default configuration file
-        start("/path/to/custom/config.yaml")  # Uses a custom configuration file
+        start()  # Uses default configuration file and audio mode
+        start("/path/to/custom/config.yaml", mode="text")  # Uses a custom configuration file and text mode
     """
     glados_config = GladosConfig.from_yaml(str(config_path))
     glados = Glados.from_config(glados_config)
-    glados.start_listen_event_loop()
+
+    if mode == "audio":
+        glados.start_listen_event_loop()
+    elif mode == "text":
+        glados.start_text()
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Must be 'audio' or 'text'.")
 
 
-def tui(config_path: str | Path = "glados_config.yaml") -> None:
+def tui(config_path: str | Path = "glados_config.yaml", mode: str = "audio") -> None:
     """
     Start the GLaDOS voice assistant with a terminal user interface (TUI).
 
     This function initializes the GLaDOS TUI application, which provides decorative
     interface elements for voice interactions.
+
+    Parameters:
+        config_path (str | Path, optional): Path to the configuration YAML file.
+            Defaults to "glados_config.yaml" in the current directory.
+        mode (str, optional): Interaction mode, either "audio" or "text". Defaults to "audio".
     """
 
     import sys
 
     import glados.tui as tui
+
     try:
-        app = tui.GladosUI()
+        app = tui.GladosUI(mode=mode)
         app.run()
     except KeyboardInterrupt:
         sys.exit()
+
+
+def tui_twitch(config_path: str | Path = "glados_config.yaml"):
+    """
+    Run the GladosUI in Twitch mode, streaming the terminal and listening to chat.
+
+    Args:
+        config_path (str | Path): Path to the configuration file. Defaults to "glados_config.yaml".
+    """
+
+    import glados.tui as tui
+
+    # Load Twitch credentials from config (you need to add these to your config file)
+    twitch_config = GladosConfig.from_yaml(str(config_path)).get("twitch", {})
+    token = twitch_config.get("token")  # Twitch OAuth token
+    channel = twitch_config.get("channel")  # Twitch channel name
+    stream_key = twitch_config.get("stream_key")  # Twitch stream key
+    ffmpeg_path = twitch_config.get(
+        "ffmpeg_path", "ffmpeg"
+    )  # Path to ffmpeg executable
+
+    if not token or not channel or not stream_key:
+        raise ValueError(
+            "Twitch credentials (token, channel, stream_key) must be provided in the config file."
+        )
+
+    # Start the GladosUI in Twitch mode
+    glados_ui = tui.GladosUI(mode="twitch")
+    glados_ui.start_glados(mode="twitch")
+
+    # Start the Twitch bot in a separate thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_twitch_bot(glados_ui, token, channel))
+
+    # Start streaming the terminal content to Twitch
+    terminal_width = 80  # Adjust based on your terminal size
+    terminal_height = 24  # Adjust based on your terminal size
+    start_twitch_stream(ffmpeg_path, stream_key, terminal_width, terminal_height)
+
 
 def models_valid() -> bool:
     """
@@ -265,7 +329,9 @@ def models_valid() -> bool:
     """
     results = verify_checksums()
     if not all(results.values()):
-        print("Some model files are missing or invalid. Please run 'uv run glados download'")
+        print(
+            "Some model files are missing or invalid. Please run 'uv run glados download'"
+        )
         return False
     return True
 
@@ -274,10 +340,11 @@ def main() -> None:
     """
     Command-line interface (CLI) entry point for the GLaDOS voice assistant.
 
-    Provides three primary commands:
+    Provides several primary commands:
     - 'download': Download required model files
     - 'start': Launch the GLaDOS voice assistant
     - 'say': Generate speech from input text
+    - 'tui': Start the GLaDOS voice assistant with a terminal user interface
 
     The function sets up argument parsing with optional configuration file paths and handles
     command execution based on user input. If no command is specified, it defaults to starting
@@ -285,6 +352,7 @@ def main() -> None:
 
     Optional Arguments:
         --config (str): Path to configuration file, defaults to 'glados_config.yaml'
+        --mode (str): Interaction mode, either 'audio' or 'text' (default: 'audio')
 
     Raises:
         SystemExit: If invalid arguments are provided
@@ -303,9 +371,25 @@ def main() -> None:
         default=DEFAULT_CONFIG,
         help=f"Path to configuration file (default: {DEFAULT_CONFIG})",
     )
+    start_parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["audio", "text"],
+        default="audio",
+        help="Interaction mode: 'audio' for microphone input, 'text' for terminal input (default: 'audio')",
+    )
 
-    # TUI command   
-    tui_parser = subparsers.add_parser("tui", help="Start GLaDOS voice assistant with TUI")
+    # TUI command
+    tui_parser = subparsers.add_parser(
+        "tui", help="Start GLaDOS voice assistant with TUI"
+    )
+    tui_parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["audio", "text", "twitch"],
+        default="audio",
+        help="Interaction mode: 'audio' for microphone input, 'text' for terminal input, 'twitch' for twitch input (default: 'audio')",
+    )
 
     # Say command
     say_parser = subparsers.add_parser("say", help="Make GLaDOS speak text")
@@ -327,9 +411,9 @@ def main() -> None:
         if args.command == "say":
             say(args.text, args.config)
         elif args.command == "start":
-            start(args.config)
+            start(args.config, args.mode)
         elif args.command == "tui":
-            tui()
+            tui(mode=args.mode if "mode" in args else "audio")
         else:
             # Default to start if no command specified
             start(DEFAULT_CONFIG)

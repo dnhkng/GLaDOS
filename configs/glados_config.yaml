@@ -1,6 +1,6 @@
 Glados:
   completion_url: "http://localhost:11434/api/chat"
-  model: "llama3.2"
+  model: "llama3.2:3b"
   api_key: "Bearer your_api_key_here"
   interruptible: true
   wake_word: null

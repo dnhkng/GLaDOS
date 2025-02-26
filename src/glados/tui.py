@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 import random
 import sys
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from loguru import logger
 from rich.text import Text
@@ -11,12 +11,19 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static
+from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static, Input
 
 from glados.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
 # Custom Widgets
+try:
+    logger.remove(0)
+except ValueError:
+    pass  # Handler with ID 0 does not exist
+
+
+logger.add(sys.stderr, level="INFO")
 
 
 class Printer(RichLog):
@@ -61,7 +68,9 @@ class ScrollingBlocks(Log):
         Returns:
             None
         """
-        random_blocks = " ".join(random.choice(self.BLOCKS) for _ in range(self.size.width - 8))
+        random_blocks = " ".join(
+            random.choice(self.BLOCKS) for _ in range(self.size.width - 8)
+        )
         self.write_line(f"{random_blocks}")
 
     def on_show(self) -> None:
@@ -85,10 +94,10 @@ class Typewriter(Static):
         id: str | None = "",
         speed: float = 0.01,  # time between each character
         repeat: bool = False,  # whether to start again at the end
-        *args: str,
-        **kwargs: str,
+        *args,
+        **kwargs,
     ) -> None:
-        super().__init__(*args, *kwargs)
+        super().__init__(*args, **kwargs)
         self._text = text
         self.__id = id
         self._speed = speed
@@ -100,7 +109,8 @@ class Typewriter(Static):
         yield self._vertical_scroll
 
     def _get_iterator(self) -> Iterator[str]:
-        return (self._text[:i] + "[blink]▃[/]" for i in range(len(self._text) + 1))
+        # Use proper markup for blinking cursor
+        return (self._text[:i] + "[blink]▃[/blink]" for i in range(len(self._text) + 1))
 
     def on_mount(self) -> None:
         self._iter_text = self._get_iterator()
@@ -111,6 +121,7 @@ class Typewriter(Static):
         try:
             if not self._vertical_scroll.is_vertical_scroll_end:
                 self._vertical_scroll.scroll_down()
+            # Update the static widget with the next text
             self._static.update(next(self._iter_text))
         except StopIteration:
             if self._repeat:
@@ -122,6 +133,13 @@ class Typewriter(Static):
 
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
+
+    def __init__(
+        self, mode: Literal["audio", "text"] = "audio", name=None, id=None, classes=None
+    ):
+        super().__init__(name, id, classes)
+        self.mode = mode
+        self.glados_instance = None
 
     with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
         SPLASH_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
@@ -161,24 +179,10 @@ class SplashScreen(Screen[None]):
         self.set_interval(0.5, self.scroll_end)
 
     def on_key(self, event: events.Key) -> None:
-        """
-        Handle key press events on the splash screen.
-
-        This method is triggered when a key is pressed during the splash screen display.
-        If the 'q' key is pressed, it triggers the application quit action.
-        Regardless of the key pressed, it dismisses the current splash screen
-        and starts the main GLADOS application.
-
-        Args:
-            event (events.Key): The key event that was triggered.
-        """
-        # fire her up.....
-
-    def on_key(self, event: events.Key) -> None:
         if event.key == "q":
             self.app.action_quit()  # Use self.app instead of global app
         self.dismiss()
-        self.app.start_glados()  # Use self.app instead of global app
+        self.app.start_glados(mode=self.mode)
 
 
 class HelpScreen(ModalScreen[None]):
@@ -234,6 +238,17 @@ class GladosUI(App[None]):
     with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
         LOGO_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
 
+    def __init__(
+        self,
+        mode: Literal["audio", "text"] = "audio",
+        driver_class=None,
+        css_path=None,
+        watch_css=False,
+        ansi_color=False,
+    ):
+        super().__init__(driver_class, css_path, watch_css, ansi_color)
+        self.mode = mode
+
     def compose(self) -> ComposeResult:
         """
         Compose the user interface layout for the GladosUI application.
@@ -258,7 +273,9 @@ class GladosUI(App[None]):
             with Horizontal():
                 yield (Printer(id="log_area"))
                 with Container(id="utility_area"):
-                    typewriter = Typewriter(recipe, id="recipe", speed=0.01, repeat=True)
+                    typewriter = Typewriter(
+                        recipe, id="recipe", speed=0.01, repeat=True
+                    )
                     yield typewriter
 
         yield Footer()
@@ -271,6 +288,9 @@ class GladosUI(App[None]):
                 yield Digits("1002")
                 yield Digits("45.6")
             yield Label(self.LOGO_ANSI, id="logo_block", classes="block")
+
+        if self.mode == "text":
+            yield Input(placeholder="Type your message here...", id="user_input")
 
     def on_load(self) -> None:
         """
@@ -296,8 +316,8 @@ class GladosUI(App[None]):
         # Cause logger to print all log text. Printed text can then be  captured
         # by the main_log widget
         logger.remove()
-        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | {name}:{function}:{line} - {message}"
-        logger.add(print, format=fmt)
+        fmt = "{time:YYYY-MM-DD HH:mm:ss} | {message}"
+        logger.add(print, format=fmt, level="INFO")
 
     def on_mount(self) -> None:
         """
@@ -311,7 +331,7 @@ class GladosUI(App[None]):
             None: Does not return any value, simply initializes the splash screen.
         """
         # Display the splash screen for a few moments
-        self.push_screen(SplashScreen())
+        self.push_screen(SplashScreen(mode=self.mode))
 
     def action_help(self) -> None:
         """Someone pressed the help key!."""
@@ -320,7 +340,6 @@ class GladosUI(App[None]):
     def on_key(self, event: events.Key) -> None:
         """ "A key is pressed."""
         logger.debug(f"Pressed {event.character}")
-        logger.info("some warning")
 
     def action_quit(self) -> None:  # type: ignore
         """
@@ -340,31 +359,65 @@ class GladosUI(App[None]):
         # self.glados.cancel()
         self.exit()
 
-    def start_glados(self) -> None:
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle user input submission."""
+        if self.mode == "text":
+            user_input = event.value
+            self.send_message_to_llm(user_input=user_input)
+
+    def send_message_to_llm(self, user_input: str, user_name: str = "You"):
+        if user_input.strip():
+            self.query_one("#log_area").write(f"{user_name}: {user_input}")
+            if self.glados_instance:  # Ensure Glados instance exists
+                self.glados_instance.llm_queue.put(user_input)
+
+                self.query_one("#user_input").value = ""
+
+                # Wait for the assistant's response
+                self.glados_instance.processing = True
+                self.glados_instance.currently_speaking.set()
+
+    def start_glados(self, mode: str = "audio") -> None:
         """
         Start the GLaDOS worker thread in the background.
 
         This method initializes a worker thread to run the GLaDOS module's start function.
         The worker is run exclusively and in a separate thread to prevent blocking the main application.
 
-        Notes:
-            - Uses `run_worker` to create a non-blocking background task
-            - Sets the worker as an instance attribute for potential later reference
-            - The `exclusive=True` parameter ensures only one instance of this worker runs at a time
+        Args:
+            mode (str): Interaction mode, either "audio" or "text". Defaults to "audio".
         """
-
         config_path = "configs/glados_config.yaml"
         glados_config = GladosConfig.from_yaml(str(config_path))
-        glados = Glados.from_config(glados_config)
+        self.glados_instance = Glados.from_config(
+            glados_config
+        )  # Store the Glados instance
 
-        self.glados = self.run_worker(glados.start_listen_event_loop, exclusive=False, thread=True)
-        pass
+        if mode == "audio":
+            self.run_worker(
+                self.glados_instance.start_listen_event_loop,
+                exclusive=False,
+                thread=True,
+            )
+        elif mode == "text" or mode == "twitch":
+            pass
+        else:
+            raise ValueError(
+                f"Invalid mode: {mode}. Must be 'audio', 'text' or 'twitch'."
+            )
 
     @classmethod
-    def run_app(cls, config_path: str | Path = "glados_config.yaml") -> None:
-        """Class method to create and run the app instance."""
+    def run_app(
+        cls, config_path: str | Path = "glados_config.yaml", mode: str = "audio"
+    ) -> None:
+        """Class method to create and run the app instance.
+
+        Args:
+            config_path (str | Path): Path to the configuration file. Defaults to "glados_config.yaml".
+            mode (str): Interaction mode, either "audio" or "text". Defaults to "audio".
+        """
         try:
-            app = cls()
+            app = cls(mode=mode)
             app.run()
         except KeyboardInterrupt:
             sys.exit()
