@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 import random
 import sys
+from datetime import datetime
 from typing import ClassVar, Literal
 
 from loguru import logger
@@ -17,13 +18,6 @@ from glados.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
 # Custom Widgets
-try:
-    logger.remove(0)
-except ValueError:
-    pass  # Handler with ID 0 does not exist
-
-
-logger.add(sys.stderr, level="INFO")
 
 
 class Printer(RichLog):
@@ -135,7 +129,11 @@ class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
 
     def __init__(
-        self, mode: Literal["audio", "text"] = "audio", name=None, id=None, classes=None
+        self,
+        mode: Literal["audio", "text", "twitch"] = "audio",
+        name=None,
+        id=None,
+        classes=None,
     ):
         super().__init__(name, id, classes)
         self.mode = mode
@@ -240,7 +238,7 @@ class GladosUI(App[None]):
 
     def __init__(
         self,
-        mode: Literal["audio", "text"] = "audio",
+        mode: Literal["audio", "text", "twitch"] = "audio",
         driver_class=None,
         css_path=None,
         watch_css=False,
@@ -316,7 +314,7 @@ class GladosUI(App[None]):
         # Cause logger to print all log text. Printed text can then be  captured
         # by the main_log widget
         logger.remove()
-        fmt = "{time:YYYY-MM-DD HH:mm:ss} | {message}"
+        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | {name}:{function}:{line} - {message}"
         logger.add(print, format=fmt, level="INFO")
 
     def on_mount(self) -> None:
@@ -331,7 +329,10 @@ class GladosUI(App[None]):
             None: Does not return any value, simply initializes the splash screen.
         """
         # Display the splash screen for a few moments
-        self.push_screen(SplashScreen(mode=self.mode))
+        if self.mode != "twitch":
+            self.push_screen(SplashScreen(mode=self.mode))
+        else:
+            self.start_glados(mode=self.mode)
 
     def action_help(self) -> None:
         """Someone pressed the help key!."""
@@ -361,21 +362,31 @@ class GladosUI(App[None]):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
-        if self.mode == "text":
+        if self.mode == "text" and event.value.strip():
             user_input = event.value
             self.send_message_to_llm(user_input=user_input)
 
     def send_message_to_llm(self, user_input: str, user_name: str = "You"):
         if user_input.strip():
-            self.query_one("#log_area").write(f"{user_name}: {user_input}")
-            if self.glados_instance:  # Ensure Glados instance exists
-                self.glados_instance.llm_queue.put(user_input)
+            # Get the current time and format it as HH:mm
+            current_time = datetime.now().strftime("%H:%M")
 
+            # Update the line to include the timestamp
+            self.query_one("#log_area").write(
+                f"{current_time} | {user_name}: {user_input}"
+            )
+            if self.mode == "text":
                 self.query_one("#user_input").value = ""
+            self._send_message_to_llm(user_input=user_input)
 
-                # Wait for the assistant's response
-                self.glados_instance.processing = True
-                self.glados_instance.currently_speaking.set()
+    def _send_message_to_llm(self, user_input: str):
+        if self.glados_instance:  # Ensure Glados instance exists
+            # Send the message to the LLM queue
+            self.glados_instance.llm_queue.put(user_input)
+
+            # Wait for the assistant's response
+            self.glados_instance.processing = True
+            self.glados_instance.currently_speaking.set()
 
     def start_glados(self, mode: str = "audio") -> None:
         """
@@ -392,14 +403,19 @@ class GladosUI(App[None]):
         self.glados_instance = Glados.from_config(
             glados_config
         )  # Store the Glados instance
-
         if mode == "audio":
             self.run_worker(
-                self.glados_instance.start_listen_event_loop,
+                self.glados_instance.start_listen_event_loop,  # self.glados_instance.start_listen_event_loop,
                 exclusive=False,
                 thread=True,
             )
-        elif mode == "text" or mode == "twitch":
+        elif mode == "twitch":
+            self.run_worker(
+                self.glados_instance.start_auto_talk_loop,
+                exclusive=False,
+                thread=True,
+            )
+        elif mode == "text":
             pass
         else:
             raise ValueError(

@@ -1,134 +1,144 @@
 import asyncio
-import subprocess
-from pathlib import Path
-from typing import Optional
-
+import logging
+import sqlite3
+import asqlite
 import twitchio
 from twitchio.ext import commands
+from twitchio import eventsub
+from .tui import GladosUI
 
-from glados.glados_ui.tui import GladosUI
+LOGGER: logging.Logger = logging.getLogger("TwitchBot")
+
+# Note: this uses twitchio 3.0, please follow the startup tutorial here:
+# https://twitchio.dev/en/latest/getting-started/quickstart.html
+# You should have the file "tokens.db" in this project's root folder
+CLIENT_ID: str = (
+    ""  # The CLIENT ID from the Twitch Dev Console
+)
+CLIENT_SECRET: str = (
+    ""  # The CLIENT SECRET from the Twitch Dev Console
+)
+# Note: use https://www.streamweasels.com/tools/convert-twitch-username-%20to-user-id/ to convert UserName to Twitch ID
+BOT_ID = ""  # The Account ID of the bot user...
+OWNER_ID = ""  # Your personal User ID..
+STREAM_KEY = ""
 
 
 class TwitchBot(commands.Bot):
     def __init__(
-        self, glados_ui: GladosUI, token: str, prefix: str, initial_channels: list[str]
+        self,
+        glados_ui: GladosUI,
+        token_database: asqlite.Pool,
+        prefix: str,
     ):
-        super().__init__(token=token, prefix=prefix, initial_channels=initial_channels)
         self.glados_ui = glados_ui
-
-    async def event_ready(self):
-        print(f"Logged in as | {self.nick}")
-        print(f"User id is | {self.user_id}")
-
-    async def event_message(self, message: twitchio.Message):
-        # Ignore messages from the bot itself
-        if message.author.name.lower() == self.nick.lower():
-            return
-
-        # Send the chat message to GladosUI
-        self.glados_ui.send_message_to_llm(
-            user_input=message.content, user_name=message.author.name
+        self.token_database = token_database
+        super().__init__(
+            client_id=CLIENT_ID,
+            client_secret=CLIENT_SECRET,
+            bot_id=BOT_ID,
+            owner_id=OWNER_ID,
+            prefix=prefix,
         )
 
-    #     # Ensure the bot processes commands as well
-    #     await self.handle_commands(message)
+    async def setup_hook(self) -> None:
+        # Add our component which contains our commands...
+        await self.add_component(TwitchChatListener(self))
 
-    # @commands.command(name="hello")
-    # async def hello(self, ctx: commands.Context):
-    #     await ctx.send(f"Hello {ctx.author.name}!")
+        # Subscribe to read chat (event_message) from our channel as the bot...
+        # This creates and opens a websocket to Twitch EventSub...
+        subscription = eventsub.ChatMessageSubscription(
+            broadcaster_user_id=OWNER_ID, user_id=BOT_ID
+        )
+        await self.subscribe_websocket(payload=subscription)
+
+    async def add_token(
+        self, token: str, refresh: str
+    ) -> twitchio.authentication.ValidateTokenPayload:
+        # Make sure to call super() as it will add the tokens internally and return us some data...
+        resp: twitchio.authentication.ValidateTokenPayload = await super().add_token(
+            token, refresh
+        )
+
+        # Store our tokens in a simple SQLite Database when they are authorized...
+        query = """
+        INSERT INTO tokens (user_id, token, refresh)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id)
+        DO UPDATE SET
+            token = excluded.token,
+            refresh = excluded.refresh;
+        """
+
+        async with self.token_database.acquire() as connection:
+            await connection.execute(query, (resp.user_id, token, refresh))
+
+        LOGGER.info("Added token to the database for user: %s", resp.user_id)
+        return resp
+
+    async def load_tokens(self, path: str | None = None) -> None:
+        # We don't need to call this manually, it is called in .login() from .start() internally...
+
+        async with self.token_database.acquire() as connection:
+            rows: list[sqlite3.Row] = await connection.fetchall(
+                """SELECT * from tokens"""
+            )
+
+        for row in rows:
+            await self.add_token(row["token"], row["refresh"])
+
+    async def setup_database(self) -> None:
+        # Create our token table, if it doesn't exist..
+        query = """CREATE TABLE IF NOT EXISTS tokens(user_id TEXT PRIMARY KEY, token TEXT NOT NULL, refresh TEXT NOT NULL)"""
+        async with self.token_database.acquire() as connection:
+            await connection.execute(query)
+
+    async def event_ready(self) -> None:
+        LOGGER.info("Successfully logged in as: %s", self.bot_id)
 
 
-async def start_twitch_bot(glados_ui: GladosUI, token: str, channel: str):
-    import sys
+class TwitchChatListener(commands.Component):
+    def __init__(self, bot: TwitchBot):
+        self.bot = bot
+
+    # @commands.Component.listener()
+    # async def event_message(self, payload: twitchio.ChatMessage) -> None:
+    #     self.bot.glados_ui.send_message_to_llm(
+    #         user_input=payload.text, user_name=payload.chatter.name
+    #     )
+
+    @commands.command(aliases=["chat"])
+    async def hi(self, ctx: commands.Context) -> None:
+        """Command to interact with GlaDOS!
+
+        !chat
+        """
+        message: str = ctx.message.text.strip()
+        if message.startswith("!chat"):
+            message = message[len("!chat") :].strip()
+        self.bot.glados_ui.send_message_to_llm(
+            user_input=message, user_name=ctx.chatter.display_name
+        )
+
+
+async def start_twitch_bot(glados_ui: GladosUI):
+    twitchio.utils.setup_logging(level=logging.INFO)
+
+    async def runner() -> None:
+        async with asqlite.create_pool("tokens.db") as tdb:
+            bot = TwitchBot(
+                glados_ui=glados_ui,
+                token_database=tdb,
+                prefix="!",
+            )
+            await bot.setup_database()  # Ensure the database is set up
+            await bot.start()
 
     try:
-        bot = TwitchBot(
-            glados_ui=glados_ui, token=token, prefix="!", initial_channels=[channel]
-        )
-        await bot.start()
+        await runner()
     except KeyboardInterrupt:
-        sys.exit()
-
-
-def start_twitch_stream(
-    ffmpeg_path: str, stream_key: str, terminal_width: int, terminal_height: int
-):
-    """
-    Start streaming the terminal content to Twitch using ffmpeg.
-
-    Args:
-        ffmpeg_path (str): Path to the ffmpeg executable.
-        stream_key (str): Twitch stream key.
-        terminal_width (int): Width of the terminal to capture.
-        terminal_height (int): Height of the terminal to capture.
-    """
-    command = [
-        ffmpeg_path,
-        "-f",
-        "x11grab",  # Capture from X11 display
-        "-video_size",
-        f"{terminal_width}x{terminal_height}",  # Terminal size
-        "-framerate",
-        "30",  # Frame rate
-        "-i",
-        ":0.0",  # Display to capture (default is :0.0)
-        "-f",
-        "flv",  # Output format
-        "-c:v",
-        "libx264",  # Video codec
-        "-preset",
-        "veryfast",  # Encoding speed/quality tradeoff
-        "-maxrate",
-        "3000k",  # Max bitrate
-        "-bufsize",
-        "6000k",  # Buffer size
-        "-pix_fmt",
-        "yuv420p",  # Pixel format
-        "-g",
-        "60",  # Keyframe interval
-        "-f",
-        "flv",  # Output format
-        f"rtmp://live.twitch.tv/app/{stream_key}",  # Twitch RTMP URL
-    ]
-
-    subprocess.run(command, check=True)
-
-
-def run_twitch_mode(config_path: str | Path = "glados_config.yaml"):
-    """
-    Run the GladosUI in Twitch mode, streaming the terminal and listening to chat.
-
-    Args:
-        config_path (str | Path): Path to the configuration file. Defaults to "glados_config.yaml".
-    """
-    # Load Twitch credentials from config (you need to add these to your config file)
-    twitch_config = GladosConfig.from_yaml(str(config_path)).get("twitch", {})
-    token = twitch_config.get("token")  # Twitch OAuth token
-    channel = twitch_config.get("channel")  # Twitch channel name
-    stream_key = twitch_config.get("stream_key")  # Twitch stream key
-    ffmpeg_path = twitch_config.get(
-        "ffmpeg_path", "ffmpeg"
-    )  # Path to ffmpeg executable
-
-    if not token or not channel or not stream_key:
-        raise ValueError(
-            "Twitch credentials (token, channel, stream_key) must be provided in the config file."
-        )
-
-    # Start the GladosUI in Twitch mode
-    glados_ui = GladosUI(mode="twitch")
-    glados_ui.start_glados(mode="twitch")
-
-    # Start the Twitch bot in a separate thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_twitch_bot(glados_ui, token, channel))
-
-    # Start streaming the terminal content to Twitch
-    terminal_width = 80  # Adjust based on your terminal size
-    terminal_height = 24  # Adjust based on your terminal size
-    start_twitch_stream(ffmpeg_path, stream_key, terminal_width, terminal_height)
+        LOGGER.warning("Shutting down due to KeyboardInterrupt...")
 
 
 if __name__ == "__main__":
-    run_twitch_mode()
+    asyncio.run(start_twitch_bot(GladosUI()))

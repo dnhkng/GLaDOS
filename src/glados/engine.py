@@ -25,11 +25,11 @@ from .utils import spoken_text_converter as stc
 
 try:
     logger.remove(0)
-except ValueError:
-    pass  # Handler with ID 0 does not exist
+except:
+    # no logger to remove
+    pass
 
-
-logger.add(sys.stderr, level="INFO")
+logger.add(sys.stderr, level="SUCCESS")
 
 
 class PersonalityPrompt(BaseModel):
@@ -173,6 +173,7 @@ class Glados:
         self._tts = tts_model
         self._asr_model = asr_model
         self._stc = stc.SpokenTextConverter()
+        self.last_message_time = time.time()
 
         # warm up onnx ASR model
         self._asr_model.transcribe_file("data/0.wav")
@@ -388,12 +389,63 @@ class Glados:
                 self.currently_speaking.set()
 
                 # Wait until the assistant finishes speaking
-                while self.currently_speaking.is_set():
-                    continue
+                self.currently_speaking.wait()
 
             except KeyboardInterrupt:
                 logger.info("Exiting text-based interaction.")
                 break
+
+    def start_auto_talk_loop(
+        self,
+        max_silence_time: int = 40,
+        prompt: str = "keep talking please...",
+    ) -> None:
+        """
+        Start a Twitch-like interaction loop that ensures the assistant keeps talking.
+
+        This method continuously monitors the time since the last message was sent to the LLM.
+        If the time since the last message exceeds `max_silence_time`, it automatically sends
+        a "keep talking" message to the LLM to maintain the conversation.
+
+        Args:
+            max_silence_time (int): Maximum allowed silence time in seconds before sending a "keep talking" message.
+                                Defaults to 30 seconds.
+
+        Behavior:
+            - Continuously checks the time since the last message was sent to the LLM.
+            - If the silence time exceeds `max_silence_time`, sends a "keep talking" message to the LLM.
+            - Runs in an infinite loop until the shutdown event is set.
+
+        Raises:
+            KeyboardInterrupt: Allows graceful termination of the loop.
+        """
+        logger.debug("Starting Twitch-like interaction loop...")
+        self.last_message_time = time.time()  # Initialize the last message time
+
+        try:
+            while not self.shutdown_event.is_set():
+                current_time = time.time()
+                time_since_last_message = current_time - self.last_message_time
+
+                if time_since_last_message > max_silence_time:
+                    logger.debug(
+                        f"No message for {max_silence_time} seconds. Sending 'keep talking' prompt."
+                    )
+                    self.llm_queue.put(prompt)
+                    # Reset the last message time
+                    self.last_message_time = time.time()
+                    # Wait for the assistant's response
+                    self.processing = True
+                    self.currently_speaking.set()
+
+                    # Wait until the assistant finishes speaking
+                    self.currently_speaking.wait()
+
+                time.sleep(1)  # Sleep for a short duration to avoid busy-waiting
+
+        except KeyboardInterrupt:
+            logger.info("Exiting Twitch-like interaction loop.")
+            self.shutdown_event.set()
 
     def _handle_audio_sample(
         self, sample: NDArray[np.float32], vad_confidence: bool
@@ -706,6 +758,10 @@ class Glados:
                     "model": self.model,
                     "stream": True,
                     "messages": self.messages,
+                    "options": {
+                        "num_ctx": 256,
+                        "temperature": 0.8,
+                    },
                 }
                 logger.debug(f"starting request on {self.messages=}")
                 logger.debug("Performing request to LLM server...")
@@ -744,7 +800,7 @@ class Glados:
                                             ]
                                             and sentence[-2].isdigit() is False
                                         ):  # Don't split on numbers!
-                                            logger.debug(f"Chunk: {chunk}")
+                                            logger.info(f"Chunk: {chunk}")
                                             self._process_sentence(sentence)
                                             sentence = []
                             except Exception as e:
@@ -875,18 +931,20 @@ class Glados:
                 elif not generated_text:
                     logger.warning("Empty string sent to TTS")
                 else:
-                    logger.debug(f"LLM text: {generated_text}")
+                    logger.info(f"LLM text: {generated_text}")
 
                     start = time.time()
                     spoken_text = self._stc.text_to_spoken(generated_text)
                     audio = self._tts.generate_speech_audio(spoken_text)
-                    logger.debug(
+                    logger.info(
                         f"TTS Complete, inference: {(time.time() - start):.2f}, "
                         f"length: {len(audio) / self._tts.sample_rate:.2f}s"
                     )
 
                     if len(audio):
                         self.audio_queue.put(AudioMessage(audio, spoken_text))
+
+                    self.last_message_time = time.time()
 
             except queue.Empty:
                 pass
@@ -1028,6 +1086,8 @@ def start() -> None:
         glados.start_listen_event_loop()
     elif args.mode == "text":
         glados.start_text()
+    elif args.mode == "twitch":
+        glados.start_auto_talk_loop()
 
 
 if __name__ == "__main__":

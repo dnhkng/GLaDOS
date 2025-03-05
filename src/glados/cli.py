@@ -9,7 +9,7 @@ import sounddevice as sd  # type: ignore
 from .engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
-from .twitch import start_twitch_stream, start_twitch_bot
+from .twitch import start_twitch_bot
 
 DEFAULT_CONFIG = Path("configs/glados_config.yaml")
 
@@ -250,6 +250,8 @@ def start(config_path: str | Path = "glados_config.yaml", mode: str = "audio") -
         glados.start_listen_event_loop()
     elif mode == "text":
         glados.start_text()
+    elif mode == "twitch":
+        glados.start_auto_talk_loop()
     else:
         raise ValueError(f"Invalid mode: {mode}. Must be 'audio' or 'text'.")
 
@@ -278,43 +280,43 @@ def tui(config_path: str | Path = "glados_config.yaml", mode: str = "audio") -> 
         sys.exit()
 
 
-def tui_twitch(config_path: str | Path = "glados_config.yaml"):
+async def tui_twitch(config_path: str | Path = "glados_config.yaml") -> None:
     """
-    Run the GladosUI in Twitch mode, streaming the terminal and listening to chat.
+    Run the GladosUI in Twitch mode and listening to chat (streaming is done in the bash script directly with ffmpeg).
 
     Args:
         config_path (str | Path): Path to the configuration file. Defaults to "glados_config.yaml".
     """
-
+    import os
     import glados.tui as tui
+    import sys
 
-    # Load Twitch credentials from config (you need to add these to your config file)
-    twitch_config = GladosConfig.from_yaml(str(config_path)).get("twitch", {})
-    token = twitch_config.get("token")  # Twitch OAuth token
-    channel = twitch_config.get("channel")  # Twitch channel name
-    stream_key = twitch_config.get("stream_key")  # Twitch stream key
-    ffmpeg_path = twitch_config.get(
-        "ffmpeg_path", "ffmpeg"
-    )  # Path to ffmpeg executable
+    try:
 
-    if not token or not channel or not stream_key:
-        raise ValueError(
-            "Twitch credentials (token, channel, stream_key) must be provided in the config file."
-        )
+        # Initialize the GladosUI in Twitch mode
+        glados_ui = tui.GladosUI(mode="twitch")
 
-    # Start the GladosUI in Twitch mode
-    glados_ui = tui.GladosUI(mode="twitch")
-    glados_ui.start_glados(mode="twitch")
+        # Start the Twitch bot as a concurrent task
+        bot_task = asyncio.create_task(start_twitch_bot(glados_ui=glados_ui))
 
-    # Start the Twitch bot in a separate thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_twitch_bot(glados_ui, token, channel))
+        # Set a unique title for the current terminal window
+        unique_title = f"GladosTwitchStream_{os.getpid()}"
+        print(
+            f"\033]0;{unique_title}\007", flush=True
+        )  # Set terminal title using escape sequence
 
-    # Start streaming the terminal content to Twitch
-    terminal_width = 80  # Adjust based on your terminal size
-    terminal_height = 24  # Adjust based on your terminal size
-    start_twitch_stream(ffmpeg_path, stream_key, terminal_width, terminal_height)
+        # Give streaming time to initialize
+        await asyncio.sleep(2)
+
+        # This start the auto talk, comment it if you don't want this feature
+        # Run the GladosUI application
+        await glados_ui.run_async()
+
+    except KeyboardInterrupt:
+        sys.exit()
+
+    # Wait for the bot task to complete
+    await bot_task
 
 
 def models_valid() -> bool:
@@ -374,9 +376,9 @@ def main() -> None:
     start_parser.add_argument(
         "--mode",
         type=str,
-        choices=["audio", "text"],
+        choices=["audio", "text", "twitch"],
         default="audio",
-        help="Interaction mode: 'audio' for microphone input, 'text' for terminal input (default: 'audio')",
+        help="Interaction mode: 'audio' for microphone input, 'text', 'twitch' for terminal input (default: 'audio')",
     )
 
     # TUI command
@@ -413,7 +415,10 @@ def main() -> None:
         elif args.command == "start":
             start(args.config, args.mode)
         elif args.command == "tui":
-            tui(mode=args.mode if "mode" in args else "audio")
+            if args.mode == "twitch":
+                asyncio.run(tui_twitch())
+            else:
+                tui(mode=args.mode if "mode" in args else "audio")
         else:
             # Default to start if no command specified
             start(DEFAULT_CONFIG)

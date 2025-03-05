@@ -9,7 +9,7 @@ dependencies = [
     "loguru>=0.7.3",
     "jinja2>=3.1.5",
     "requests>=2.32.3",
-    "textual>=1.0.0",
+    "textual>=1.0.0,<2.0.0",
     "pyyaml>=6.0.2",
     "numba>=0.61.0",
     "soundfile>=0.13.0",
@@ -20,7 +20,10 @@ dependencies = [
 cuda = ["onnxruntime-gpu>=1.16.0"]
 cpu = ["onnxruntime>=1.16.0"]
 dev = ["pytest", "ruff", "ipykernel", "types-requests", "types-PyYAML"]
-
+twitch = [
+    "twitchio[starlette] (>=3.0.0b3,<4.0.0)",
+    "asqlite @ git+https://github.com/Rapptz/asqlite.git",
+]
 
 [project.scripts]
 glados = "glados.cli:main"
@@ -91,3 +94,6 @@ line-ending = "auto"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[tool.poetry.dependencies]
+twitchio = {allow-prereleases = true}
