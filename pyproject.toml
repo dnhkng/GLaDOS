@@ -40,6 +40,13 @@ build-backend = "hatchling.build"
 line-length = 120
 indent-width = 4
 
+[tool.black]
+line-length = 120
+
+[tool.isort]
+line_length = 120
+
+
 # Enable all rules, including those that replace Black and isort
 lint.extend-select = [
     "E",   # pycodestyle errors

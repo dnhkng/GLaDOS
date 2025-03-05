@@ -115,9 +115,7 @@ def download_models() -> None:
         file.seek(0)
         return sha.hexdigest()
 
-    def download_with_progress(
-        url: str, path: Path, expected_hash: str, max_retries: int = 3
-    ) -> None:
+    def download_with_progress(url: str, path: Path, expected_hash: str, max_retries: int = 3) -> None:
         """Download a file with progress tracking and retry logic."""
         retry_count = 0
         temp_path = path.with_suffix(path.suffix + ".tmp")
@@ -137,9 +135,7 @@ def download_models() -> None:
                     if total_size == 0:
                         print(f"\nDownloading {path.name} (size unknown)")
                     else:
-                        print(
-                            f"\nDownloading {path.name} ({total_size / 1024 / 1024:.1f} MB)"
-                        )
+                        print(f"\nDownloading {path.name} ({total_size / 1024 / 1024:.1f} MB)")
 
                     downloaded_size = 0
                     for chunk in response.iter_content(chunk_size=8192):
@@ -171,14 +167,10 @@ def download_models() -> None:
                 if retry_count < max_retries:
                     wait_time = 2**retry_count  # Exponential backoff
                     print(f"\nError downloading {path.name}: {e!s}")
-                    print(
-                        f"Retrying in {wait_time} seconds... (Attempt {retry_count + 1}/{max_retries})"
-                    )
+                    print(f"Retrying in {wait_time} seconds... (Attempt {retry_count + 1}/{max_retries})")
                     sleep(wait_time)
                 else:
-                    print(
-                        f"\nFailed to download {path.name} after {max_retries} attempts: {e!s}"
-                    )
+                    print(f"\nFailed to download {path.name} after {max_retries} attempts: {e!s}")
                     raise
 
     # Download each model file
@@ -186,9 +178,7 @@ def download_models() -> None:
     for path, is_valid in checksums.items():
         if not is_valid:
             try:
-                download_with_progress(
-                    MODEL_URLS[path], Path(path), MODEL_CHECKSUMS[path]
-                )
+                download_with_progress(MODEL_URLS[path], Path(path), MODEL_CHECKSUMS[path])
             except Exception as e:
                 print(f"Error: Failed to download {path}: {e!s}")
                 sys.exit(1)
@@ -301,9 +291,7 @@ async def tui_twitch(config_path: str | Path = "glados_config.yaml") -> None:
 
         # Set a unique title for the current terminal window
         unique_title = f"GladosTwitchStream_{os.getpid()}"
-        print(
-            f"\033]0;{unique_title}\007", flush=True
-        )  # Set terminal title using escape sequence
+        print(f"\033]0;{unique_title}\007", flush=True)  # Set terminal title using escape sequence
 
         # Give streaming time to initialize
         await asyncio.sleep(2)
@@ -331,9 +319,7 @@ def models_valid() -> bool:
     """
     results = verify_checksums()
     if not all(results.values()):
-        print(
-            "Some model files are missing or invalid. Please run 'uv run glados download'"
-        )
+        print("Some model files are missing or invalid. Please run 'uv run glados download'")
         return False
     return True
 
@@ -382,9 +368,7 @@ def main() -> None:
     )
 
     # TUI command
-    tui_parser = subparsers.add_parser(
-        "tui", help="Start GLaDOS voice assistant with TUI"
-    )
+    tui_parser = subparsers.add_parser("tui", help="Start GLaDOS voice assistant with TUI")
     tui_parser.add_argument(
         "--mode",
         type=str,

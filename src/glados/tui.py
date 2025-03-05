@@ -62,9 +62,7 @@ class ScrollingBlocks(Log):
         Returns:
             None
         """
-        random_blocks = " ".join(
-            random.choice(self.BLOCKS) for _ in range(self.size.width - 8)
-        )
+        random_blocks = " ".join(random.choice(self.BLOCKS) for _ in range(self.size.width - 8))
         self.write_line(f"{random_blocks}")
 
     def on_show(self) -> None:
@@ -271,9 +269,7 @@ class GladosUI(App[None]):
             with Horizontal():
                 yield (Printer(id="log_area"))
                 with Container(id="utility_area"):
-                    typewriter = Typewriter(
-                        recipe, id="recipe", speed=0.01, repeat=True
-                    )
+                    typewriter = Typewriter(recipe, id="recipe", speed=0.01, repeat=True)
                     yield typewriter
 
         yield Footer()
@@ -372,9 +368,7 @@ class GladosUI(App[None]):
             current_time = datetime.now().strftime("%H:%M")
 
             # Update the line to include the timestamp
-            self.query_one("#log_area").write(
-                f"{current_time} | {user_name}: {user_input}"
-            )
+            self.query_one("#log_area").write(f"{current_time} | {user_name}: {user_input}")
             if self.mode == "text":
                 self.query_one("#user_input").value = ""
             self._send_message_to_llm(user_input=user_input)
@@ -400,9 +394,7 @@ class GladosUI(App[None]):
         """
         config_path = "configs/glados_config.yaml"
         glados_config = GladosConfig.from_yaml(str(config_path))
-        self.glados_instance = Glados.from_config(
-            glados_config
-        )  # Store the Glados instance
+        self.glados_instance = Glados.from_config(glados_config)  # Store the Glados instance
         if mode == "audio":
             self.run_worker(
                 self.glados_instance.start_listen_event_loop,  # self.glados_instance.start_listen_event_loop,
@@ -418,14 +410,10 @@ class GladosUI(App[None]):
         elif mode == "text":
             pass
         else:
-            raise ValueError(
-                f"Invalid mode: {mode}. Must be 'audio', 'text' or 'twitch'."
-            )
+            raise ValueError(f"Invalid mode: {mode}. Must be 'audio', 'text' or 'twitch'.")
 
     @classmethod
-    def run_app(
-        cls, config_path: str | Path = "glados_config.yaml", mode: str = "audio"
-    ) -> None:
+    def run_app(cls, config_path: str | Path = "glados_config.yaml", mode: str = "audio") -> None:
         """Class method to create and run the app instance.
 
         Args:

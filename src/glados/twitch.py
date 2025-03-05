@@ -12,12 +12,8 @@ LOGGER: logging.Logger = logging.getLogger("TwitchBot")
 # Note: this uses twitchio 3.0, please follow the startup tutorial here:
 # https://twitchio.dev/en/latest/getting-started/quickstart.html
 # You should have the file "tokens.db" in this project's root folder
-CLIENT_ID: str = (
-    ""  # The CLIENT ID from the Twitch Dev Console
-)
-CLIENT_SECRET: str = (
-    ""  # The CLIENT SECRET from the Twitch Dev Console
-)
+CLIENT_ID: str = ""  # The CLIENT ID from the Twitch Dev Console
+CLIENT_SECRET: str = ""  # The CLIENT SECRET from the Twitch Dev Console
 # Note: use https://www.streamweasels.com/tools/convert-twitch-username-%20to-user-id/ to convert UserName to Twitch ID
 BOT_ID = ""  # The Account ID of the bot user...
 OWNER_ID = ""  # Your personal User ID..
@@ -47,18 +43,12 @@ class TwitchBot(commands.Bot):
 
         # Subscribe to read chat (event_message) from our channel as the bot...
         # This creates and opens a websocket to Twitch EventSub...
-        subscription = eventsub.ChatMessageSubscription(
-            broadcaster_user_id=OWNER_ID, user_id=BOT_ID
-        )
+        subscription = eventsub.ChatMessageSubscription(broadcaster_user_id=OWNER_ID, user_id=BOT_ID)
         await self.subscribe_websocket(payload=subscription)
 
-    async def add_token(
-        self, token: str, refresh: str
-    ) -> twitchio.authentication.ValidateTokenPayload:
+    async def add_token(self, token: str, refresh: str) -> twitchio.authentication.ValidateTokenPayload:
         # Make sure to call super() as it will add the tokens internally and return us some data...
-        resp: twitchio.authentication.ValidateTokenPayload = await super().add_token(
-            token, refresh
-        )
+        resp: twitchio.authentication.ValidateTokenPayload = await super().add_token(token, refresh)
 
         # Store our tokens in a simple SQLite Database when they are authorized...
         query = """
@@ -80,9 +70,7 @@ class TwitchBot(commands.Bot):
         # We don't need to call this manually, it is called in .login() from .start() internally...
 
         async with self.token_database.acquire() as connection:
-            rows: list[sqlite3.Row] = await connection.fetchall(
-                """SELECT * from tokens"""
-            )
+            rows: list[sqlite3.Row] = await connection.fetchall("""SELECT * from tokens""")
 
         for row in rows:
             await self.add_token(row["token"], row["refresh"])
@@ -116,9 +104,7 @@ class TwitchChatListener(commands.Component):
         message: str = ctx.message.text.strip()
         if message.startswith("!chat"):
             message = message[len("!chat") :].strip()
-        self.bot.glados_ui.send_message_to_llm(
-            user_input=message, user_name=ctx.chatter.display_name
-        )
+        self.bot.glados_ui.send_message_to_llm(user_input=message, user_name=ctx.chatter.display_name)
 
 
 async def start_twitch_bot(glados_ui: GladosUI):
