@@ -172,6 +172,9 @@ The users can interact with GLaDOS via the Twitch chat using the command  `!chat
 3. Follow the quickstart from twitchio 3.0 here: https://twitchio.dev/en/latest/getting-started/quickstart.html to setup the constants (CLIENT_ID, CLIENT_SECRET, BOT_ID, OWNER_ID, STREAM_KEY) in `src/glados/twitch.py` and setup your OAuth tokens (you should have the `tokens.db` file created in this project's root folder). 
 4. Run `./scripts/start_twitch_stream.sh`
 
+Example of a deployed glados instance on twitch:
+[Twitch GLaDOS channel](https://www.twitch.tv/glados_chat/)
+
 ## Common Issues
 1. If you find you are getting stuck in loops, as GLaDOS is hearing herself speak, you have two options:
    1. Solve this by upgrading your hardware. You need to you either headphone, so she can't physically hear herself speak, or a conference-style room microphone/speaker. These have hardware sound cancellation, and prevent these loops.
