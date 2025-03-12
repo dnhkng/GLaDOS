@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y \
 RUN pip install uv
 
 WORKDIR /app
-COPY pyproject.toml uv.lock .python-version README.md ./
+COPY pyproject.toml README.md ./
 COPY models/ ./models/
 COPY src/ ./src/
 
-RUN uv sync --extra api --extra cpu --no-dev --frozen \
+RUN uv sync --extra api --extra cpu --no-dev \
   && uv run glados download
 
 EXPOSE 5050
