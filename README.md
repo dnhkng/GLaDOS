@@ -165,7 +165,7 @@ Then run the server with:
 
     ./scripts/serve
 
-Alternatively you can run the server in Docker:
+Alternatively, you can run the server in Docker:
 
     docker compose up -d --build
 
