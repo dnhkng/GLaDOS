@@ -12,6 +12,8 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..utils.resources import resource_path
+
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(4)
 
@@ -28,8 +30,6 @@ class ModelConfig:
     USE_CUDA: bool = True
 
     def __post_init__(self) -> None:
-        from ..utils.resources import resource_path
-        
         if self.MODEL_NAME is None:
             self.MODEL_NAME = resource_path("models/TTS/phomenizer_en.onnx")
         if self.PHONEME_DICT_PATH is None:
