@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 import soundfile as sf  # type: ignore
 
+from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator
 
 # Default OnnxRuntime is way to verbose
@@ -12,8 +13,8 @@ ort.set_default_logger_severity(4)
 
 
 class AudioTranscriber:
-    MODEL_PATH = Path("./models/ASR/nemo-parakeet_tdt_ctc_110m.onnx")
-    TOKEN_PATH = Path("./models/ASR/nemo-parakeet_tdt_ctc_110m_tokens.txt")
+    MODEL_PATH = resource_path("models/ASR/nemo-parakeet_tdt_ctc_110m.onnx")
+    TOKEN_PATH = resource_path("models/ASR/nemo-parakeet_tdt_ctc_110m_tokens.txt")
 
     def __init__(
         self,

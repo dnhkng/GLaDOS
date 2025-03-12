@@ -22,6 +22,7 @@ import yaml
 from .ASR import VAD, AudioTranscriber
 from .TTS import tts_glados, tts_kokoro
 from .utils import spoken_text_converter as stc
+from .utils.resources import resource_path
 
 logger.remove(0)
 logger.add(sys.stderr, level="SUCCESS")
@@ -164,7 +165,7 @@ class Glados:
         self._stc = stc.SpokenTextConverter()
 
         # warm up onnx ASR model
-        self._asr_model.transcribe_file("data/0.wav")
+        self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
         # LLAMA_SERVER_HEADERS
         self.prompt_headers = {

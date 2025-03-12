@@ -13,6 +13,6 @@ def get_package_root() -> Path:
     # Go up to the project root (src/glados -> src -> project_root)
     return package_dir.parent.parent
 
-def model_path(relative_path: str) -> Path:
+def resource_path(relative_path: str) -> Path:
     """Return absolute path to a model file."""
-    return get_package_root() / "models" / relative_path
+    return get_package_root() / relative_path

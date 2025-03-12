@@ -4,13 +4,14 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..utils.resources import resource_path
 from .phonemizer import Phonemizer
 
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(3)
 
 
-VOICES_PATH = Path("./models/TTS/kokoro-voices-v1.0.bin")
+VOICES_PATH = resource_path("models/TTS/kokoro-voices-v1.0.bin")
 
 
 def get_voices(path: Path = VOICES_PATH) -> list[str]:
@@ -22,7 +23,7 @@ def get_voices(path: Path = VOICES_PATH) -> list[str]:
 
 
 class Synthesizer:
-    MODEL_PATH: Path = Path("./models/TTS/kokoro-v1.0.fp16.onnx")
+    MODEL_PATH: Path = resource_path("models/TTS/kokoro-v1.0.fp16.onnx")
     DEFAULT_VOICE: str = "af_alloy"
 
     MAX_PHONEME_LENGTH: int = 510

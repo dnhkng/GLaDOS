@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
-from ..utils.resources import model_path
+from ..utils.resources import resource_path
 
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(4)
@@ -20,10 +20,10 @@ ort.set_default_logger_severity(4)
 
 @dataclass
 class ModelConfig:
-    MODEL_NAME: Path = model_path("TTS/phomenizer_en.onnx")
-    PHONEME_DICT_PATH: Path = model_path("TTS/lang_phoneme_dict.pkl")
-    TOKEN_TO_IDX_PATH: Path = model_path("TTS/token_to_idx.pkl")
-    IDX_TO_TOKEN_PATH: Path = model_path("TTS/idx_to_token.pkl")
+    MODEL_NAME: Path = resource_path("models/TTS/phomenizer_en.onnx")
+    PHONEME_DICT_PATH: Path = resource_path("models/TTS/lang_phoneme_dict.pkl")
+    TOKEN_TO_IDX_PATH: Path = resource_path("models/TTS/token_to_idx.pkl")
+    IDX_TO_TOKEN_PATH: Path = resource_path("models/TTS/idx_to_token.pkl")
     CHAR_REPEATS: int = 3
     MODEL_INPUT_LENGTH: int = 64
     EXPAND_ACRONYMS: bool = False

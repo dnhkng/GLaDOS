@@ -4,12 +4,14 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort
 
+from ..utils.resources import resource_path
+
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(4)
 
 
 class VAD:
-    VAD_MODEL: Path = Path("./models/ASR/silero_vad_v5.onnx")
+    VAD_MODEL: Path = resource_path("models/ASR/silero_vad_v5.onnx")
     SAMPLE_RATE: int = 16000  # or 8000 only!
 
     def __init__(self, model_path: Path = VAD_MODEL) -> None:

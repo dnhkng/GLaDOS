@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
-from ..utils.resources import model_path
+from ..utils.resources import resource_path
 from .phonemizer import Phonemizer
 
 # Default OnnxRuntime is way to verbose
@@ -134,8 +134,8 @@ class Synthesizer:
     MAX_WAV_VALUE = 32767.0
 
     # Settings
-    MODEL_PATH = model_path("TTS/glados.onnx")
-    PHONEME_TO_ID_PATH = model_path("TTS/phoneme_to_id.pkl")
+    MODEL_PATH = resource_path("models/TTS/glados.onnx")
+    PHONEME_TO_ID_PATH = resource_path("models/TTS/phoneme_to_id.pkl")
     USE_CUDA = True
 
     # Conversions

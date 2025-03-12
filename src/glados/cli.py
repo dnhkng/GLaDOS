@@ -8,8 +8,9 @@ import sounddevice as sd  # type: ignore
 from .engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
+from .utils.resources import resource_path
 
-DEFAULT_CONFIG = Path("configs/glados_config.yaml")
+DEFAULT_CONFIG = resource_path("configs/glados_config.yaml")
 
 MODEL_CHECKSUMS = {
     "models/ASR/nemo-parakeet_tdt_ctc_110m.onnx": "313705ff6f897696ddbe0d92b5ffadad7429a47d2ddeef370e6f59248b1e8fb5",
@@ -58,13 +59,13 @@ def verify_checksums() -> dict[str, bool]:
     """
     results = {}
     for path, expected in MODEL_CHECKSUMS.items():
-        model_path = Path(path)
-        if not model_path.exists():
+        path_to_model = resource_path(path)
+        if not path_to_model.exists():
             results[path] = False
             continue
 
         sha = hashlib.sha256()
-        sha.update(model_path.read_bytes())
+        sha.update(path_to_model.read_bytes())
         results[path] = sha.hexdigest() == expected
 
     return results
