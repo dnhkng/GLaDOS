@@ -20,7 +20,7 @@ dependencies = [
 cuda = ["onnxruntime-gpu>=1.16.0"]
 cpu = ["onnxruntime>=1.16.0"]
 dev = ["pytest", "ruff", "ipykernel", "types-requests", "types-PyYAML"]
-
+api = ["litestar[standard,structlog]>=2.15.1"]
 
 [project.scripts]
 glados = "glados.cli:main"
