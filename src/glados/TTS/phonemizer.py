@@ -12,23 +12,32 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
-from ..utils.resources import resource_path
-
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(4)
 
 
 @dataclass
 class ModelConfig:
-    MODEL_NAME: Path = resource_path("models/TTS/phomenizer_en.onnx")
-    PHONEME_DICT_PATH: Path = resource_path("models/TTS/lang_phoneme_dict.pkl")
-    TOKEN_TO_IDX_PATH: Path = resource_path("models/TTS/token_to_idx.pkl")
-    IDX_TO_TOKEN_PATH: Path = resource_path("models/TTS/idx_to_token.pkl")
+    MODEL_NAME: Path | None = None
+    PHONEME_DICT_PATH: Path | None = None
+    TOKEN_TO_IDX_PATH: Path | None = None
+    IDX_TO_TOKEN_PATH: Path | None = None
     CHAR_REPEATS: int = 3
     MODEL_INPUT_LENGTH: int = 64
     EXPAND_ACRONYMS: bool = False
     USE_CUDA: bool = True
 
+    def __post_init__(self) -> None:
+        from ..utils.resources import resource_path
+        
+        if self.MODEL_NAME is None:
+            self.MODEL_NAME = resource_path("models/TTS/phomenizer_en.onnx")
+        if self.PHONEME_DICT_PATH is None:
+            self.PHONEME_DICT_PATH = resource_path("models/TTS/lang_phoneme_dict.pkl")
+        if self.TOKEN_TO_IDX_PATH is None:
+            self.TOKEN_TO_IDX_PATH = resource_path("models/TTS/token_to_idx.pkl")
+        if self.IDX_TO_TOKEN_PATH is None:
+            self.IDX_TO_TOKEN_PATH = resource_path("models/TTS/idx_to_token.pkl")
 
 class SpecialTokens(Enum):
     PAD = "_"
