@@ -163,7 +163,7 @@ To run the OpenAI-compatible TTS server, first install dependencies using the in
 
 Then run the server with:
 
-    ./script/serve
+    ./scripts/serve
 
 Alternatively you can run the server in Docker:
 
