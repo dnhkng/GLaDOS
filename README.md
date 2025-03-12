@@ -169,6 +169,8 @@ Alternatively you can run the server in Docker:
 
     docker compose up -d --build
 
+NOTE: The server will not automatically reload on changes when running with Docker. When actively developing, it is recommended to run the server locally using the `serve` script.
+
 The server will be available at http://localhost:5050.
 
 ## More Personalities or LLM's

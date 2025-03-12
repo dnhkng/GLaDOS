@@ -2,4 +2,4 @@
 # Start the API server.
 set -e
 
-uv run litestar --app glados.api.app:app run --host 0.0.0.0 --port 5050
+uv run litestar --app glados.api.app:app run --host 0.0.0.0 --port 5050 --debug --reload
