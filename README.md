@@ -149,6 +149,30 @@ and then add it to glados_config.yaml as the voice, e.g.:
 
     voice: "af_bella"
 
+## OpenAI-compatible TTS server
+
+To run the OpenAI-compatible TTS server, first install dependencies using the installer script:
+
+   Mac/Linux:
+
+        python scripts/install.py --api
+
+   Windows:
+
+        python scripts\install.py --api
+
+Then run the server with:
+
+    ./scripts/serve
+
+Alternatively, you can run the server in Docker:
+
+    docker compose up -d --build
+
+NOTE: The server will not automatically reload on changes when running with Docker. When actively developing, it is recommended to run the server locally using the `serve` script.
+
+The server will be available at http://localhost:5050.
+
 ## More Personalities or LLM's
 Make a copy of the file 'configs/glados_config.yaml' and give it a new name, then edit the parameters:
 

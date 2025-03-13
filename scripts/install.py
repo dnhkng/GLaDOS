@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 import platform
@@ -59,6 +60,10 @@ def main() -> None:
         - Assumes project is structured with a standard Python project layout
         - Modifies system environment variables during execution
     """
+    parser = argparse.ArgumentParser(description="Set up the project development environment.")
+    parser.add_argument("--api", action="store_true", help="Install API dependencies.")
+    args = parser.parse_args()
+
     project_root = Path(__file__).parent.parent
     os.chdir(project_root)
 
@@ -80,13 +85,15 @@ def main() -> None:
     except FileNotFoundError:
         has_cuda = False
 
-    extras = "[cuda]" if has_cuda else "[cpu]"
+    extras = ["cuda"] if has_cuda else ["cpu"]
+    if args.api:
+        extras.append("api")
 
     # Install project in editable mode
     env = os.environ.copy()
     env["PATH"] = f"{os.path.abspath('.venv/bin')}:{env['PATH']}"
     os.environ["VIRTUAL_ENV"] = os.path.abspath(".venv")
-    os.system(f"uv pip install -e .{extras}")
+    os.system(f"uv pip install -e .[{','.join(extras)}]")
 
     # Download and verify model files
     os.system("uv run glados download")
