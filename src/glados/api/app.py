@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-import tempfile
+import io
 from typing import Literal
 
 from litestar import Litestar, post
-from litestar.response import File
+from litestar.response import Stream
 
 from .log import structlog_plugin
 from .tts import write_glados_audio_file
@@ -21,8 +21,11 @@ class RequestData:
     speed: float = 1.0
 
 
+CONTENT_TYPES: dict[ResponseFormat, str] = {"mp3": "audio/mpeg"}
+
+
 @post("/v1/audio/speech")
-async def create_speech(data: RequestData) -> File:
+async def create_speech(data: RequestData) -> Stream:
     """
     Generate speech audio from input text.
 
@@ -30,18 +33,21 @@ async def create_speech(data: RequestData) -> File:
         data: The request data containing input text and speech parameters
 
     Returns:
-        File: Audio file containing the generated speech
+        Stream: Stream of bytes data containing the generated speech
     """
     # TODO: Handle other voices
     # TODO: Handle other formats
     # TODO: Handle speed
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_output_file:
-        write_glados_audio_file(temp_output_file, data.input)
-        return File(
-            temp_output_file.name,
-            content_disposition_type="attachment",
-            filename="speech.mp3",
-        )
+    buffer = io.BytesIO()
+    write_glados_audio_file(buffer, data.input)
+    buffer.seek(0)
+    return Stream(
+        buffer,
+        headers={
+            "content-type": CONTENT_TYPES[data.response_format],
+            "content-disposition": f'attachment; filename="speech.{data.response_format}"',
+        },
+    )
 
 
 app = Litestar([create_speech], plugins=[structlog_plugin])
