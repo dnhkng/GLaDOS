@@ -6,9 +6,9 @@ from glados.TTS import tts_glados
 from glados.utils import spoken_text_converter
 
 
-def write_glados_audio_file(f: str | io.BytesIO, text: str) -> None:
+def write_glados_audio_file(f: str | io.BytesIO, text: str, *, format: str) -> None:
     """Generate GLaDOS-style speech audio from text and write to a file.
-    
+
     Parameters:
         f: File path or BytesIO object to write the audio to
         text: Text to convert to speech
@@ -21,5 +21,5 @@ def write_glados_audio_file(f: str | io.BytesIO, text: str) -> None:
         f,
         audio,
         glados_tts.sample_rate,
-        format="MP3",
+        format=format.upper(),
     )

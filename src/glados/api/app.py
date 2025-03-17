@@ -9,7 +9,7 @@ from .log import structlog_plugin
 from .tts import write_glados_audio_file
 
 Voice = Literal["glados"]
-ResponseFormat = Literal["mp3"]
+ResponseFormat = Literal["mp3", "wav", "ogg"]
 
 
 @dataclass
@@ -21,7 +21,7 @@ class RequestData:
     speed: float = 1.0
 
 
-CONTENT_TYPES: dict[ResponseFormat, str] = {"mp3": "audio/mpeg"}
+CONTENT_TYPES: dict[ResponseFormat, str] = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg"}
 
 
 @post("/v1/audio/speech")
@@ -36,10 +36,9 @@ async def create_speech(data: RequestData) -> Stream:
         Stream: Stream of bytes data containing the generated speech
     """
     # TODO: Handle other voices
-    # TODO: Handle other formats
     # TODO: Handle speed
     buffer = io.BytesIO()
-    write_glados_audio_file(buffer, data.input)
+    write_glados_audio_file(buffer, data.input, format=data.response_format)
     buffer.seek(0)
     return Stream(
         buffer,
