@@ -12,6 +12,7 @@ def write_glados_audio_file(f: str | io.BytesIO, text: str, *, format: str) -> N
     Parameters:
         f: File path or BytesIO object to write the audio to
         text: Text to convert to speech
+        format: Audio format (e.g., "mp3", "wav", "ogg")
     """
     glados_tts = tts_glados.Synthesizer()
     converter = spoken_text_converter.SpokenTextConverter()
