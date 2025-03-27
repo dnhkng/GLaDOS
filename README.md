@@ -171,7 +171,7 @@ Alternatively, you can run the server in Docker:
 
 You can generate voice like this:
 
-    curl -X POST http://0.0.0.0:5050/v1/audio/speech \
+    curl -X POST http://localhost:5050/v1/audio/speech \
     -H "Content-Type: application/json" \
     -d '{
         "input": "Hello world! This is a test.",
@@ -181,7 +181,7 @@ You can generate voice like this:
 
 NOTE: The server will not automatically reload on changes when running with Docker. When actively developing, it is recommended to run the server locally using the `serve` script.
 
-The server will be available at http://localhost:5050.
+The server will be available at [http://localhost:5050](http://localhost:5050)
 
 ## More Personalities or LLM's
 Make a copy of the file 'configs/glados_config.yaml' and give it a new name, then edit the parameters:
