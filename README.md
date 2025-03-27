@@ -169,6 +169,16 @@ Alternatively, you can run the server in Docker:
 
     docker compose up -d --build
 
+You can generate voice like this:
+
+    curl -X POST http://0.0.0.0:5050/v1/audio/speech \
+    -H "Content-Type: application/json" \
+    -d '{
+        "input": "Hello world! This is a test.",
+        "voice": "glados"
+    }' \
+    --output speech.mp3
+
 NOTE: The server will not automatically reload on changes when running with Docker. When actively developing, it is recommended to run the server locally using the `serve` script.
 
 The server will be available at http://localhost:5050.
