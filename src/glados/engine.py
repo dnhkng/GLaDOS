@@ -56,6 +56,7 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None = None
     personality_preprompt: list[PersonalityPrompt]
+    conversation_timeout: float = 10.0  # Seconds to allow conversation without wake word
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -112,6 +113,7 @@ class Glados:
     BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
     PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
     SIMILARITY_THRESHOLD: int = 2  # Threshold for wake word similarity
+    CONVERSATION_TIMEOUT: float = 10.0  # Seconds to maintain conversation without wake word
 
     NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
     DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
@@ -191,6 +193,7 @@ class Glados:
 
         self.currently_speaking = threading.Event()
         self.shutdown_event = threading.Event()
+        self.last_response_time = 0.0  # Timestamp when the assistant last stopped speaking
 
         llm_thread = threading.Thread(target=self.process_llm)
         llm_thread.start()
@@ -278,7 +281,7 @@ class Glados:
             assert config.voice in tts_kokoro.get_voices(), f"Voice '{config.wake_word}' not available"
             tts_model = tts_kokoro.Synthesizer(voice=config.voice)
 
-        return cls(
+        glados = cls(
             asr_model=asr_model,
             tts_model=tts_model,
             vad_model=vad_model,
@@ -290,6 +293,11 @@ class Glados:
             announcement=config.announcement,
             personality_preprompt=tuple(config.to_chat_messages()),
         )
+        
+        # Set the conversation timeout from config
+        glados.CONVERSATION_TIMEOUT = config.conversation_timeout
+        
+        return glados
 
     @classmethod
     def from_yaml(cls, path: str) -> "Glados":
@@ -443,6 +451,19 @@ class Glados:
         closest_distance = min([distance(word.lower(), self.wake_word) for word in words])
         return bool(closest_distance < self.SIMILARITY_THRESHOLD)
 
+    def is_in_conversation(self) -> bool:
+        """
+        Check if the current time is within the conversation timeout period after the assistant's last response.
+        
+        Returns:
+            bool: True if within conversation timeout period, False otherwise
+        """
+        elapsed = time.time() - self.last_response_time
+        in_conversation = elapsed < self.CONVERSATION_TIMEOUT
+        if in_conversation:
+            logger.debug(f"In conversation mode: {elapsed:.1f}s elapsed, timeout: {self.CONVERSATION_TIMEOUT:.1f}s")
+        return in_conversation
+
     def reset(self) -> None:
         """
         Reset the voice recording state and clear all audio buffers.
@@ -495,9 +516,15 @@ class Glados:
         if detected_text:
             logger.success(f"ASR text: '{detected_text}'")
 
-            if self.wake_word and not self._wakeword_detected(detected_text):
+            # Check if we're within the conversation timeout after the assistant spoke
+            in_conversation = self.is_in_conversation()
+            
+            # Only check for wake word if we're not in an active conversation or if there's no wake word set
+            if self.wake_word and not in_conversation and not self._wakeword_detected(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
+                if in_conversation and self.wake_word:
+                    logger.info("Wake word check bypassed - within conversation timeout")
                 self.llm_queue.put(detected_text)
                 self.processing = True
                 self.currently_speaking.set()
@@ -843,6 +870,7 @@ class Glados:
                         self.messages.append({"role": "assistant", "content": " ".join(assistant_text)})
                     assistant_text = []
                     self.currently_speaking.clear()
+                    self.last_response_time = time.time()  # Record when the assistant finished speaking
                     logger.debug("Speaking event cleared")
                     continue
 
@@ -866,6 +894,7 @@ class Glados:
                         assistant_text = []
 
                         self.currently_speaking.clear()
+                        self.last_response_time = time.time()  # Record when the assistant's speech was interrupted
                         logger.debug("Speaking event cleared")
 
                         # Clear remaining audio queue
@@ -903,6 +932,14 @@ class Glados:
         if words_to_print < len(tokens):
             text = text + "<INTERRUPTED>"
         return text
+
+    def reset_conversation(self) -> None:
+        """
+        Reset the conversation state by setting the last response time to 0,
+        effectively disabling the conversation mode until the assistant speaks again.
+        """
+        self.last_response_time = 0.0
+        logger.debug("Conversation state reset")
 
 
 def start() -> None:
