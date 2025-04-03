@@ -56,7 +56,7 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None = None
     personality_preprompt: list[PersonalityPrompt]
-    conversation_timeout: float = 10.0  # Seconds to allow conversation without wake word
+    conversation_timeout: float = 10.0
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
