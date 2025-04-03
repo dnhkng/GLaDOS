@@ -164,3 +164,7 @@ cython_debug/
 *.bin
 *.gguf
 *.onnx
+
+# Config files
+configs/*.yaml
+!configs/*.yaml.example

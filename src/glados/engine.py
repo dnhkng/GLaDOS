@@ -933,14 +933,6 @@ class Glados:
             text = text + "<INTERRUPTED>"
         return text
 
-    def reset_conversation(self) -> None:
-        """
-        Reset the conversation state by setting the last response time to 0,
-        effectively disabling the conversation mode until the assistant speaks again.
-        """
-        self.last_response_time = 0.0
-        logger.debug("Conversation state reset")
-
 
 def start() -> None:
     """Set up the LLM server and start GlaDOS.
