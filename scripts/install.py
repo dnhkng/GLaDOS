@@ -4,6 +4,7 @@ from pathlib import Path
 import platform
 from shutil import which
 import subprocess
+import shutil
 
 
 def is_uv_installed() -> bool:
@@ -40,6 +41,27 @@ def install_uv() -> None:
         subprocess.run(["uv", "self", "update"])
 
 
+def setup_config_files() -> None:
+    """
+    Set up configuration files by copying examples if the target files don't exist.
+    
+    This ensures users have working configuration files without needing to manually copy them.
+    """
+    config_dir = Path("configs")
+    
+    # List of example files to copy
+    example_files = list(config_dir.glob("*.yaml.example"))
+    
+    for example_file in example_files:
+        target_file = config_dir / example_file.name.replace(".example", "")
+        
+        if not target_file.exists():
+            print(f"Creating config file: {target_file}")
+            shutil.copy(example_file, target_file)
+        else:
+            print(f"Config file already exists: {target_file}")
+
+
 def main() -> None:
     """
     Set up the project development environment by installing UV, creating a virtual environment,
@@ -52,6 +74,7 @@ def main() -> None:
     4. Detects CUDA availability
     5. Installs the project in editable mode with appropriate dependencies
     6. Downloads and verifies project model files
+    7. Set up configuration files
 
     The function handles different platform-specific configurations and supports both CUDA and CPU-only installations.
 
@@ -97,6 +120,9 @@ def main() -> None:
 
     # Download and verify model files
     os.system("uv run glados download")
+    
+    # Set up config files
+    setup_config_files()
 
 
 if __name__ == "__main__":
