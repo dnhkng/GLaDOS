@@ -183,8 +183,10 @@ NOTE: The server will not automatically reload on changes when running with Dock
 
 The server will be available at [http://localhost:5050](http://localhost:5050)
 
-## More Personalities or LLM's
-Make a copy of the file 'configs/glados_config.yaml' and give it a new name, then edit the parameters:
+## More Personalities or LLM's (the configs directory)
+The `configs` directory contains .example configuration files which will be created as .yaml files when running the installer.
+
+Make a copy of the file 'configs/glados_config.yaml' or refer to one of the .yaml.example files and give it a new name, then edit the parameters:
 
     model:  # the LLM model you want to use, see "Changing the LLM Model"
     personality_preprompt:
