@@ -69,8 +69,7 @@ class VAD:
 
         if audio_sample.shape[-1] != num_samples:
             raise ValueError(
-                f"Provided number of samples is {audio_sample.shape[-1]} "
-                f"(Supported values: 256 for 8000 sample rate, 512 for 16000)"
+                f"Provided number of samples is {audio_sample.shape[-1]} (Supported values: 256 for 8000 sample rate, 512 for 16000)"
             )
 
         batch_size = audio_sample.shape[0]

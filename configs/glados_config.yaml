@@ -3,6 +3,7 @@ Glados:
   model: "llama3.2"
   api_key: "Bearer your_api_key_here"
   interruptible: true
+  asr_engine: "tdt"
   wake_word: null
   voice: "glados"
   announcement: "All neural network modules are now loaded. No network access detected. How very annoying. System Operational."

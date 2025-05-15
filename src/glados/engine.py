@@ -19,7 +19,8 @@ import sounddevice as sd  # type: ignore
 from sounddevice import CallbackFlags
 import yaml
 
-from .ASR import VAD, AudioTranscriber
+from glados.ASR import VAD, TranscriberProtocol, get_audio_transcriber
+
 from .TTS import tts_glados, tts_kokoro
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
@@ -52,6 +53,7 @@ class GladosConfig(BaseModel):
     model: str
     api_key: str | None = None
     interruptible: bool = True
+    asr_engine: str = "ctc"
     wake_word: str | None = None
     voice: str
     announcement: str | None = None
@@ -123,10 +125,10 @@ class Glados:
 
     def __init__(
         self,
-        asr_model: AudioTranscriber,
+        asr_model: TranscriberProtocol,
         tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer,
         vad_model: VAD,
-        completion_url: str,
+        completion_url: HttpUrl,
         model: str,
         api_key: str | None = None,
         interruptible: bool = True,
@@ -268,7 +270,14 @@ class Glados:
         Returns:
             Glados: A new Glados instance configured with the provided settings
         """
-        asr_model = AudioTranscriber()
+
+        if config.asr_engine in ["ctc", "tdt"]:
+            asr_model = get_audio_transcriber(
+                engine_type=config.asr_engine,
+            )
+        else:
+            raise ValueError(f"Unsupported ASR engine type: {config.asr_engine}")
+
         vad_model = VAD()
 
         tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer
@@ -641,7 +650,7 @@ class Glados:
                 # Perform the request and process the stream
 
                 with requests.post(
-                    self.completion_url,
+                    str(self.completion_url),
                     headers=self.prompt_headers,
                     json=data,
                     stream=True,

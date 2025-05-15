@@ -14,6 +14,9 @@ DEFAULT_CONFIG = resource_path("configs/glados_config.yaml")
 
 MODEL_CHECKSUMS = {
     "models/ASR/nemo-parakeet_tdt_ctc_110m.onnx": "313705ff6f897696ddbe0d92b5ffadad7429a47d2ddeef370e6f59248b1e8fb5",
+    "models/ASR/parakeet-tdt-0.6b-v2_encoder.onnx": "f133a92186e63c7d4ab5b395a8e45d49f4a7a84a1d80b66f494e8205dfd57b63",
+    "models/ASR/parakeet-tdt-0.6b-v2_decoder.onnx": "415b14f965b2eb9d4b0b8517f0a1bf44a014351dd43a09c3a04d26a41c877951",
+    "models/ASR/parakeet-tdt-0.6b-v2_joiner.onnx": "846929b668a94462f21be25c7b5a2d83526e0b92a8306f21d8e336fc98177976",
     "models/ASR/silero_vad_v5.onnx": "6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396",
     "models/TTS/glados.onnx": "17ea16dd18e1bac343090b8589042b4052f1e5456d42cad8842a4f110de25095",
     "models/TTS/kokoro-v1.0.fp16.onnx": "c1610a859f3bdea01107e73e50100685af38fff88f5cd8e5c56df109ec880204",
@@ -23,6 +26,9 @@ MODEL_CHECKSUMS = {
 
 MODEL_URLS = {
     "models/ASR/nemo-parakeet_tdt_ctc_110m.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/nemo-parakeet_tdt_ctc_110m.onnx",
+    "models/ASR/parakeet-tdt-0.6b-v2_encoder.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_encoder.onnx",
+    "models/ASR/parakeet-tdt-0.6b-v2_decoder.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_decoder.onnx",
+    "models/ASR/parakeet-tdt-0.6b-v2_joiner.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_joiner.onnx",
     "models/ASR/silero_vad_v5.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/silero_vad_v5.onnx",
     "models/TTS/glados.onnx": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/glados.onnx",
     "models/TTS/kokoro-v1.0.fp16.onnx": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/kokoro-v1.0.fp16.onnx",
@@ -248,11 +254,13 @@ def tui(config_path: str | Path = "glados_config.yaml") -> None:
     import sys
 
     import glados.tui as tui
+
     try:
         app = tui.GladosUI()
         app.run()
     except KeyboardInterrupt:
         sys.exit()
+
 
 def models_valid() -> bool:
     """
@@ -305,7 +313,7 @@ def main() -> None:
         help=f"Path to configuration file (default: {DEFAULT_CONFIG})",
     )
 
-    # TUI command   
+    # TUI command
     tui_parser = subparsers.add_parser("tui", help="Start GLaDOS voice assistant with TUI")
 
     # Say command

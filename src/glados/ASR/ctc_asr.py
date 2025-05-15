@@ -4,82 +4,92 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 import soundfile as sf  # type: ignore
+import yaml
 
 from ..utils.resources import resource_path
-from .mel_spectrogram import MelSpectrogramCalculator
+from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
 # Default OnnxRuntime is way to verbose
 ort.set_default_logger_severity(4)
 
 
 class AudioTranscriber:
-    MODEL_PATH = resource_path("models/ASR/nemo-parakeet_tdt_ctc_110m.onnx")
-    TOKEN_PATH = resource_path("models/ASR/nemo-parakeet_tdt_ctc_110m_tokens.txt")
+    DEFAULT_MODEL_PATH = resource_path("models/ASR/nemo-parakeet_tdt_ctc_110m.onnx")
+    DEFAULT_CONFIG_PATH = resource_path("models/ASR/parakeet-tdt_ctc-110m_model_config.yaml")
 
     def __init__(
         self,
-        model_path: Path = MODEL_PATH,
-        tokens_file: Path = TOKEN_PATH,
+        model_path: Path = DEFAULT_MODEL_PATH,
+        config_path: Path = DEFAULT_CONFIG_PATH,
     ) -> None:
         """
         Initialize an AudioTranscriber with an ONNX speech recognition model.
 
         Parameters:
             model_path (Path, optional): Path to the ONNX model file. Defaults to the predefined MODEL_PATH.
-            tokens_file (Path, optional): Path to the file containing token mappings. Defaults
-            to the predefined TOKEN_PATH.
+            config_file (Path, optional): Path to the main YAML configuration file. Defaults
+            to the predefined CONFIG_PATH.
 
         Initializes the transcriber by:
             - Configuring ONNX Runtime providers, excluding TensorRT if available
             - Creating an inference session with the specified model
-            - Loading the vocabulary from the tokens file
+            - Loading the vocabulary from the yaml file
             - Preparing a mel spectrogram calculator for audio preprocessing
 
         Note:
             - Removes TensorRT execution provider to ensure compatibility across different hardware
             - Uses default model and token paths if not explicitly specified
         """
+        # 1. Load the main YAML configuration file
+        if not config_path.exists():
+            raise FileNotFoundError(f"Main YAML configuration file not found: {config_path}")
+        with open(config_path, encoding="utf-8") as f:
+            try:
+                full_config = yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                raise ValueError(f"Error parsing YAML file {config_path}: {e}") from e
+
+        # 2. Configure ONNX Runtime session
         providers = ort.get_available_providers()
+
+        # Exclude providers known to cause issues or not desired
         if "TensorrtExecutionProvider" in providers:
             providers.remove("TensorrtExecutionProvider")
         if "CoreMLExecutionProvider" in providers:
             providers.remove("CoreMLExecutionProvider")
 
+        # Prioritize CUDA if available, otherwise CPU
+        if "CUDAExecutionProvider" in providers:
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        session_opts = ort.SessionOptions()
+
+        # Enable memory pattern optimization for potential speedup
+        session_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        session_opts.enable_mem_pattern = True  # Can uncomment if beneficial
+
         self.session = ort.InferenceSession(
             model_path,
-            sess_options=ort.SessionOptions(),
+            sess_options=session_opts,
             providers=providers,
         )
-        self.vocab = self._load_vocabulary(tokens_file)
 
-        # Standard mel spectrogram parameters
-        self.melspectrogram = MelSpectrogramCalculator()
+        # 3. Load the vocabulary from the YAML configuration file
+        if "labels" not in full_config:
+            raise ValueError("YAML missing 'labels' section for vocabulary configuration.")
+        self.vocab = dict(enumerate(full_config["labels"]))
+        self.vocab[1024] = "<blk>"  # Add blank token to vocab
 
-    def _load_vocabulary(self, tokens_file: Path) -> dict[int, str]:
-        """
-        Load token vocabulary from a file mapping token indices to their string representations.
+        # 4. Initialize MelSpectrogramCalculator using the 'preprocessor' section
+        if "preprocessor" not in full_config:
+            raise ValueError("YAML missing 'preprocessor' section for mel spectrogram configuration.")
 
-        Parameters:
-            tokens_file (str): Path to the file containing token-to-index mappings.
+        preprocessor_conf_dict = full_config["preprocessor"]
+        mel_config = MelSpectrogramConfig(**preprocessor_conf_dict)
 
-        Returns:
-            dict[int, str]: A dictionary where keys are integer token indices and values are
-            corresponding token strings.
-
-        Raises:
-            FileNotFoundError: If the specified tokens file cannot be found.
-            ValueError: If the tokens file is improperly formatted.
-
-        Example:
-            vocab = self._load_vocabulary('./models/ASR/tokens.txt')
-            # Resulting vocab might look like: {0: '<blank>', 1: 'a', 2: 'b', ...}
-        """
-        vocab = {}
-        with open(tokens_file, encoding="utf-8") as f:
-            for line in f:
-                token, index = line.strip().split()
-                vocab[int(index)] = token
-        return vocab
+        self.melspectrogram = MelSpectrogramCalculator.from_config(mel_config)
 
     def process_audio(self, audio: NDArray[np.float32]) -> NDArray[np.float32]:
         """
@@ -201,23 +211,40 @@ class AudioTranscriber:
 
         return transcription[0]
 
-    def transcribe_file(self, audio_path: str) -> str:
+    def transcribe_file(self, audio_path: Path) -> str:
         """
-        Transcribe an audio file to text by reading the audio data and converting it to a textual representation.
+        Transcribes an audio file to text.
 
-        Parameters:
-            audio_path (str): Path to the audio file to be transcribed.
+        Args:
+            audio_path: Path to the audio file.
 
         Returns:
-            str: The transcribed text content of the audio file.
+            A tuple containing:
+            - str: Transcribed text.
 
         Raises:
-            FileNotFoundError: If the specified audio file does not exist.
-            ValueError: If the audio file cannot be read or processed.
+            FileNotFoundError: If the audio file does not exist.
+            ValueError: If the audio file cannot be read or processed, or sample rate mismatch.
+            sf.SoundFileError: If soundfile encounters an error reading the file.
         """
+        if not audio_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        # Load audio
-        audio, sr = sf.read(audio_path, dtype="float32")
+        try:
+            # Load as float32, assume mono (take first channel if stereo)
+            audio, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+            audio = audio[:, 0]  # Select first channel
+            # Check sample rate and audio length
+            if sr != self.melspectrogram.sample_rate:
+                raise ValueError(f"Sample rate mismatch: expected {self.melspectrogram.sample_rate}Hz, got {sr}Hz")
+            if len(audio) == 0:
+                raise ValueError(f"Audio file {audio_path} is empty or has no valid samples.")
+            if audio.ndim > 1 and audio.shape[1] > 1:
+                raise ValueError(f"Audio file {audio_path} is not mono. Please provide a mono audio file.")
+        except sf.SoundFileError as e:
+            raise sf.SoundFileError(f"Error reading audio file {audio_path}: {e}") from e
+        except Exception as e:
+            raise ValueError(f"Failed to load audio file {audio_path}: {e}") from e
 
         return self.transcribe(audio)
 

@@ -39,6 +39,7 @@ class ModelConfig:
         if self.IDX_TO_TOKEN_PATH is None:
             self.IDX_TO_TOKEN_PATH = resource_path("models/TTS/idx_to_token.pkl")
 
+
 class SpecialTokens(Enum):
     PAD = "_"
     START = "<start>"
