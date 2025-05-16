@@ -328,6 +328,18 @@ class AudioTranscriber:
             raise ValueError("TDT durations list is empty in the configuration.")
         logger.info(f"TDT durations: {self.tdt_durations}")
 
+
+        # Validate joiner output dimension
+        if (  
+            isinstance(self.model.joiner_output_total_dim, int) 
+            and self.model.joiner_output_total_dim > 0  
+            and self.model.joiner_output_total_dim != len(self.idx2token) + len(self.tdt_durations)  
+        ):  
+            raise ValueError(  
+                f"Joiner output dimension mismatch: expected {len(self.idx2token) + len(self.tdt_durations)}, "  
+                f"got {self.model.joiner_output_total_dim}"  
+            )  
+
         # Initialize Mel Spectrogram calculator from config
         preprocessor_conf_dict = self.config["preprocessor"]
         self.preprocessor_conf = MelSpectrogramConfig(**preprocessor_conf_dict)
