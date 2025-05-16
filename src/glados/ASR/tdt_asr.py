@@ -1,4 +1,3 @@
-# tdt_transcriber.py
 from pathlib import Path
 import time
 import typing
@@ -13,8 +12,8 @@ import yaml
 from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
-# Default OnnxRuntime is way to verbose
-ort.set_default_logger_severity(3)  # Slightly less verbose than error-only
+# Default OnnxRuntime is very verbose; set to error-only to reduce logs
+ort.set_default_logger_severity(3)  # Show only error messages
 
 
 class _OnnxTDTModel:
@@ -38,8 +37,10 @@ class _OnnxTDTModel:
         Initializes the ONNX model sessions and extracts necessary metadata.
 
         Args:
-            config: The validated TDTConfig object containing model paths.
             providers: List of ONNX Runtime execution providers to use.
+            encoder_model_path: Path to the encoder ONNX model file.
+            decoder_model_path: Path to the decoder ONNX model file.
+            joiner_model_path: Path to the joiner ONNX model file.
         """
         session_opts = ort.SessionOptions()
 
@@ -61,7 +62,8 @@ class _OnnxTDTModel:
 
         # Extract metadata from encoder
         encoder_meta = self.encoder.get_modelmeta().custom_metadata_map
-        self.normalize_type: str | None = encoder_meta.get("normalize_type")  # e.g., "per_feature" or None
+        self.normalize_type: str | None = encoder_meta.get("normalize_type")  # ToDo: Validate agaisnt config
+        print(f"normalize_type: {self.normalize_type}")
         self.pred_rnn_layers = int(encoder_meta.get("pred_rnn_layers", 0))
         self.pred_hidden = int(encoder_meta.get("pred_hidden", 0))
         logger.info(f"Encoder metadata: {encoder_meta}")
@@ -216,7 +218,6 @@ class _OnnxTDTModel:
         Args:
             encoder_out_t: Encoder output for the current time step `t`,
                            shape [batch, 1, channels] or similar (depends on model).
-                           The script used [B, C, 1] -> [B, 1, C]? Check logs.
                            Log shows input: [1, 1, 512] - so [B, T=1, C]
             decoder_out: Decoder output for the current step, shape [batch, 1, channels].
 
@@ -354,28 +355,13 @@ class AudioTranscriber:
         """
         Preprocesses raw audio into Mel spectrogram features suitable for the encoder.
 
-        Steps:
-        1. Applies tail padding.
-        2. Computes Mel spectrogram using MelSpectrogramCalculator.
-        3. Applies normalization based on encoder metadata (`normalize_type`).
-        4. Adds batch dimension.
-
         Args:
             audio: Input audio time series data as a numpy float32 array.
 
         Returns:
             Processed Mel spectrogram features with shape [1, n_mels, time].
         """
-        # # 1. Apply tail padding
-        # if self.config.tail_padding_seconds > 0:
-        #     padding_samples = int(self.config.preprocessor.sample_rate * self.config.tail_padding_seconds)
-        #     audio = np.pad(audio, (0, padding_samples), mode="constant", constant_values=0.0)
-
-        # 2. Compute Mel spectrogram
-        # Output shape: [n_mels, time]
         mel_spec = self.melspectrogram.compute(audio)
-
-        # 3. Add batch dimension
         mel_spec = np.expand_dims(mel_spec, axis=0)  # Shape: [1, n_mels, time]
 
         return mel_spec.astype(np.float32)  # Ensure float32 for ONNX
@@ -411,8 +397,6 @@ class AudioTranscriber:
         logger.info(f"Starting TDT decoding loop for {max_encoder_t} encoder frames...")
         while current_t < max_encoder_t and steps_taken < max_steps:
             steps_taken += 1
-            # Prepare encoder output for the current time step `t`
-            # Joiner expects [B, T=1, C] based on logs/typical RNNT
             encoder_out_t = encoder_out[:, :, current_t : current_t + 1]
 
             # Run Joiner

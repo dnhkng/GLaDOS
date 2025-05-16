@@ -111,13 +111,9 @@ class MelSpectrogramConfig(BaseModel):
         "per_feature",
         description="Normalization method ('per_feature', 'all_features', or None to disable).",
     )
-    preemph: float | None = Field(
-        None, description="Preemphasis coefficient. If None, no preemphasis (0.0)."
-    )
+    preemph: float | None = Field(None, description="Preemphasis coefficient. If None, no preemphasis (0.0).")
     dither: float = Field(NEMO_CONSTANT, description="Strength of dithering noise.")
-    log: bool = Field(
-        True, description="If True, applies log scaling to the mel spectrogram."
-    )
+    log: bool = Field(True, description="If True, applies log scaling to the mel spectrogram.")
     frame_splicing: int = Field(
         1,
         ge=1,
@@ -133,9 +129,7 @@ class MelSpectrogramConfig(BaseModel):
         alias="pad_value",
         description="Value for padding spectrogram time dim if pad_to > 1.",
     )
-    fmin: float = Field(
-        0.0, alias="lowfreq", description="Minimum frequency for mel filterbank."
-    )
+    fmin: float = Field(0.0, alias="lowfreq", description="Minimum frequency for mel filterbank.")
     fmax: float | None = Field(
         None,
         alias="highfreq",
@@ -150,9 +144,7 @@ class MelSpectrogramConfig(BaseModel):
         "add",
         description="How to handle values close to zero before log scaling ('add' or 'clamp').",
     )
-    log_zero_guard_value: float = Field(
-        float(2**-24), description="Value used for the zero guard during log scaling."
-    )
+    log_zero_guard_value: float = Field(float(2**-24), description="Value used for the zero guard during log scaling.")
     mel_norm: Literal["slaney", "htk"] = Field(
         "slaney",
         description="Mel filterbank normalization type ('slaney' or 'htk').",
@@ -195,24 +187,17 @@ class MelSpectrogramConfig(BaseModel):
                 raise ValueError(f"Error parsing YAML file {file_path}: {e}") from e
 
         if not isinstance(full_config, dict) or "preprocessor" not in full_config:
-            raise ValueError(
-                f"YAML file {file_path} must contain a 'preprocessor' key."
-            )
+            raise ValueError(f"YAML file {file_path} must contain a 'preprocessor' key.")
 
         preprocessor_config_dict = full_config["preprocessor"]
         if not isinstance(preprocessor_config_dict, dict):
-            raise ValueError(
-                f"'preprocessor' key in {file_path} must contain a dictionary."
-            )
+            raise ValueError(f"'preprocessor' key in {file_path} must contain a dictionary.")
 
         if "_target_" in preprocessor_config_dict:
             del preprocessor_config_dict["_target_"]
 
         # Ensure mel_norm default if not in YAML, as it's crucial for filterbank type
-        if (
-            "mel_norm" not in preprocessor_config_dict
-            and "mel_norm" not in cls.model_fields
-        ):
+        if "mel_norm" not in preprocessor_config_dict and "mel_norm" not in cls.model_fields:
             # This case should ideally be handled by Pydantic default if field exists
             pass  # Pydantic handles default from Field definition
         elif (
@@ -331,9 +316,7 @@ class MelSpectrogramCalculator:
 
         self.exact_pad = exact_pad
         if self.exact_pad:
-            if (
-                self.hop_length <= 0
-            ):  # hop_length must be positive for stft_pad_amount calculation
+            if self.hop_length <= 0:  # hop_length must be positive for stft_pad_amount calculation
                 raise ValueError("hop_length must be positive when exact_pad is True.")
             # As per NeMo's FilterbankFeatures: (n_fft - hop_length) // 2
             # This padding is applied *before* STFT when exact_pad is true.
@@ -386,9 +369,7 @@ class MelSpectrogramCalculator:
         else:
             pad_left = (self.n_fft - self.win_length) // 2
             pad_right = self.n_fft - self.win_length - pad_left
-            self.window_coeffs = np.pad(
-                actual_window, (pad_left, pad_right), mode="constant"
-            ).astype(np.float32)
+            self.window_coeffs = np.pad(actual_window, (pad_left, pad_right), mode="constant").astype(np.float32)
 
     @classmethod
     def from_config(cls, config: MelSpectrogramConfig) -> "MelSpectrogramCalculator":
@@ -411,14 +392,10 @@ class MelSpectrogramCalculator:
         Returns:
             Frequencies in Mel scale.
         """
-        if (
-            dtype is None
-        ):  # Ruff's B008 rule ("Do not perform function calls in argument defaults"
+        if dtype is None:  # Ruff's B008 rule ("Do not perform function calls in argument defaults"
             dtype = np.dtype(np.float32)
 
-        freq_arr = np.atleast_1d(
-            np.asarray(frequencies, dtype=dtype)
-        )  # Ensure it's an array for processing
+        freq_arr = np.atleast_1d(np.asarray(frequencies, dtype=dtype))  # Ensure it's an array for processing
 
         f_min = 0.0
         f_sp = 200.0 / 3.0
@@ -430,19 +407,13 @@ class MelSpectrogramCalculator:
         logstep = np.log(6.4) / 27.0
 
         log_indices = freq_arr >= min_log_hz
-        mels[log_indices] = (
-            min_log_mel + np.log(freq_arr[log_indices] / min_log_hz) / logstep
-        )
+        mels[log_indices] = min_log_mel + np.log(freq_arr[log_indices] / min_log_hz) / logstep
 
-        return (
-            np.array([mels[0]], dtype=dtype) if np.isscalar(frequencies) else mels
-        )  # Always return an array
+        return np.array([mels[0]], dtype=dtype) if np.isscalar(frequencies) else mels  # Always return an array
 
     def _slaney_mel_to_hz(
         self, mels: float | NDArray[np.float32], dtype: np.dtype[Any] | None = None
     ) -> NDArray[np.float32]:
-        if dtype is None:
-            dtype = np.dtype(np.float32)
         """Converts Mel scale to Hz using Slaney's Auditory Toolbox formula.
 
         Inverse of Slaney `hz_to_mel`.
@@ -454,6 +425,9 @@ class MelSpectrogramCalculator:
         Returns:
             Frequencies in Hz.
         """
+        if dtype is None:
+            dtype = np.dtype(np.float32)
+
         mel_arr = np.atleast_1d(np.asarray(mels, dtype=dtype))
 
         f_min = 0.0
@@ -466,13 +440,9 @@ class MelSpectrogramCalculator:
         logstep = np.log(6.4) / 27.0
 
         log_indices = mel_arr >= min_log_mel
-        freqs[log_indices] = min_log_hz * np.exp(
-            logstep * (mel_arr[log_indices] - min_log_mel)
-        )
+        freqs[log_indices] = min_log_hz * np.exp(logstep * (mel_arr[log_indices] - min_log_mel))
 
-        return (
-            np.array([freqs[0]], dtype=dtype) if np.isscalar(mels) else freqs
-        )  # Always return an array
+        return np.array([freqs[0]], dtype=dtype) if np.isscalar(mels) else freqs  # Always return an array
 
     def _create_mel_filterbank(self, fmin: float, fmax: float) -> NDArray[np.float32]:
         """Creates a Slaney-style mel filterbank matrix.
@@ -492,9 +462,7 @@ class MelSpectrogramCalculator:
         if fmin >= fmax:
             raise ValueError(f"fmin ({fmin}) must be less than fmax ({fmax}).")
 
-        fft_freqs = np.linspace(
-            0, self.sample_rate / 2, 1 + self.n_fft // 2, dtype=dtype
-        )
+        fft_freqs = np.linspace(0, self.sample_rate / 2, 1 + self.n_fft // 2, dtype=dtype)
 
         if self.mel_norm != "slaney":
             # For simplicity, this manual version primarily targets Slaney.
@@ -507,9 +475,7 @@ class MelSpectrogramCalculator:
         min_mel = self._slaney_hz_to_mel(fmin, dtype=np.dtype(dtype))
         max_mel = self._slaney_hz_to_mel(fmax, dtype=np.dtype(dtype))
 
-        mels = np.linspace(
-            min_mel.item(), max_mel.item(), self.features + 2, dtype=dtype
-        )
+        mels = np.linspace(min_mel.item(), max_mel.item(), self.features + 2, dtype=dtype)
         hz_pts = self._slaney_mel_to_hz(mels, dtype=np.dtype(dtype))
 
         weights = np.zeros((self.features, 1 + self.n_fft // 2), dtype=dtype)
@@ -522,9 +488,7 @@ class MelSpectrogramCalculator:
 
             # Calculate lower slope: (fftfreqs - hz_pts[i]) / (hz_pts[i+1] - hz_pts[i])
             if fdiff[i] <= 1e-8:  # Check for non-positive or very small denominator
-                lower_slope = np.full_like(
-                    fft_freqs, -np.inf
-                )  # Will result in 0 after np.maximum
+                lower_slope = np.full_like(fft_freqs, -np.inf)  # Will result in 0 after np.maximum
             else:
                 lower_slope = -ramps[i, :] / fdiff[i]
 
@@ -551,30 +515,20 @@ class MelSpectrogramCalculator:
             return audio
         return np.concatenate([audio[:1], audio[1:] - self.preemph * audio[:-1]])
 
-    def _normalize_spectrogram(
-        self, mel_spec: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    def _normalize_spectrogram(self, mel_spec: NDArray[np.float32]) -> NDArray[np.float32]:
         """Applies per-feature normalization to the mel spectrogram."""
         if self.normalize == "per_feature":
             num_frames = mel_spec.shape[1]
             if num_frames == 0:
                 return mel_spec
             if num_frames == 1:
-                centered = (mel_spec - np.mean(mel_spec, axis=1, keepdims=True)).astype(
-                    np.float32
-                )
-                return np.asarray(
-                    centered, dtype=np.float32
-                )  # Explicitly cast to NDArray[np.float32]
+                centered = (mel_spec - np.mean(mel_spec, axis=1, keepdims=True)).astype(np.float32)
+                return np.asarray(centered, dtype=np.float32)  # Explicitly cast to NDArray[np.float32]
 
             mean = np.mean(mel_spec, axis=1, keepdims=True).astype(np.float32)
-            std_dev = np.std(
-                mel_spec, axis=1, keepdims=True, ddof=1
-            )  # Bessel's correction
+            std_dev = np.std(mel_spec, axis=1, keepdims=True, ddof=1)  # Bessel's correction
 
-            normalized = (mel_spec - mean) / (
-                std_dev + NEMO_CONSTANT
-            )  # Epsilon for stability
+            normalized = (mel_spec - mean) / (std_dev + NEMO_CONSTANT)  # Epsilon for stability
             return np.asarray(normalized, dtype=np.float32)  # Epsilon for stability
         elif self.normalize == "all_features":
             if mel_spec.size == 0:  # Handle empty spectrogram
@@ -621,9 +575,7 @@ class MelSpectrogramCalculator:
             raise ValueError("Input audio contains non-finite values.")
 
         if self.dither > 0:
-            audio = audio + self.dither * np.random.randn(*audio.shape).astype(
-                np.float32
-            )
+            audio = audio + self.dither * np.random.randn(*audio.shape).astype(np.float32)
 
         audio_preemph = self._apply_preemphasis(audio)
 
@@ -638,9 +590,7 @@ class MelSpectrogramCalculator:
         else:
             # This is the center=True like behavior
             center_padding_val = self.n_fft // 2
-            audio_padded = np.pad(
-                audio_preemph, (center_padding_val, center_padding_val), mode="reflect"
-            )
+            audio_padded = np.pad(audio_preemph, (center_padding_val, center_padding_val), mode="reflect")
 
         if len(audio_padded) < self.n_fft:
             n_frames = 0
@@ -652,9 +602,7 @@ class MelSpectrogramCalculator:
         if n_frames <= 0:
             return np.empty((final_num_features, 0), dtype=np.float32)
 
-        frames = _extract_windows_numba(
-            audio_padded, self.window_coeffs, self.n_fft, self.hop_length, n_frames
-        )
+        frames = _extract_windows_numba(audio_padded, self.window_coeffs, self.n_fft, self.hop_length, n_frames)
         stft_result = np.fft.rfft(frames, n=self.n_fft, axis=1).T
         power_spec = (np.abs(stft_result) ** self.mag_power).astype(np.float32)
         mel_spec = self.mel_filterbank @ power_spec

@@ -28,7 +28,7 @@ class AudioTranscriber:
 
         Parameters:
             model_path (Path, optional): Path to the ONNX model file. Defaults to the predefined MODEL_PATH.
-            config_file (Path, optional): Path to the main YAML configuration file. Defaults
+            config_path (Path, optional): Path to the main YAML configuration file. Defaults
             to the predefined CONFIG_PATH.
 
         Initializes the transcriber by:
@@ -70,7 +70,7 @@ class AudioTranscriber:
 
         # Enable memory pattern optimization for potential speedup
         session_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        session_opts.enable_mem_pattern = True  # Can uncomment if beneficial
+        session_opts.enable_mem_pattern = True  # Memory pattern optimization enabled for better performance
 
         self.session = ort.InferenceSession(
             model_path,
@@ -155,7 +155,6 @@ class AudioTranscriber:
         Notes:
             - Uses argmax to select the most probable token at each timestep
             - Assumes tokens with '▁' prefix represent word starts
-            - Skips tokens marked as '<blk>' (blank tokens)
             - Removes consecutive duplicate tokens
         """
         # Step 1: Greedy decoding to get the most probable token index at each time step
