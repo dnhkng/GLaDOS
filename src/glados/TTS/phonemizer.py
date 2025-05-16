@@ -20,24 +20,33 @@ ort.set_default_logger_severity(4)
 
 @dataclass
 class ModelConfig:
-    MODEL_NAME: Path | None = None
-    PHONEME_DICT_PATH: Path | None = None
-    TOKEN_TO_IDX_PATH: Path | None = None
-    IDX_TO_TOKEN_PATH: Path | None = None
+    MODEL_PATH: Path
+    PHONEME_DICT_PATH: Path
+    TOKEN_TO_IDX_PATH: Path
+    IDX_TO_TOKEN_PATH: Path
     CHAR_REPEATS: int = 3
     MODEL_INPUT_LENGTH: int = 64
     EXPAND_ACRONYMS: bool = False
     USE_CUDA: bool = True
 
-    def __post_init__(self) -> None:
-        if self.MODEL_NAME is None:
-            self.MODEL_NAME = resource_path("models/TTS/phomenizer_en.onnx")
-        if self.PHONEME_DICT_PATH is None:
-            self.PHONEME_DICT_PATH = resource_path("models/TTS/lang_phoneme_dict.pkl")
-        if self.TOKEN_TO_IDX_PATH is None:
-            self.TOKEN_TO_IDX_PATH = resource_path("models/TTS/token_to_idx.pkl")
-        if self.IDX_TO_TOKEN_PATH is None:
-            self.IDX_TO_TOKEN_PATH = resource_path("models/TTS/idx_to_token.pkl")
+    def __init__(
+        self,
+        model_path: Path | None = None,
+        phoneme_dict_path: Path | None = None,
+        token_to_idx_path: Path | None = None,
+        idx_to_token_path: Path | None = None,
+    ) -> None:
+        # Provide default Path objects if None is passed or for defaults
+        self.MODEL_PATH = model_path if model_path is not None else resource_path("models/TTS/phomenizer_en.onnx")
+        self.PHONEME_DICT_PATH = (
+            phoneme_dict_path if phoneme_dict_path is not None else resource_path("models/TTS/lang_phoneme_dict.pkl")
+        )
+        self.TOKEN_TO_IDX_PATH = (
+            token_to_idx_path if token_to_idx_path is not None else resource_path("models/TTS/token_to_idx.pkl")
+        )
+        self.IDX_TO_TOKEN_PATH = (
+            idx_to_token_path if idx_to_token_path is not None else resource_path("models/TTS/idx_to_token.pkl")
+        )
 
 
 class SpecialTokens(Enum):
@@ -168,7 +177,7 @@ class Phonemizer:
             providers.remove("CoreMLExecutionProvider")
 
         self.ort_session = ort.InferenceSession(
-            self.config.MODEL_NAME,
+            self.config.MODEL_PATH,
             sess_options=ort.SessionOptions(),
             providers=providers,
         )
