@@ -472,9 +472,6 @@ class AudioTranscriber:
         underline = "▁"
         text = "".join(tokens_str_list).replace(underline, " ").strip()
 
-        # Optional: Clean up multiple spaces if needed (though SentencePiece usually handles this)
-        text = " ".join(text.split())
-
         return text
 
     def transcribe(self, audio: NDArray[np.float32]) -> str:
