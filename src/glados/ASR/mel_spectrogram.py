@@ -548,7 +548,14 @@ class MelSpectrogramCalculator:
         spliced_parts = [mel_spec]
         for n_roll in range(1, self.frame_splicing):
             # Rolls the time axis (axis=1) to the left by n_roll positions
-            rolled_mel_spec = np.roll(mel_spec, shift=-n_roll, axis=1)
+            if n_roll >= num_frames:
+                # Pad with last frame if roll exceeds available frames
+                rolled_mel_spec = np.tile(mel_spec[:, -1:], (1, num_frames))
+            else:
+                rolled_mel_spec = np.concatenate(
+                    [mel_spec[:, n_roll:], np.repeat(mel_spec[:, -1:], n_roll, axis=1)],
+                    axis=1,
+                )
             spliced_parts.append(rolled_mel_spec)
 
         # Concatenate along the feature axis (axis=0)
