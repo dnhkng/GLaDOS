@@ -20,8 +20,19 @@ def get_audio_transcriber(
     engine_type: str = "ctc", **kwargs: dict[str, Any]
 ) -> TranscriberProtocol:  # Return type is now a Union of concrete types
     """
-    Factory function to get an instance of an audio transcriber.
-    (docstring same as before)
+    Factory function to get an instance of an audio transcriber based on the specified engine type.
+    
+    Parameters:
+        engine_type (str): The type of ASR engine to use:
+            - "ctc": Connectionist Temporal Classification model (faster, good accuracy)
+            - "tdt": Token and Duration Transducer model (best accuracy, slightly slower)
+        **kwargs: Additional keyword arguments to pass to the transcriber constructor
+    
+    Returns:
+        TranscriberProtocol: An instance of the requested audio transcriber
+        
+    Raises:
+        ValueError: If the specified engine type is not supported
     """
     if engine_type.lower() == "ctc":
         from .ctc_asr import AudioTranscriber as CTCTranscriber

@@ -271,12 +271,9 @@ class Glados:
             Glados: A new Glados instance configured with the provided settings
         """
 
-        if config.asr_engine in ["ctc", "tdt"]:
-            asr_model = get_audio_transcriber(
-                engine_type=config.asr_engine,
-            )
-        else:
-            raise ValueError(f"Unsupported ASR engine type: {config.asr_engine}")
+        asr_model = get_audio_transcriber(
+            engine_type=config.asr_engine,
+        )
 
         vad_model = VAD()
 
@@ -284,7 +281,7 @@ class Glados:
         if config.voice == "glados":
             tts_model = tts_glados.Synthesizer()
         else:
-            assert config.voice in tts_kokoro.get_voices(), f"Voice '{config.wake_word}' not available"
+            assert config.voice in tts_kokoro.get_voices(), f"Voice '{config.voice}' not available"
             tts_model = tts_kokoro.Synthesizer(voice=config.voice)
 
         return cls(

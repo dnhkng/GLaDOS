@@ -392,7 +392,7 @@ class MelSpectrogramCalculator:
         Returns:
             Frequencies in Mel scale.
         """
-        if dtype is None:  # Ruff's B008 rule ("Do not perform function calls in argument defaults"
+        if dtype is None:  # Ruff's B008 rule ("Do not perform function calls in argument defaults")
             dtype = np.dtype(np.float32)
 
         freq_arr = np.atleast_1d(np.asarray(frequencies, dtype=dtype))  # Ensure it's an array for processing
@@ -475,7 +475,7 @@ class MelSpectrogramCalculator:
         min_mel = self._slaney_hz_to_mel(fmin, dtype=np.dtype(dtype))
         max_mel = self._slaney_hz_to_mel(fmax, dtype=np.dtype(dtype))
 
-        mels = np.linspace(min_mel.item(), max_mel.item(), self.features + 2, dtype=dtype)
+        mels = np.linspace(min_mel[0], max_mel[0], self.features + 2, dtype=dtype)
         hz_pts = self._slaney_mel_to_hz(mels, dtype=np.dtype(dtype))
 
         weights = np.zeros((self.features, 1 + self.n_fft // 2), dtype=dtype)
@@ -510,7 +510,18 @@ class MelSpectrogramCalculator:
         return weights.astype(np.float32)
 
     def _apply_preemphasis(self, audio: NDArray[np.float32]) -> NDArray[np.float32]:
-        """Applies a preemphasis filter to the audio signal."""
+        """Applies a preemphasis filter to the audio signal.
+
+        Preemphasis boosts higher frequencies to improve signal-to-noise ratio
+        before processing. This is a first-order high-pass filter implemented
+        as y[n] = x[n] - preemph * x[n-1].
+
+        Args:
+            audio: Input audio signal as a numpy array.
+
+        Returns:
+            Preemphasized audio signal.
+        """
         if self.preemph == 0.0 or len(audio) == 0:
             return audio
         return np.concatenate([audio[:1], audio[1:] - self.preemph * audio[:-1]])
@@ -613,6 +624,10 @@ class MelSpectrogramCalculator:
                 mel_spec = np.log(mel_spec + guard_val)
             elif self.log_zero_guard_type == "clamp":
                 mel_spec = np.log(np.maximum(mel_spec, guard_val))
+            else:
+                raise ValueError(
+                    f"Unsupported log_zero_guard_type: {self.log_zero_guard_type}. Expected 'add' or 'clamp'."
+                )
 
         # NeMo order: log -> splice -> normalize -> pad_to
         if self.frame_splicing > 1:

@@ -12,8 +12,8 @@ import yaml
 from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
-# Default OnnxRuntime is very verbose; set to error-only to reduce logs
-ort.set_default_logger_severity(3)  # Show only error messages
+# Default OnnxRuntime is way to verbose, only show fatal errors
+ort.set_default_logger_severity(4)
 
 
 class _OnnxTDTModel:
@@ -318,7 +318,7 @@ class AudioTranscriber:
             )
 
         # Add blank token to vocab
-        self.blank_id = num_tokens  # Including blank toke
+        self.blank_id = num_tokens  # Including blank token
         self.idx2token[self.blank_id] = "<blank>"  # Add blank token to vocab
 
         logger.info(f"Blank token ID: {self.blank_id} ('{self.idx2token[self.blank_id]}')")

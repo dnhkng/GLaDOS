@@ -7,8 +7,8 @@ import onnxruntime as ort  # type: ignore
 from ..utils.resources import resource_path
 from .phonemizer import Phonemizer
 
-# Default OnnxRuntime is way to verbose
-ort.set_default_logger_severity(3)
+# Default OnnxRuntime is way to verbose, only show fatal errors
+ort.set_default_logger_severity(4)
 
 
 VOICES_PATH = resource_path("models/TTS/kokoro-voices-v1.0.bin")
