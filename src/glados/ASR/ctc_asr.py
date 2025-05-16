@@ -1,4 +1,5 @@
 from pathlib import Path
+import typing
 
 import numpy as np
 from numpy.typing import NDArray
@@ -41,11 +42,12 @@ class AudioTranscriber:
             - Uses default model and token paths if not explicitly specified
         """
         # 1. Load the main YAML configuration file
+        self.config: dict[str, typing.Any]
         if not config_path.exists():
             raise FileNotFoundError(f"Main YAML configuration file not found: {config_path}")
         with open(config_path, encoding="utf-8") as f:
             try:
-                full_config = yaml.safe_load(f)
+                self.config = yaml.safe_load(f)
             except yaml.YAMLError as e:
                 raise ValueError(f"Error parsing YAML file {config_path}: {e}") from e
 
@@ -77,16 +79,24 @@ class AudioTranscriber:
         )
 
         # 3. Load the vocabulary from the YAML configuration file
-        if "labels" not in full_config:
+        if "labels" not in self.config:
             raise ValueError("YAML missing 'labels' section for vocabulary configuration.")
-        self.vocab = dict(enumerate(full_config["labels"]))
-        self.vocab[1024] = "<blk>"  # Add blank token to vocab
+        self.idx2token: dict[int, str] = dict(enumerate(self.config["labels"]))
+        num_tokens = len(self.idx2token)
+        if num_tokens != self.config["decoder"]["vocab_size"]:
+            raise ValueError(
+                f"Mismatch between number of tokens in vocabulary ({num_tokens}) and decoder vocab size ({self.config['decoder']['vocab_size']})."
+            )
+
+        # Add blank token to vocab
+        self.blank_id = num_tokens  # Including blank toke
+        self.idx2token[self.blank_id] = "<blank>"  # Add blank token to vocab
 
         # 4. Initialize MelSpectrogramCalculator using the 'preprocessor' section
-        if "preprocessor" not in full_config:
+        if "preprocessor" not in self.config:
             raise ValueError("YAML missing 'preprocessor' section for mel spectrogram configuration.")
 
-        preprocessor_conf_dict = full_config["preprocessor"]
+        preprocessor_conf_dict = self.config["preprocessor"]
         mel_config = MelSpectrogramConfig(**preprocessor_conf_dict)
 
         self.melspectrogram = MelSpectrogramCalculator.from_config(mel_config)
@@ -153,8 +163,8 @@ class AudioTranscriber:
             prev_token = None
 
             for idx in predictions[batch_idx]:
-                if idx in self.vocab:
-                    token = self.vocab[idx]
+                if idx in self.idx2token:
+                    token = self.idx2token[idx]
                     # Skip <blk> tokens and repeated tokens
                     if token != "<blk>" and token != prev_token:
                         tokens.append(token)

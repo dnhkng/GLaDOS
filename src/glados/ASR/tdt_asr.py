@@ -310,9 +310,10 @@ class AudioTranscriber:
             raise ValueError("YAML missing 'labels' section for vocabulary configuration.")
         self.idx2token: dict[int, str] = dict(enumerate(self.config["labels"]))
         num_tokens = len(self.idx2token)
-        if num_tokens == 0:
-            raise ValueError("No tokens found in the vocabulary configuration.")
-        logger.info(f"Vocabulary size: {num_tokens} tokens loaded.")
+        if num_tokens != self.config["decoder"]['vocab_size']:
+            raise ValueError(
+                f"Mismatch between number of tokens in vocabulary ({num_tokens}) and decoder vocab size ({self.config['decoder']['vocab_size']})."
+            )
 
         # Add blank token to vocab
         self.blank_id = num_tokens  # Including blank toke
