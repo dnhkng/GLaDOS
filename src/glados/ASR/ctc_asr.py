@@ -89,8 +89,8 @@ class AudioTranscriber:
             )
 
         # Add blank token to vocab
-        self.blank_id = num_tokens  # Including blank toke
-        self.idx2token[self.blank_id] = "<blank>"  # Add blank token to vocab
+        self.blank_idx = num_tokens  # Including blank toke
+        self.idx2token[self.blank_idx] = "<blank>"  # Add blank token to vocab
 
         # 4. Initialize MelSpectrogramCalculator using the 'preprocessor' section
         if "preprocessor" not in self.config:
@@ -155,32 +155,36 @@ class AudioTranscriber:
             - Skips tokens marked as '<blk>' (blank tokens)
             - Removes consecutive duplicate tokens
         """
-        predictions = np.argmax(output_logits, axis=-1)
+        # Step 1: Greedy decoding to get the most probable token index at each time step
+        predicted_indices_batch = np.argmax(output_logits, axis=-1)  # Shape: (batch_size, sequence_length)
 
-        decoded_texts = []
-        for batch_idx in range(predictions.shape[0]):
-            tokens = []
-            prev_token = None
+        decoded_texts: list[str] = []
+        for batch_idx in range(predicted_indices_batch.shape[0]):
+            raw_indices_for_sample = predicted_indices_batch[batch_idx]
 
-            for idx in predictions[batch_idx]:
-                if idx in self.idx2token:
-                    token = self.idx2token[idx]
-                    # Skip <blk> tokens and repeated tokens
-                    if token != "<blk>" and token != prev_token:
-                        tokens.append(token)
-                        prev_token = token
+            # Step 2: CTC Collapse - Remove blanks and merge repeated non-blank tokens
+            collapsed_indices: list[int] = []
+            # Initialize to a non-valid token index to correctly handle the very first token (even blank)
+            last_emitted_or_blank_idx = -1
 
-            # Combine tokens with improved handling
-            text = ""
-            for token in tokens:
-                if token.startswith("▁"):
-                    text += " " + token[1:]
-                else:
-                    text += token
+            for current_idx in raw_indices_for_sample:
+                if current_idx == last_emitted_or_blank_idx:
+                    continue
 
-            # Clean up the text
-            text = text.strip()
-            text = " ".join(text.split())  # Remove multiple spaces
+                if current_idx == self.blank_idx:
+                    last_emitted_or_blank_idx = self.blank_idx
+                    continue
+
+                collapsed_indices.append(current_idx)
+                last_emitted_or_blank_idx = current_idx
+
+            # Step 3: Convert collapsed_indices to string tokens
+            # At this point, collapsed_indices should only contain valid, non-blank, de-duplicated token indices.
+            tokens_str_list: list[str] = [self.idx2token.get(idx, "") for idx in collapsed_indices]
+
+            # Handle SentencePiece style joining (replace "▁" with space)
+            underline = "▁"
+            text = "".join(tokens_str_list).replace(underline, " ").strip()
 
             decoded_texts.append(text)
 
