@@ -553,8 +553,6 @@ class AudioTranscriber:
                 raise ValueError(f"Sample rate mismatch: expected {self.melspectrogram.sample_rate}Hz, got {sr}Hz")
             if len(audio) == 0:
                 raise ValueError(f"Audio file {audio_path} is empty or has no valid samples.")
-            if audio.ndim > 1 and audio.shape[1] > 1:
-                raise ValueError(f"Audio file {audio_path} is not mono. Please provide a mono audio file.")
         except sf.SoundFileError as e:
             raise sf.SoundFileError(f"Error reading audio file {audio_path}: {e}") from e
         except Exception as e:
