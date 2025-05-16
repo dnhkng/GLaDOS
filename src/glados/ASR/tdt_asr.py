@@ -310,7 +310,7 @@ class AudioTranscriber:
             raise ValueError("YAML missing 'labels' section for vocabulary configuration.")
         self.idx2token: dict[int, str] = dict(enumerate(self.config["labels"]))
         num_tokens = len(self.idx2token)
-        if num_tokens != self.config["decoder"]['vocab_size']:
+        if num_tokens != self.config["decoder"]["vocab_size"]:
             raise ValueError(
                 f"Mismatch between number of tokens in vocabulary ({num_tokens}) and decoder vocab size ({self.config['decoder']['vocab_size']})."
             )
@@ -328,17 +328,16 @@ class AudioTranscriber:
             raise ValueError("TDT durations list is empty in the configuration.")
         logger.info(f"TDT durations: {self.tdt_durations}")
 
-
         # Validate joiner output dimension
-        if (  
-            isinstance(self.model.joiner_output_total_dim, int) 
-            and self.model.joiner_output_total_dim > 0  
-            and self.model.joiner_output_total_dim != len(self.idx2token) + len(self.tdt_durations)  
-        ):  
-            raise ValueError(  
-                f"Joiner output dimension mismatch: expected {len(self.idx2token) + len(self.tdt_durations)}, "  
-                f"got {self.model.joiner_output_total_dim}"  
-            )  
+        if (
+            isinstance(self.model.joiner_output_total_dim, int)
+            and self.model.joiner_output_total_dim > 0
+            and self.model.joiner_output_total_dim != len(self.idx2token) + len(self.tdt_durations)
+        ):
+            raise ValueError(
+                f"Joiner output dimension mismatch: expected {len(self.idx2token) + len(self.tdt_durations)}, "
+                f"got {self.model.joiner_output_total_dim}"
+            )
 
         # Initialize Mel Spectrogram calculator from config
         preprocessor_conf_dict = self.config["preprocessor"]
