@@ -7,7 +7,7 @@ from typing import ClassVar
 from loguru import logger
 from rich.text import Text
 from textual import events
-from textual.app import App, ComposeResult, on
+from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
@@ -282,9 +282,8 @@ class GladosUI(App[None]):
         LOGO_ANSI = Text.from_markup("[bold red]Logo ANSI Art Missing[/bold red]")
 
     glados_engine_instance: Glados | None = None
-    instantiation_worker: Worker | None = None
-
-    glados_worker: object | None = None  # Replace 'object' with the actual Worker type if available
+    glados_worker: object | None = None
+    instantiation_worker: Worker[None] | None = None
 
     def compose(self) -> ComposeResult:
         """
@@ -350,8 +349,8 @@ class GladosUI(App[None]):
         logger.remove()
         fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
 
-        self._instantiation_worker = None  # Reset the instantiation worker reference
-        self.app.start_instantiation()
+        self.instantiation_worker = None  # Reset the instantiation worker reference
+        self.start_instantiation()
 
         logger.add(print, format=fmt, level="SUCCESS")  # Changed to DEBUG for more verbose logging during dev
 
@@ -374,25 +373,23 @@ class GladosUI(App[None]):
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
 
-    def on_key(self, event: events.Key) -> None:
-        """ "A key is pressed."""
-        # Use event.key for better representation of special keys
-        logger.debug(f"App key pressed: {event.key}")
-        # logger.info("some warning") # Removed, was likely for temporary debugging
+    # def on_key(self, event: events.Key) -> None:
+    #     """Useful for debugging via key presses."""
+    #     logger.success(f"Key pressed: {self.glados_worker}")
 
-    def action_quit(self) -> None:
+    async def action_quit(self) -> None:
         logger.info("Quit action initiated in TUI.")
         if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
             logger.info("Signalling GLaDOS engine to stop...")
             self.glados_engine_instance.stop_listen_event_loop()
 
             if hasattr(self, "glados_worker") and self.glados_worker is not None:
-                if self.glados_worker.is_running:
-                    logger.info("Waiting for GLaDOS worker to complete...")
+                if isinstance(self.glados_worker, Worker) and self.glados_worker.is_running:
+                    logger.warning("Waiting for GLaDOS worker to complete...")
                     try:
-                        self.glados_worker.wait(timeout=5.0)
+                        await self.glados_worker.wait()
                         if self.glados_worker.is_running:
-                            logger.warning("GLaDOS worker is still running after timeout.")
+                            logger.warning("GLaDOS worker is still running after wait.")
                         else:
                             logger.info("GLaDOS worker has completed.")
                     except TimeoutError:
@@ -403,10 +400,8 @@ class GladosUI(App[None]):
                     logger.info("GLaDOS worker was not running or already finished.")
             else:
                 logger.warning("GLaDOS worker attribute not found.")
-            # It's good practice to ensure the instance is cleaned up.
-            # You might want to do this after self.exit() if there are Textual interactions with it.
-            # For now, here is fine.
-            del self.glados_engine_instance
+
+            # del self.glados_engine_instance
             self.glados_engine_instance = None
         else:
             logger.info("GLaDOS engine instance not found or already cleaned up.")
@@ -414,18 +409,15 @@ class GladosUI(App[None]):
         logger.info("Exiting Textual application.")
         self.exit()
 
-    @on(Worker.StateChanged)
-    def on_worker_state(self, message: Worker.StateChanged) -> None:
+    def on_worker_state_changed(self, message: Worker.StateChanged) -> None:
         """Handle messages from workers."""
 
-
         if message.state == WorkerState.SUCCESS:
-            self.notify("AI Engine operational", title="GLaDOS", timeout=10)
+            self.notify("AI Engine operational", title="GLaDOS", timeout=2)
         elif message.state == WorkerState.ERROR:
             self.notify("Instantiation failed!", severity="error")
 
-        self._instantiation_worker = None  # Clear the worker reference
-   
+        self.instantiation_worker = None  # Clear the worker reference
 
     def start_glados(self) -> None:
         """
@@ -441,10 +433,13 @@ class GladosUI(App[None]):
         """
         try:
             # Run in a thread to avoid blocking the UI
-            self.glados_worker = self.run_worker(
-                self.glados_engine_instance.start_listen_event_loop, exclusive=True, thread=True
-            )
-            logger.info("GLaDOS worker started.")
+            if self.glados_engine_instance is not None:
+                self.glados_worker = self.run_worker(
+                    self.glados_engine_instance.start_listen_event_loop, exclusive=True, thread=True
+                )
+                logger.info("GLaDOS worker started.")
+            else:
+                logger.error("Cannot start GLaDOS worker: glados_engine_instance is None.")
         except Exception as e:
             logger.opt(exception=True).error(f"Failed to start GLaDOS: {e}")
 
@@ -470,15 +465,14 @@ class GladosUI(App[None]):
 
     def start_instantiation(self) -> None:
         """Starts the worker to instantiate the slow class."""
-        if self._instantiation_worker is not None:
+        if self.instantiation_worker is not None:
             self.notify("Instantiation already in progress!", severity="warning")
             return
 
-        self._instantiation_worker = self.run_worker(
+        self.instantiation_worker = self.run_worker(
             self.instantiate_glados,  # The callable function
             thread=True,  # Run in a thread (default)
         )
-
 
     @classmethod
     def run_app(cls, config_path: str | Path = "glados_config.yaml") -> None:
@@ -501,8 +495,4 @@ class GladosUI(App[None]):
 
 
 if __name__ == "__main__":
-    # Example: Use a default config path for direct execution
-    # Ensure text_resources and engine modules are available in PYTHONPATH
-    # and ANSI files are in the correct relative paths (e.g., src/glados/glados_ui/images/)
-    # or adjust paths as needed.
     GladosUI.run_app()
