@@ -14,6 +14,7 @@ dependencies = [
     "numba>=0.61.0",
     "soundfile>=0.13.0",
     "pydantic>=2.10.6",
+    "onnxruntime>=1.22.0",
 ]
 
 [project.optional-dependencies]

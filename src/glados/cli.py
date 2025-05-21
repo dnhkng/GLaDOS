@@ -288,6 +288,7 @@ def main() -> None:
     - 'download': Download required model files
     - 'start': Launch the GLaDOS voice assistant
     - 'say': Generate speech from input text
+    - 'tui': Launch the GLaDOS voice assistant, but with a Portal 2 themed terminal user interface
 
     The function sets up argument parsing with optional configuration file paths and handles
     command execution based on user input. If no command is specified, it defaults to starting
