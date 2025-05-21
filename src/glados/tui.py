@@ -14,9 +14,6 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static
 from textual.worker import Worker, WorkerState
 
-# These imports are from the original code. Ensure they are resolvable in your environment.
-# If they are part of the larger project, they should be fine.
-# For standalone testing, they would need to be stubbed or provided.
 from glados.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
@@ -146,8 +143,6 @@ class Typewriter(Static):
 
 
 # Screens
-
-
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
 
@@ -244,31 +239,7 @@ class HelpScreen(ModalScreen[None]):
         dialog.border_subtitle = "[blink]Press Esc key to continue[/blink]"
 
 
-def instantiate_glados() -> Glados:
-    """
-    Instantiate the GLaDOS engine.
-
-    This function creates an instance of the GLaDOS engine, which is responsible for
-    managing the GLaDOS system's operations and interactions. The instance can be used
-    to control various aspects of the GLaDOS engine, including starting and stopping
-    its event loop.
-
-    Returns:
-        Glados: An instance of the GLaDOS engine.
-    """
-
-    config_path = Path("configs/glados_config.yaml")
-    if not config_path.exists():
-        logger.error(f"GLaDOS config file not found: {config_path}")
-
-    glados_config = GladosConfig.from_yaml(str(config_path))
-    glados_instance = Glados.from_config(glados_config)
-    return glados_instance
-
-
 # The App
-
-
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
 
