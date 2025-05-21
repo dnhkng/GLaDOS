@@ -7,12 +7,16 @@ from typing import ClassVar
 from loguru import logger
 from rich.text import Text
 from textual import events
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, on
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static
+from textual.worker import Worker, WorkerState
 
+# These imports are from the original code. Ensure they are resolvable in your environment.
+# If they are part of the larger project, they should be fine.
+# For standalone testing, they would need to be stubbed or provided.
 from glados.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
@@ -61,7 +65,9 @@ class ScrollingBlocks(Log):
         Returns:
             None
         """
-        random_blocks = " ".join(random.choice(self.BLOCKS) for _ in range(self.size.width - 8))
+        # Ensure width calculation doesn't go negative if self.size.width is small
+        num_blocks_to_generate = max(0, self.size.width - 8)
+        random_blocks = " ".join(random.choice(self.BLOCKS) for _ in range(num_blocks_to_generate))
         self.write_line(f"{random_blocks}")
 
     def on_show(self) -> None:
@@ -82,25 +88,28 @@ class Typewriter(Static):
     def __init__(
         self,
         text: str = "_",
-        id: str | None = "",
+        id: str | None = None,  # Consistent with typical Textual widget `id` parameter
         speed: float = 0.01,  # time between each character
         repeat: bool = False,  # whether to start again at the end
-        *args: str,
-        **kwargs: str,
+        *args: str,  # Passed to super().__init__
+        **kwargs: str,  # Passed to super().__init__
     ) -> None:
-        super().__init__(*args, *kwargs)
+        super().__init__(*args)  # Pass id via kwargs if Typewriter(id=...) is used
         self._text = text
-        self.__id = id
+        self.__id_for_child = id  # Store id specifically for the child VerticalScroll
         self._speed = speed
         self._repeat = repeat
 
     def compose(self) -> ComposeResult:
         self._static = Static()
-        self._vertical_scroll = VerticalScroll(self._static, id=self.__id)
+        self._vertical_scroll = VerticalScroll(self._static, id=self.__id_for_child)
         yield self._vertical_scroll
 
     def _get_iterator(self) -> Iterator[str]:
-        return (self._text[:i] + "[blink]▃[/]" for i in range(len(self._text) + 1))
+        # THE FIX: Changed "[blink]▃[/]" to "[blink]▃[/blink]"
+        # This makes the closing tag explicit and less prone to parsing issues
+        # across different Rich versions or platforms.
+        return (self._text[:i] + "[blink]▃[/blink]" for i in range(len(self._text) + 1))
 
     def on_mount(self) -> None:
         self._iter_text = self._get_iterator()
@@ -109,12 +118,16 @@ class Typewriter(Static):
     def _display_next_char(self) -> None:
         """Get and display the next character."""
         try:
+            # Scroll down first, then update. This feels more natural for a typewriter.
             if not self._vertical_scroll.is_vertical_scroll_end:
                 self._vertical_scroll.scroll_down()
             self._static.update(next(self._iter_text))
         except StopIteration:
             if self._repeat:
                 self._iter_text = self._get_iterator()
+            # else:
+            # Optional: If not repeating, remove the cursor or show final text without cursor.
+            # For example: self._static.update(self._text)
 
 
 # Screens
@@ -123,8 +136,14 @@ class Typewriter(Static):
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
 
-    with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
-        SPLASH_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
+    # Ensure this path is correct relative to your project structure/runtime directory
+    # Using a try-except block for robustness if the file is missing
+    try:
+        with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
+            SPLASH_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
+    except FileNotFoundError:
+        logger.error("Splash screen ANSI art file not found. Using placeholder.")
+        SPLASH_ANSI = Text.from_markup("[bold red]Splash ANSI Art Missing[/bold red]")
 
     def compose(self) -> ComposeResult:
         """
@@ -160,6 +179,7 @@ class SplashScreen(Screen[None]):
         """
         self.set_interval(0.5, self.scroll_end)
 
+    # Removed duplicated on_key method. Python uses the last definition.
     def on_key(self, event: events.Key) -> None:
         """
         Handle key press events on the splash screen.
@@ -172,13 +192,13 @@ class SplashScreen(Screen[None]):
         Args:
             event (events.Key): The key event that was triggered.
         """
-        # fire her up.....
-
-    def on_key(self, event: events.Key) -> None:
         if event.key == "q":
-            self.app.action_quit()  # Use self.app instead of global app
-        self.dismiss()
-        self.app.start_glados()  # Use self.app instead of global app
+            self.app.action_quit()
+        else:
+            if self.app.glados_engine_instance:
+                self.app.glados_engine_instance.play_announcement()
+                self.app.start_glados()
+                self.dismiss()
 
 
 class HelpScreen(ModalScreen[None]):
@@ -205,7 +225,30 @@ class HelpScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#help_dialog")
         dialog.border_title = self.TITLE
-        dialog.border_subtitle = "[blink]Press Esc key to continue[/]"
+        # Consistent use of explicit closing tag for blink
+        dialog.border_subtitle = "[blink]Press Esc key to continue[/blink]"
+
+
+def instantiate_glados() -> Glados:
+    """
+    Instantiate the GLaDOS engine.
+
+    This function creates an instance of the GLaDOS engine, which is responsible for
+    managing the GLaDOS system's operations and interactions. The instance can be used
+    to control various aspects of the GLaDOS engine, including starting and stopping
+    its event loop.
+
+    Returns:
+        Glados: An instance of the GLaDOS engine.
+    """
+
+    config_path = Path("configs/glados_config.yaml")
+    if not config_path.exists():
+        logger.error(f"GLaDOS config file not found: {config_path}")
+
+    glados_config = GladosConfig.from_yaml(str(config_path))
+    glados_instance = Glados.from_config(glados_config)
+    return glados_instance
 
 
 # The App
@@ -231,8 +274,17 @@ class GladosUI(App[None]):
 
     SUB_TITLE = "(c) 1982 Aperture Science, Inc."
 
-    with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
-        LOGO_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
+    try:
+        with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
+            LOGO_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
+    except FileNotFoundError:
+        logger.error("Logo ANSI art file not found. Using placeholder.")
+        LOGO_ANSI = Text.from_markup("[bold red]Logo ANSI Art Missing[/bold red]")
+
+    glados_engine_instance: Glados | None = None
+    instantiation_worker: Worker | None = None
+
+    glados_worker: object | None = None  # Replace 'object' with the actual Worker type if available
 
     def compose(self) -> ComposeResult:
         """
@@ -263,7 +315,6 @@ class GladosUI(App[None]):
 
         yield Footer()
 
-        # Blocks are displayed in a different layer, and out of the normal flow
         with Container(id="block_container", classes="fadeable"):
             yield ScrollingBlocks(id="scrolling_block", classes="block")
             with Vertical(id="text_block", classes="block"):
@@ -295,9 +346,14 @@ class GladosUI(App[None]):
         """
         # Cause logger to print all log text. Printed text can then be  captured
         # by the main_log widget
+
         logger.remove()
-        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{level: <8}</level> | {name}:{function}:{line} - {message}"
-        logger.add(print, format=fmt)
+        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
+
+        self._instantiation_worker = None  # Reset the instantiation worker reference
+        self.app.start_instantiation()
+
+        logger.add(print, format=fmt, level="SUCCESS")  # Changed to DEBUG for more verbose logging during dev
 
     def on_mount(self) -> None:
         """
@@ -312,6 +368,7 @@ class GladosUI(App[None]):
         """
         # Display the splash screen for a few moments
         self.push_screen(SplashScreen())
+        self.notify("Loading AI engine...", title="GLaDOS", timeout=6)
 
     def action_help(self) -> None:
         """Someone pressed the help key!."""
@@ -319,26 +376,56 @@ class GladosUI(App[None]):
 
     def on_key(self, event: events.Key) -> None:
         """ "A key is pressed."""
-        logger.debug(f"Pressed {event.character}")
-        logger.info("some warning")
+        # Use event.key for better representation of special keys
+        logger.debug(f"App key pressed: {event.key}")
+        # logger.info("some warning") # Removed, was likely for temporary debugging
 
-    def action_quit(self) -> None:  # type: ignore
-        """
-        Quit the application and exit with a status code of 0.
+    def action_quit(self) -> None:
+        logger.info("Quit action initiated in TUI.")
+        if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
+            logger.info("Signalling GLaDOS engine to stop...")
+            self.glados_engine_instance.stop_listen_event_loop()
 
-        This method terminates the current Textual application instance,
-        effectively closing the terminal user interface.
+            if hasattr(self, "glados_worker") and self.glados_worker is not None:
+                if self.glados_worker.is_running:
+                    logger.info("Waiting for GLaDOS worker to complete...")
+                    try:
+                        self.glados_worker.wait(timeout=5.0)
+                        if self.glados_worker.is_running:
+                            logger.warning("GLaDOS worker is still running after timeout.")
+                        else:
+                            logger.info("GLaDOS worker has completed.")
+                    except TimeoutError:
+                        logger.warning("Timeout waiting for GLaDOS worker to complete.")
+                    except Exception as e:
+                        logger.error(f"Error waiting for GLaDOS worker: {e}")
+                else:
+                    logger.info("GLaDOS worker was not running or already finished.")
+            else:
+                logger.warning("GLaDOS worker attribute not found.")
+            # It's good practice to ensure the instance is cleaned up.
+            # You might want to do this after self.exit() if there are Textual interactions with it.
+            # For now, here is fine.
+            del self.glados_engine_instance
+            self.glados_engine_instance = None
+        else:
+            logger.info("GLaDOS engine instance not found or already cleaned up.")
 
-        Note:
-            - The commented-out `self.glados.cancel()` suggests a potential future implementation
-                for cancelling background tasks before exiting.
-            - Uses `exit(0)` to indicate a successful, intentional application termination.
-
-        Raises:
-            SystemExit: Exits the application with a zero status code.
-        """
-        # self.glados.cancel()
+        logger.info("Exiting Textual application.")
         self.exit()
+
+    @on(Worker.StateChanged)
+    def on_worker_state(self, message: Worker.StateChanged) -> None:
+        """Handle messages from workers."""
+
+
+        if message.state == WorkerState.SUCCESS:
+            self.notify("AI Engine operational", title="GLaDOS", timeout=10)
+        elif message.state == WorkerState.ERROR:
+            self.notify("Instantiation failed!", severity="error")
+
+        self._instantiation_worker = None  # Clear the worker reference
+   
 
     def start_glados(self) -> None:
         """
@@ -352,23 +439,70 @@ class GladosUI(App[None]):
             - Sets the worker as an instance attribute for potential later reference
             - The `exclusive=True` parameter ensures only one instance of this worker runs at a time
         """
+        try:
+            # Run in a thread to avoid blocking the UI
+            self.glados_worker = self.run_worker(
+                self.glados_engine_instance.start_listen_event_loop, exclusive=True, thread=True
+            )
+            logger.info("GLaDOS worker started.")
+        except Exception as e:
+            logger.opt(exception=True).error(f"Failed to start GLaDOS: {e}")
 
-        config_path = "configs/glados_config.yaml"
+    def instantiate_glados(self) -> None:
+        """
+        Instantiate the GLaDOS engine.
+
+        This function creates an instance of the GLaDOS engine, which is responsible for
+        managing the GLaDOS system's operations and interactions. The instance can be used
+        to control various aspects of the GLaDOS engine, including starting and stopping
+        its event loop.
+
+        Returns:
+            Glados: An instance of the GLaDOS engine.
+        """
+
+        config_path = Path("configs/glados_config.yaml")
+        if not config_path.exists():
+            logger.error(f"GLaDOS config file not found: {config_path}")
+
         glados_config = GladosConfig.from_yaml(str(config_path))
-        glados = Glados.from_config(glados_config)
+        self.glados_engine_instance = Glados.from_config(glados_config)
 
-        self.glados = self.run_worker(glados.start_listen_event_loop, exclusive=False, thread=True)
-        pass
+    def start_instantiation(self) -> None:
+        """Starts the worker to instantiate the slow class."""
+        if self._instantiation_worker is not None:
+            self.notify("Instantiation already in progress!", severity="warning")
+            return
+
+        self._instantiation_worker = self.run_worker(
+            self.instantiate_glados,  # The callable function
+            thread=True,  # Run in a thread (default)
+        )
+
 
     @classmethod
     def run_app(cls, config_path: str | Path = "glados_config.yaml") -> None:
-        """Class method to create and run the app instance."""
+        app = None  # Initialize app to None
         try:
             app = cls()
             app.run()
         except KeyboardInterrupt:
-            sys.exit()
+            logger.info("Application interrupted by user. Exiting.")
+            if app is not None and hasattr(app, "action_quit") and callable(app.action_quit):
+                app.action_quit()  # This will now call the improved action_quit
+            # No explicit sys.exit(0) here; Textual's app.exit() will handle it.
+        except Exception:
+            logger.opt(exception=True).critical("Unhandled exception in app run:")
+            if app is not None and hasattr(app, "action_quit") and callable(app.action_quit):
+                # Attempt a graceful shutdown even on other exceptions
+                logger.info("Attempting graceful shutdown due to unhandled exception...")
+                app.action_quit()
+            sys.exit(1)  # Exit with error for unhandled exceptions
 
 
 if __name__ == "__main__":
+    # Example: Use a default config path for direct execution
+    # Ensure text_resources and engine modules are available in PYTHONPATH
+    # and ANSI files are in the correct relative paths (e.g., src/glados/glados_ui/images/)
+    # or adjust paths as needed.
     GladosUI.run_app()

@@ -161,6 +161,7 @@ class Glados:
         self.completion_url = completion_url
         self.model = model
         self.wake_word = wake_word
+        self.announcement = announcement
         self._vad_model = vad_model
         self._tts = tts_model
         self._asr_model = asr_model
@@ -194,21 +195,14 @@ class Glados:
         self.currently_speaking = threading.Event()
         self.shutdown_event = threading.Event()
 
-        llm_thread = threading.Thread(target=self.process_llm)
+        llm_thread = threading.Thread(target=self.process_llm, daemon=True)
         llm_thread.start()
 
-        tts_thread = threading.Thread(target=self.process_tts_thread)
+        tts_thread = threading.Thread(target=self.process_tts_thread, daemon=True)
         tts_thread.start()
 
-        audio_thread = threading.Thread(target=self.process_audio_thread)
+        audio_thread = threading.Thread(target=self.process_audio_thread, daemon=True)
         audio_thread.start()
-
-        if announcement:
-            audio = self._tts.generate_speech_audio(announcement)
-            logger.success(f"TTS text: {announcement}")
-            sd.play(audio, self._tts.sample_rate)
-            if not self.interruptible:
-                sd.wait()
 
         def audio_callback_for_sd_input_stream(
             indata: np.dtype[np.float32],
@@ -248,6 +242,24 @@ class Glados:
             callback=audio_callback_for_sd_input_stream,
             blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
         )
+
+    def play_announcement(self, interruptible: bool | None = None ) -> None:
+        """
+        Play the announcement using text-to-speech (TTS) synthesis.
+
+        Parameters:
+            interruptible (bool | None): Whether the announcement can be interrupted. If None, uses the instance's
+                interruptible setting.
+        """
+        if interruptible is None:
+            interruptible = self.interruptible
+        logger.success("Playing announcement...")
+        if self.announcement:
+            audio = self._tts.generate_speech_audio(self.announcement)
+            logger.success(f"TTS text: {self.announcement}")
+            sd.play(audio, self._tts.sample_rate)
+            if not interruptible:
+                sd.wait()
 
     @property
     def messages(self) -> list[dict[str, str]]:
@@ -337,12 +349,44 @@ class Glados:
         logger.success("Listening...")
         # Loop forever, but is 'paused' when new samples are not available
         try:
-            while True:
-                sample, vad_confidence = self._sample_queue.get()
-                self._handle_audio_sample(sample, vad_confidence)
+            while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
+                try:
+                    # Use a timeout for the queue get
+                    sample, vad_confidence = self._sample_queue.get(timeout=self.PAUSE_TIME)
+                    self._handle_audio_sample(sample, vad_confidence)
+                except queue.Empty:
+                    # Timeout occurred, loop again to check shutdown_event
+                    continue
+                except Exception as e:  # Catch other potential errors during get or handle
+                    if not self.shutdown_event.is_set():  # Only log if not shutting down
+                        logger.error(f"Error in listen loop: {e}")
+                    continue
+
+            logger.info("Shutdown event detected in listen loop, exiting loop.")
+
         except KeyboardInterrupt:
-            self.shutdown_event.set()
-            self.input_stream.stop()
+            logger.info("Keyboard interrupt in listen loop.")
+        finally:
+            logger.info("Listen event loop is stopping/exiting.")
+            self.stop_listen_event_loop()
+
+    def stop_listen_event_loop(self) -> None:
+        """
+        Stop the voice assistant's listening event loop and clean up resources.
+
+        This method stops the audio input stream and sets the shutdown event to terminate
+        any ongoing processing threads. It ensures that all resources are released properly.
+
+        Raises:
+            No explicit exceptions raised; handles cleanup gracefully.
+        """
+        logger.info("Setting Shutdown event")
+        self.shutdown_event.set()  # Set shutdown event first
+
+        logger.info("Calling global sd.stop() to halt all sounddevice activity.")
+        sd.stop()
+
+        logger.info("Glados engine stop sequence initiated. Threads should terminate.")
 
     def _handle_audio_sample(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
@@ -912,6 +956,7 @@ def start() -> None:
     """
     glados_config = GladosConfig.from_yaml("glados_config.yaml")
     glados = Glados.from_config(glados_config)
+    glados.play_announcement()
     glados.start_listen_event_loop()
 
 
