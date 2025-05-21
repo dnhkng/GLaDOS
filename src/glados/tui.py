@@ -94,22 +94,37 @@ class Typewriter(Static):
         *args: str,  # Passed to super().__init__
         **kwargs: str,  # Passed to super().__init__
     ) -> None:
-        super().__init__(*args)  # Pass id via kwargs if Typewriter(id=...) is used
+        super().__init__(*args, **kwargs)  # Pass all kwargs to parent
         self._text = text
         self.__id_for_child = id  # Store id specifically for the child VerticalScroll
         self._speed = speed
         self._repeat = repeat
+        # Flag to determine if we should use Rich markup
+        self._use_markup = True
+        # Check if text contains special Rich markup characters
+        if "[" in text or "]" in text:
+            # If there are brackets in the text, disable markup to avoid conflicts
+            self._use_markup = False
 
     def compose(self) -> ComposeResult:
-        self._static = Static()
+        self._static = Static(markup=self._use_markup)
         self._vertical_scroll = VerticalScroll(self._static, id=self.__id_for_child)
         yield self._vertical_scroll
 
     def _get_iterator(self) -> Iterator[str]:
-        # THE FIX: Changed "[blink]▃[/]" to "[blink]▃[/blink]"
-        # This makes the closing tag explicit and less prone to parsing issues
-        # across different Rich versions or platforms.
-        return (self._text[:i] + "[blink]▃[/blink]" for i in range(len(self._text) + 1))
+        """
+        Create an iterator that returns progressively longer substrings of the text,
+        with a cursor at the end.
+
+        If markup is enabled, uses a blinking cursor with Rich markup.
+        If markup is disabled (due to brackets in the text), uses a plain underscore.
+        """
+        if self._use_markup:
+            # Use Rich markup for the blinking cursor if markup is enabled
+            return (self._text[:i] + "[blink]_[/blink]" for i in range(len(self._text) + 1))
+        else:
+            # Use a simple underscore cursor if markup is disabled
+            return (self._text[:i] + "_" for i in range(len(self._text) + 1))
 
     def on_mount(self) -> None:
         self._iter_text = self._get_iterator()

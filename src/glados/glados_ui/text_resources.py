@@ -11,7 +11,7 @@ aperture = r"""
 # This is adapted from text in the POTRAL ARG:
 # https://github.com/glados-egg/glados/blob/main/main.jsl
 login_text = (
-    "[bold]APERTURE LABORATORIES GLaDOS 1.09 ttyS0 1208 1288[/]"
+    "APERTURE LABORATORIES GLaDOS 1.09 ttyS0 1208 1288"
     "\n\n"
     "Aperture Laboratories operates this computer system under a contract with the "
     "U.S. Department of Defense. It is for authorized use only. The use of this system "
@@ -19,18 +19,18 @@ login_text = (
     "system is prohibited and is subject to criminal and civil penalties under Federal "
     "Laws including but not limited to Public Laws 83-703 and 99-474"
     "\n\n"
-    'If you are a first time user, please type [bold]"CONTINUE"[/].'
+    'If you are a first time user, please type "CONTINUE".'
     "\n\n"
-    "[blink][bold]DISREGARD THIS INSTRUCTION [/][/]if you are returning after a break "
-    "of any duration for any reason. In that case, you [bold]MUST[/] contact your "
+    "DISREGARD THIS INSTRUCTION if you are returning after a break "
+    "of any duration for any reason. In that case, you MUST contact your "
     "supervisor before proceeding. Your supervisor will solicit your Authorized "
-    'Administrative Unit for an affirmative injunction to type [bold]"CONTINUE"[/].'
+    'Administrative Unit for an affirmative injunction to type "CONTINUE".'
     "\n\n"
-    'If permission to type [bold]"CONTINUE"[/b] has been granted, please do so now, '
+    'If permission to type "CONTINUE" has been granted, please do so now, '
     'unless the box labeled "DO NOT TYPE CONTINUE" on the "Forms Re-Sanction" '
     "form you received from your "
     "supervisor is checked, in which case you should remain at your workstation not "
-    'typing [bold]"CONTINUE" [/] until such a time as you are instructed by your '
+    'typing "CONTINUE" until such a time as you are instructed by your '
     "supervisor to discontinue not typing it.\n\n"
     "**EMSI_REQA77E"
     "\n\n"
