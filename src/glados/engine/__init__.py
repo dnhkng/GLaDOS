@@ -14,9 +14,9 @@ logger.remove(0)
 logger.add(sys.stderr, level="SUCCESS")
 
 # Import all components from correct modules
-from glados.engine.core import Glados, start
-from glados.engine.config import GladosConfig, PersonalityPrompt
-from glados.engine.audio_models import AudioMessage
+from .core import Glados, start
+from .config import GladosConfig, PersonalityPrompt
+from .audio_models import AudioMessage
 
 # Export main classes and functions for public API
 __all__ = [
