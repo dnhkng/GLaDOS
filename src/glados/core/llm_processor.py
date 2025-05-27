@@ -8,20 +8,22 @@ from typing import Any
 
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
-import requests  # type: ignore
+import requests
 
 
 class LanguageModelProcessor:
-    def __init__(self,
-                 llm_input_queue: queue.Queue[str],
-                 tts_input_queue: queue.Queue[str],
-                 conversation_history: list[dict[str, str]], # Shared
-                 completion_url: HttpUrl,
-                 model_name: str, # Renamed from 'model' to avoid conflict
-                 api_key: str | None,
-                 processing_active_event: threading.Event, # To check if we should stop streaming
-                 shutdown_event: threading.Event,
-                 pause_time: float = 0.05):
+    def __init__(
+        self,
+        llm_input_queue: queue.Queue[str],
+        tts_input_queue: queue.Queue[str],
+        conversation_history: list[dict[str, str]],  # Shared
+        completion_url: HttpUrl,
+        model_name: str,  # Renamed from 'model' to avoid conflict
+        api_key: str | None,
+        processing_active_event: threading.Event,  # To check if we should stop streaming
+        shutdown_event: threading.Event,
+        pause_time: float = 0.05,
+    ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tts_input_queue = tts_input_queue
         self.conversation_history = conversation_history
@@ -33,23 +35,26 @@ class LanguageModelProcessor:
         self.pause_time = pause_time
 
         self.prompt_headers = {
-            "Authorization": (f"Bearer {api_key}" if api_key else "Bearer your_api_key_here"), # Consider better default
+            "Authorization": (
+                f"Bearer {api_key}" if api_key else "Bearer your_api_key_here"
+            ),  # Consider better default
             "Content-Type": "application/json",
         }
         # Define at class level or locally
         self.PUNCTUATION_SET = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
 
-
-    def _clean_raw_bytes(self, line: bytes) -> dict[str, Any] | None:
+    def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         # Copy from Glados._clean_raw_bytes
         try:
+            # Handle OpenAI format
             if line.startswith(b"data: "):
                 json_str = line.decode("utf-8")[6:]
-                if json_str.strip() == "[DONE]": # Handle OpenAI [DONE] marker
-                    return {"done_marker": True}
+                if json_str.strip() == "[DONE]":  # Handle OpenAI [DONE] marker
+                    return {"done_marker": "True"}
                 parsed_json: dict[str, Any] = json.loads(json_str)
                 return parsed_json
-            else: # Ollama format
+            # Handle Ollama format
+            else:
                 parsed_json = json.loads(line.decode("utf-8"))
                 if isinstance(parsed_json, dict):
                     return parsed_json
@@ -57,28 +62,33 @@ class LanguageModelProcessor:
         except json.JSONDecodeError:
             # If it's not JSON, it might be Ollama's final summary object which isn't part of the stream
             # Or just noise.
-            logger.trace(f"LLM Processor: Failed to parse non-JSON server response line: {line[:100]}") # Log only a part
+            logger.trace(
+                f"LLM Processor: Failed to parse non-JSON server response line: "
+                f"{line[:100].decode('utf-8', errors='replace')}"  
+            )  # Log only a part
             return None
         except Exception as e:
-            logger.warning(f"LLM Processor: Failed to parse server response: {e} for line: {line[:100]}")
+            logger.warning(
+                f"LLM Processor: Failed to parse server response: {e} for line: "
+                f"{line[:100].decode('utf-8', errors='replace')}"
+            )
             return None
-
 
     def _process_chunk(self, line: dict[str, Any]) -> str | None:
         # Copy from Glados._process_chunk
         if not line or not isinstance(line, dict):
             return None
         try:
-            if line.get("done_marker"): # Handle [DONE] marker
+            # Handle OpenAI format
+            if line.get("done_marker"):  # Handle [DONE] marker
                 return None
-            if "choices" in line: # OpenAI format
+            elif "choices" in line:  # OpenAI format
                 content = line.get("choices", [{}])[0].get("delta", {}).get("content")
-                return content # content can be None, which is fine
-            else: # Ollama format
-                content = line.get("message", {}).get("content") # Ollama's stream
-                if content is None and line.get("done") is True and line.get("response") == "": # Ollama: last message often "done" with empty response
-                    return None
-                return content
+                return str(content) if content else None
+            # Handle Ollama format
+            else:
+                content = line.get("message", {}).get("content")
+                return content if content else None
         except Exception as e:
             logger.error(f"LLM Processor: Error processing chunk: {e}, chunk: {line}")
             return None
@@ -87,11 +97,13 @@ class LanguageModelProcessor:
         # Copy from Glados._process_sentence
         sentence = "".join(current_sentence_parts)
         # Be careful with aggressive replacements if LLM might output code or structured text
-        sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence) # Remove *text* and (text)
-        sentence = sentence.replace("\n\n", ". ").replace("\n", ". ") # Replace newlines
-        sentence = sentence.replace("  ", " ").strip() # Normalize spaces and strip
-        
-        if sentence and sentence != ".": # Avoid sending just a period
+        sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence)  # Remove *text* and (text)
+        sentence = sentence.replace("\n\n", ". ").replace("\n", ". ")  # Replace newlines
+        sentence = re.sub(r"\s+", " ", sentence)  # Replace multiple spaces with a single space
+        sentence = re.sub(r"[.!?;:]+", ". ", sentence)  # Normalize punctuation
+        sentence = sentence.strip()  # Normalize spaces and strip
+
+        if sentence and sentence != ".":  # Avoid sending just a period
             logger.info(f"LLM Processor: Sending to TTS queue: '{sentence}'")
             self.tts_input_queue.put(sentence)
 
@@ -101,7 +113,7 @@ class LanguageModelProcessor:
         while not self.shutdown_event.is_set():
             try:
                 detected_text = self.llm_input_queue.get(timeout=self.pause_time)
-                if not self.processing_active_event.is_set(): # Check if we were interrupted before starting
+                if not self.processing_active_event.is_set():  # Check if we were interrupted before starting
                     logger.info("LLM Processor: Interruption signal active, discarding LLM request.")
                     # Ensure EOS is sent if a previous stream was cut short by this interruption
                     # This logic might need refinement based on state. For now, assume no prior stream.
@@ -110,52 +122,51 @@ class LanguageModelProcessor:
                 logger.info(f"LLM Processor: Received text for LLM: '{detected_text}'")
                 self.conversation_history.append({"role": "user", "content": detected_text})
 
-                # Make a copy for this request, as self.conversation_history can be modified by AudioPlayer
-                # for assistant messages during the streaming.
-                # This ensures the LLM request uses the history *at the time of request*.
-                current_request_messages = copy.deepcopy(self.conversation_history)
-
 
                 data = {
                     "model": self.model_name,
                     "stream": True,
-                    "messages": current_request_messages,
+                    "messages": self.conversation_history,
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
-                logger.debug(f"LLM Processor: Starting request to LLM with {len(current_request_messages)} messages.")
 
                 sentence_buffer: list[str] = []
                 try:
                     with requests.post(
-                        str(self.completion_url), # Ensure HttpUrl is converted to str
+                        str(self.completion_url),
                         headers=self.prompt_headers,
                         json=data,
                         stream=True,
-                        timeout=30 # Add a timeout for the request itself
+                        timeout=30,  # Add a timeout for the request itself
                     ) as response:
-                        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+                        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
                         logger.debug("LLM Processor: Request to LLM successful, processing stream...")
                         for line in response.iter_lines():
                             if not self.processing_active_event.is_set() or self.shutdown_event.is_set():
                                 logger.info("LLM Processor: Interruption or shutdown detected during LLM stream.")
-                                break # Stop processing stream
+                                break  # Stop processing stream
 
                             if line:
                                 cleaned_line_data = self._clean_raw_bytes(line)
                                 if cleaned_line_data:
                                     chunk = self._process_chunk(cleaned_line_data)
-                                    if chunk: # Chunk can be an empty string, but None means no actual content
+                                    if chunk:  # Chunk can be an empty string, but None means no actual content
                                         sentence_buffer.append(chunk)
                                         # Split on defined punctuation or if chunk itself is punctuation
-                                        if chunk.strip() in self.PUNCTUATION_SET and \
-                                           (len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()):
+                                        if chunk.strip() in self.PUNCTUATION_SET and (
+                                            len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()
+                                        ):
                                             self._process_sentence_for_tts(sentence_buffer)
                                             sentence_buffer = []
-                                    elif cleaned_line_data.get("done_marker"): # OpenAI [DONE]
-                                        break # End of stream
-                                    elif cleaned_line_data.get("done") and cleaned_line_data.get("response") == "": # Ollama end
+                                    # OpenAI [DONE]
+                                    elif cleaned_line_data.get("done_marker"):  # OpenAI [DONE]
                                         break
-                        
+                                    # Ollama end
+                                    elif (
+                                        cleaned_line_data.get("done") and cleaned_line_data.get("response") == ""
+                                    ):  
+                                        break
+
                         # After loop, process any remaining buffer content if not interrupted
                         if self.processing_active_event.is_set() and sentence_buffer:
                             self._process_sentence_for_tts(sentence_buffer)
@@ -169,19 +180,18 @@ class LanguageModelProcessor:
                     self.tts_input_queue.put("I'm having a little trouble thinking right now.")
                 finally:
                     # Always send EOS if we started processing, unless interrupted early
-                    if self.processing_active_event.is_set(): # Only send EOS if not interrupted
-                         logger.debug("LLM Processor: Sending EOS token to TTS queue.")
-                         self.tts_input_queue.put("<EOS>")
+                    if self.processing_active_event.is_set():  # Only send EOS if not interrupted
+                        logger.debug("LLM Processor: Sending EOS token to TTS queue.")
+                        self.tts_input_queue.put("<EOS>")
                     else:
-                         logger.info("LLM Processor: Interrupted, not sending EOS from LLM processing.")
-                         # The AudioPlayer will handle clearing its state.
-                         # If an EOS was already sent by TTS from a *previous* partial sentence,
-                         # this could lead to an early clear of currently_speaking.
-                         # The `processing_active_event` is key to synchronize.
-
+                        logger.info("LLM Processor: Interrupted, not sending EOS from LLM processing.")
+                        # The AudioPlayer will handle clearing its state.
+                        # If an EOS was already sent by TTS from a *previous* partial sentence,
+                        # this could lead to an early clear of currently_speaking.
+                        # The `processing_active_event` is key to synchronize.
 
             except queue.Empty:
-                pass # Normal
+                pass  # Normal
             except Exception as e:
                 logger.exception(f"LLM Processor: Unexpected error in main run loop: {e}")
                 time.sleep(0.1)

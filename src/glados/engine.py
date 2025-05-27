@@ -1,26 +1,22 @@
-import copy
-from dataclasses import dataclass
-import json
 from pathlib import Path
 import queue
-import re
 import sys
 import threading
-import time
-from typing import Any
 
 from Levenshtein import distance
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, HttpUrl
-import requests
 import sounddevice as sd  # type: ignore
 from sounddevice import CallbackFlags
 import yaml
 
-from glados.ASR import VAD, TranscriberProtocol, get_audio_transcriber
-
+from .ASR import VAD, TranscriberProtocol, get_audio_transcriber
+from .core.audio_message import AudioMessage
+from .core.llm_processor import LanguageModelProcessor
+from .core.tts_synthesizer import TextToSpeechSynthesizer
+from .core.voice_player import VoicePlayer
 from .TTS import tts_glados, tts_kokoro
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
@@ -99,13 +95,6 @@ class GladosConfig(BaseModel):
         return [prompt.to_chat_message() for prompt in self.personality_preprompt]
 
 
-@dataclass
-class AudioMessage:
-    audio: NDArray[np.float32]
-    text: str
-    is_eos: bool = False
-
-
 class Glados:
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
     SAMPLE_RATE: int = 16000  # Sample rate for input stream
@@ -160,6 +149,7 @@ class Glados:
         """
         self.completion_url = completion_url
         self.model = model
+        self.api_key = api_key
         self.wake_word = wake_word
         self.announcement = announcement
         self._vad_model = vad_model
@@ -170,12 +160,6 @@ class Glados:
         # warm up onnx ASR model
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
-        # LLAMA_SERVER_HEADERS
-        self.prompt_headers = {
-            "Authorization": (f"Bearer {api_key}" if api_key else "Bearer your_api_key_here"),
-            "Content-Type": "application/json",
-        }
-
         # Initialize sample queues and state flags
         self._samples: list[NDArray[np.float32]] = []
         self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
@@ -185,24 +169,64 @@ class Glados:
 
         self._messages: list[dict[str, str]] = list(personality_preprompt)
 
+        self.processing_active_event = threading.Event()
+        self.interruptible = interruptible
+
+        self.currently_speaking_event = threading.Event()
+        self.shutdown_event = threading.Event()
+
         self.llm_queue: queue.Queue[str] = queue.Queue()
         self.tts_queue: queue.Queue[str] = queue.Queue()
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()
 
-        self.processing = False
-        self.interruptible = interruptible
+        self.component_threads: list[threading.Thread] = []
 
-        self.currently_speaking = threading.Event()
-        self.shutdown_event = threading.Event()
+        logger.info("Orchestrator: Initializing LanguageModelProcessor...")
+        self.llm_processor = LanguageModelProcessor(
+            llm_input_queue=self.llm_queue,
+            tts_input_queue=self.tts_queue,
+            conversation_history=self._messages,  # Shared
+            completion_url=self.completion_url,
+            model_name=self.model,
+            api_key=self.api_key,
+            processing_active_event=self.processing_active_event,
+            shutdown_event=self.shutdown_event,
+            pause_time=self.PAUSE_TIME,
+        )
 
-        llm_thread = threading.Thread(target=self.process_llm, daemon=True)
-        llm_thread.start()
+        logger.info("Orchestrator: Initializing TextToSpeechSynthesizer...")
+        self.tts_synthesizer = TextToSpeechSynthesizer(
+            tts_input_queue=self.tts_queue,
+            audio_output_queue=self.audio_queue,
+            tts_model=self._tts,
+            stc_instance=self._stc,
+            shutdown_event=self.shutdown_event,
+            pause_time=self.PAUSE_TIME,
+        )
 
-        tts_thread = threading.Thread(target=self.process_tts_thread, daemon=True)
-        tts_thread.start()
+        logger.info("Orchestrator: Initializing AudioPlayer...")
+        self.audio_player = VoicePlayer(
+            audio_output_queue=self.audio_queue,
+            conversation_history=self._messages,  # Shared
+            tts_sample_rate=self._tts.sample_rate,
+            shutdown_event=self.shutdown_event,
+            currently_speaking_event=self.currently_speaking_event,
+            processing_active_event=self.processing_active_event,
+            pause_time=self.PAUSE_TIME,
+        )
 
-        audio_thread = threading.Thread(target=self.process_audio_thread, daemon=True)
-        audio_thread.start()
+        thread_targets = {
+            # "AudioInput": self.audio_input_handler.run,
+            "LLMProcessor": self.llm_processor.run,
+            "TTSSynthesizer": self.tts_synthesizer.run,
+            "AudioPlayer": self.audio_player.run,
+        }
+
+        for name, target_func in thread_targets.items():
+            thread = threading.Thread(target=target_func, name=name, daemon=True)
+            self.component_threads.append(thread)
+            thread.start()
+            logger.info(f"Orchestrator: {name} thread started.")
 
         def audio_callback_for_sd_input_stream(
             indata: np.dtype[np.float32],
@@ -243,7 +267,7 @@ class Glados:
             blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
         )
 
-    def play_announcement(self, interruptible: bool | None = None ) -> None:
+    def play_announcement(self, interruptible: bool | None = None) -> None:
         """
         Play the announcement using text-to-speech (TTS) synthesis.
 
@@ -429,12 +453,12 @@ class Glados:
         self._buffer.put(sample)
 
         if vad_confidence:  # Voice activity detected
-            if not self.interruptible and self.currently_speaking.is_set():
+            if not self.interruptible and self.currently_speaking_event.is_set():
                 logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
                 return
 
             sd.stop()  # Stop the audio stream to prevent overlap
-            self.processing = False  # Turns off processing on threads for the LLM and TTS!!!
+            self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS!!!
             self._samples = list(self._buffer.queue)
             self._recording_started = True
 
@@ -549,8 +573,8 @@ class Glados:
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
                 self.llm_queue.put(detected_text)
-                self.processing = True
-                self.currently_speaking.set()
+                self.processing_active_event.set()
+                self.currently_speaking_event.set()
 
         self.reset()
 
@@ -575,373 +599,6 @@ class Glados:
 
         detected_text = self._asr_model.transcribe(audio)
         return detected_text
-
-    def percentage_played(self, total_samples: int) -> tuple[bool, int]:
-        """
-        Monitor audio playback progress and return completion status with interrupt detection.
-
-        Streams audio samples through PortAudio and actively tracks the number of samples
-        that have been played. The playback can be interrupted by setting self.processing
-        to False or self.shutdown_event. Uses a non-blocking callback system with a completion event for
-        synchronization.
-
-        Args:
-            total_samples: Number of audio samples to be played in total. For example,
-                for 1 second of 48kHz audio, this would be 48000.
-
-        Returns:
-            A tuple containing:
-            - bool: True if playback was interrupted, False if completed normally
-            - int: Percentage of samples played (0-100), calculated as
-            (played_samples / total_samples * 100)
-
-        Raises:
-            sd.PortAudioError: If the audio stream encounters initialization or
-                playback errors
-            RuntimeError: If stream management fails during execution
-
-        Examples:
-            For 1 second of audio at 48kHz:
-            >>> interrupted, progress = audio.percentage_played(48000)
-            >>> print(f"Interrupted: {interrupted}, Progress: {progress}%")
-            Interrupted: False, Progress: 100%
-
-        Implementation Details:
-            - Uses a stream callback system to track sample count in real-time
-            - Handles interruption via self.processing flag
-            - Implements timeout based on audio duration plus 1 second buffer
-            - Caps progress percentage at 100 even if more samples are processed
-        """
-        interrupted = False
-        progress = 0
-        completion_event = threading.Event()
-
-        def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time: dict[str, Any], status: sd.CallbackFlags
-        ) -> tuple[NDArray[np.float32], sd.CallbackStop | None]:
-            nonlocal progress, interrupted
-            progress += frames
-            if self.processing is False or self.shutdown_event.is_set():
-                interrupted = True
-                completion_event.set()
-                return outdata, sd.CallbackStop
-            if progress >= total_samples:
-                completion_event.set()
-            return outdata, None
-
-        try:
-            stream = sd.OutputStream(
-                callback=stream_callback,
-                samplerate=self._tts.sample_rate,
-                channels=1,
-                finished_callback=completion_event.set,
-            )
-            with stream:
-                # Wait with timeout to allow for interruption
-                completion_event.wait(timeout=total_samples / self._tts.sample_rate + 1)
-
-        except (sd.PortAudioError, RuntimeError):
-            logger.debug("Audio stream already closed or invalid")
-
-        percentage_played = min(int(progress / total_samples * 100), 100)
-        return interrupted, percentage_played
-
-    def process_llm(self) -> None:
-        """
-        Process text through the Language Model (LLM) and generate conversational responses.
-
-        This method runs in a continuous loop, retrieving detected text from a queue and sending it to an LLM server.
-        It streams the response, processes each chunk, and sends processed sentences to the text-to-speech (TTS) queue.
-
-        Key Behaviors:
-        - Continuously polls the LLM queue for detected text
-        - Sends text to LLM server with streaming enabled
-        - Processes response chunks in real-time
-        - Breaks sentences at punctuation marks
-        - Handles interruptions and processing flags
-        - Adds end-of-stream token to TTS queue after processing
-
-        Exceptions:
-        - Handles empty queue timeouts
-        - Catches and logs errors during line processing
-        - Stops processing if shutdown event is set or processing flag is False
-
-        Side Effects:
-        - Modifies `self.messages` by appending user messages
-        - Puts processed sentences into `self.tts_queue`
-        - Logs debug and error information
-
-        Note:
-        - Uses a timeout mechanism to prevent blocking
-        - Supports graceful interruption of LLM processing
-        """
-        while not self.shutdown_event.is_set():
-            try:
-                detected_text = self.llm_queue.get(timeout=0.1)
-                self.messages.append({"role": "user", "content": detected_text})
-
-                data = {
-                    "model": self.model,
-                    "stream": True,
-                    "messages": self.messages,
-                }
-                logger.debug(f"starting request on {self.messages=}")
-                logger.debug("Performing request to LLM server...")
-
-                # Perform the request and process the stream
-
-                with requests.post(
-                    str(self.completion_url),
-                    headers=self.prompt_headers,
-                    json=data,
-                    stream=True,
-                ) as response:
-                    sentence = []
-                    for line in response.iter_lines():
-                        if self.processing is False:
-                            break  # If the stop flag is set from new voice input, halt processing
-                        if line:  # Filter out empty keep-alive new lines
-                            try:
-                                cleaned_line = self._clean_raw_bytes(line)
-                                if cleaned_line:  # Add check for empty cleaned line
-                                    chunk = self._process_chunk(cleaned_line)
-                                    if chunk:
-                                        sentence.append(chunk)
-                                        # If there is a pause token, send the sentence to the TTS queue
-                                        if chunk in self.PUNCTUATION_SET and (
-                                            len(sentence) < 2 or not sentence[-2].strip().isdigit()
-                                        ):  # Don't split on numbers, e.g. "1.5"
-                                            logger.info(f"Chunk: {chunk}")
-                                            self._process_sentence(sentence)
-                                            sentence = []
-                            except Exception as e:
-                                logger.error(f"Error processing line: {e}")
-                                continue
-
-                    if self.processing and sentence:
-                        self._process_sentence(sentence)
-                    self.tts_queue.put("<EOS>")  # Add end of stream token to the queue
-            except queue.Empty:
-                time.sleep(self.PAUSE_TIME)
-
-    def _process_sentence(self, current_sentence: list[str]) -> None:
-        """
-        Process a sentence for text-to-speech by cleaning and formatting the input text.
-
-        This method handles text preprocessing for the TTS system, removing special formatting
-        and cleaning up the text before adding it to the TTS queue.
-
-        Args:
-            current_sentence (list[str]): A list of text fragments to be processed.
-
-        Notes:
-            - Removes text enclosed in asterisks (*) and parentheses ()
-            - Replaces newlines with periods
-            - Removes extra whitespace and colons
-            - Only adds non-empty sentences to the TTS queue
-        """
-        sentence = "".join(current_sentence)
-        sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence)
-        sentence = sentence.replace("\n\n", ". ").replace("\n", ". ").replace("  ", " ").replace(":", " ")
-        if sentence:
-            self.tts_queue.put(sentence)
-
-    def _clean_raw_bytes(self, line: bytes) -> dict[str, Any] | None:
-        """
-        Cleans the raw bytes from the server and converts to OpenAI format.
-
-        Args:
-            line (bytes): The raw bytes from the server
-
-        Returns:
-            dict or None: Parsed JSON response in OpenAI format, or None if parsing fails
-        """
-        try:
-            # Handle OpenAI format
-            if line.startswith(b"data: "):
-                json_str = line.decode("utf-8")[6:]  # Remove 'data: ' prefix
-                parsed_json: dict[str, Any] = json.loads(json_str)
-                return parsed_json
-            # Handle Ollama format
-            else:
-                parsed_json = json.loads(line.decode("utf-8"))
-                if isinstance(parsed_json, dict):
-                    return parsed_json
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to parse server response: {e}")
-            return None
-
-    def _process_chunk(self, line: dict[str, Any]) -> str | None:
-        """
-        Process a single chunk of text from the LLM server, extracting content from different response formats.
-
-        This method handles text chunks from two different LLM server response formats: OpenAI and Ollama.
-        It safely extracts the text content, handling potential missing or malformed data.
-
-        Args:
-            line (dict[str, Any]): A dictionary containing the LLM server response chunk.
-
-        Returns:
-            str | None: The extracted text content, or None if no content is found or an error occurs.
-
-        Raises:
-            No explicit exceptions are raised; errors are logged and result in returning None.
-        """
-        if not line or not isinstance(line, dict):
-            return None
-
-        try:
-            # Handle OpenAI format
-            if "choices" in line:
-                content = line.get("choices", [{}])[0].get("delta", {}).get("content")
-                return content if content else None
-            # Handle Ollama format
-            else:
-                content = line.get("message", {}).get("content")
-                return content if content else None
-        except Exception as e:
-            logger.error(f"Error processing chunk: {e}")
-            return None
-
-    def process_tts_thread(self) -> None:
-        """
-        Processes text-to-speech (TTS) generation and playback in a dedicated thread.
-
-        This method continuously retrieves generated text from the TTS queue and converts it to spoken audio.
-        It manages the lifecycle of TTS output, including handling interruptions, tracking playback
-        progress, and updating conversation messages.
-
-        The method runs until the shutdown event is triggered and handles several key scenarios:
-        - Generating speech audio from text
-        - Playing audio through the default sound device
-        - Detecting and handling audio interruptions
-        - Tracking and logging TTS performance metrics
-        - Managing conversation message history
-
-        Attributes:
-            assistant_text (list[str]): Accumulates text generated by the assistant for current response
-            system_text (list[str]): Stores text logged when TTS is interrupted
-            finished (bool): Indicates completion of TTS generation
-            interrupted (bool): Signals whether TTS playback was interrupted
-
-        Raises:
-            queue.Empty: When no text is available in the TTS queue within the specified timeout
-        """
-        while not self.shutdown_event.is_set():
-            try:
-                generated_text = self.tts_queue.get(timeout=self.PAUSE_TIME)
-
-                if generated_text == "<EOS>":
-                    self.audio_queue.put(AudioMessage(np.array([]), "", is_eos=True))
-                elif not generated_text:
-                    logger.warning("Empty string sent to TTS")
-                else:
-                    logger.info(f"LLM text: {generated_text}")
-
-                    start = time.time()
-                    spoken_text = self._stc.text_to_spoken(generated_text)
-                    audio = self._tts.generate_speech_audio(spoken_text)
-                    logger.info(
-                        f"TTS Complete, inference: {(time.time() - start):.2f}, "
-                        f"length: {len(audio) / self._tts.sample_rate:.2f}s"
-                    )
-
-                    if len(audio):
-                        self.audio_queue.put(AudioMessage(audio, spoken_text))
-
-            except queue.Empty:
-                pass
-
-    def process_audio_thread(self) -> None:
-        """Process audio from the TTS queue and play it through the default sound device
-
-        This method continuously retrieves audio messages from the audio queue and plays them through the default sound
-        device. It manages the lifecycle of audio output, including handling interruptions, tracking playback progress,
-        and updating conversation messages.
-
-        Attributes:
-            assistant_text (list[str]): Accumulates text generated by the assistant for current response
-            system_text (list[str]): Stores text logged when TTS is interrupted
-
-        Raises:
-            queue.Empty: When no audio is available in the audio queue within the specified timeout.
-        """
-        assistant_text: list[str] = []
-        system_text: list[str] = []
-
-        while not self.shutdown_event.is_set():
-            try:
-                audio_msg = self.audio_queue.get(timeout=self.PAUSE_TIME)
-
-                if audio_msg.is_eos:
-                    logger.debug("Processing end of stream")
-                    # End of stream - append complete message
-                    if assistant_text:
-                        logger.debug(f"Appending assistant message: {' '.join(assistant_text)}")
-                        self.messages.append({"role": "assistant", "content": " ".join(assistant_text)})
-                    assistant_text = []
-                    self.currently_speaking.clear()
-                    logger.debug("Speaking event cleared")
-                    continue
-
-                if len(audio_msg.audio):
-                    sd.play(audio_msg.audio, self._tts.sample_rate)
-                    total_samples = len(audio_msg.audio)
-
-                    logger.success(f"TTS text: {audio_msg.text}")
-
-                    interrupted, percentage_played = self.percentage_played(total_samples)
-
-                    if interrupted:
-                        clipped_text = self.clip_interrupted_sentence(audio_msg.text, percentage_played)
-                        logger.success(f"TTS interrupted at {percentage_played}%: {clipped_text}")
-
-                        system_text = copy.deepcopy(assistant_text)
-                        system_text.append(clipped_text)
-
-                        # Add interrupted message
-                        self.messages.append({"role": "assistant", "content": " ".join(system_text)})
-                        assistant_text = []
-
-                        self.currently_speaking.clear()
-                        logger.debug("Speaking event cleared")
-
-                        # Clear remaining audio queue
-                        with self.audio_queue.mutex:
-                            self.audio_queue.queue.clear()
-                    else:
-                        assistant_text.append(audio_msg.text)
-
-            except queue.Empty:
-                pass
-
-    def clip_interrupted_sentence(self, generated_text: str, percentage_played: float) -> str:
-        """
-        Clips the generated text based on the percentage of audio played before interruption.
-
-        Truncates the text proportionally to the percentage of audio played and appends an
-        interruption marker if the text was cut short.
-
-        Args:
-            generated_text (str): The complete text generated by the language model.
-            percentage_played (float): Percentage of audio played before interruption (0-100).
-
-        Returns:
-            str: Truncated text with an optional interruption marker.
-
-        Example:
-            >>> assistant.clip_interrupted_sentence("Hello world how are you today", 50)
-            "Hello world<INTERRUPTED>"
-        """
-        tokens = generated_text.split()
-        words_to_print = round((percentage_played / 100) * len(tokens))
-        text = " ".join(tokens[:words_to_print])
-
-        # If the TTS was cut off, make that clear
-        if words_to_print < len(tokens):
-            text = text + "<INTERRUPTED>"
-        return text
 
 
 def start() -> None:
