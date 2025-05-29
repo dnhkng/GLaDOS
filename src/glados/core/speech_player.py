@@ -4,16 +4,14 @@ import time
 from typing import Any
 
 from loguru import logger
-import numpy as np
-from numpy.typing import NDArray
-import sounddevice as sd  # type: ignore
 
 from .audio_message import AudioMessage
 
 
-class VoicePlayer:
+class SpeechPlayer:
     def __init__(
         self,
+        audio_io: Any,  # Replace with actual type if known
         audio_output_queue: queue.Queue[AudioMessage],
         conversation_history: list[dict[str, str]],
         tts_sample_rate: int,
@@ -22,6 +20,7 @@ class VoicePlayer:
         processing_active_event: threading.Event,  # To check if we should interrupt
         pause_time: float,
     ) -> None:
+        self.audio_io = audio_io
         self.audio_output_queue = audio_output_queue
         self.conversation_history = conversation_history  # Shared list
         self.tts_sample_rate = tts_sample_rate
@@ -29,52 +28,6 @@ class VoicePlayer:
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event  # Used to know when to stop
         self.pause_time = pause_time
-
-    def percentage_played(self, total_samples: int) -> tuple[bool, int]:
-        """Calculates the percentage of audio played and checks if playback was interrupted.
-        Returns a tuple of (interrupted: bool, percentage_played: int).
-        This method uses a callback to track the number of frames played and checks if the playback was interrupted.
-
-        Args:
-            total_samples (int): The total number of samples in the audio to be played.
-        Returns:
-            tuple[bool, int]: A tuple where the first element indicates if playback was interrupted,
-                              and the second element is the percentage of audio played.
-        """
-        interrupted = False
-        progress = 0
-        completion_event = threading.Event()
-
-        def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time: dict[str, Any], status: sd.CallbackFlags
-        ) -> tuple[NDArray[np.float32], sd.CallbackStop | None]:
-            nonlocal progress, interrupted
-            progress += frames
-            if not self.processing_active_event.is_set() or self.shutdown_event.is_set():
-                interrupted = True
-                completion_event.set()
-                return outdata, sd.CallbackStop
-            if progress >= total_samples:
-                completion_event.set()
-            return outdata, None
-
-        try:
-            stream = sd.OutputStream(
-                callback=stream_callback,
-                samplerate=self.tts_sample_rate,
-                channels=1,
-                finished_callback=completion_event.set,
-            )
-            with stream:
-                # Wait with timeout to allow for interruption
-                completion_event.wait(timeout=total_samples / self.tts_sample_rate + 1)
-
-        except (sd.PortAudioError, RuntimeError):
-            logger.debug("Audio stream already closed or invalid")
-
-        logger.debug(f"played {progress} frames out of {total_samples} total frames.")
-        percentage_played = min(int(progress / total_samples * 100), 100)
-        return interrupted, percentage_played
 
     def run(self) -> None:
         """Main loop for the AudioPlayer thread."""
@@ -98,11 +51,13 @@ class VoicePlayer:
 
                 if audio_len and audio_msg.text:  # Ensure there's audio and text
                     self.currently_speaking_event.set()  # We are about to speak
-                    sd.play(audio_msg.audio, self.tts_sample_rate)
+
+                    self.audio_io.start_speaking(audio_msg.audio, self.tts_sample_rate)
+
                     logger.success(f"TTS text: {audio_msg.text}")
 
                     # Wait for the audio to finish playing or be interrupted
-                    interrupted, percentage_played = self.percentage_played(audio_len)
+                    interrupted, percentage_played = self.audio_io.measure_percentage_spoken(audio_len)
 
                     if interrupted:
                         clipped_text = self.clip_interrupted_sentence(audio_msg.text, percentage_played)
@@ -114,10 +69,9 @@ class VoicePlayer:
                         )
                         self.conversation_history.append(
                             {
-                                "role": "user", 
+                                "role": "user",
                                 "content": (
-                                    "[SYSTEM: User interrupted mid-response! "
-                                   f"Full intended output: '{audio_msg.text}']"
+                                    f"[SYSTEM: User interrupted mid-response! Full intended output: '{audio_msg.text}']"
                                 ),
                             }
                         )

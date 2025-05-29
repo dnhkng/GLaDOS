@@ -3,26 +3,25 @@ import queue
 import sys
 import threading
 
-from Levenshtein import distance
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, HttpUrl
 import sounddevice as sd  # type: ignore
-from sounddevice import CallbackFlags
 import yaml
 
 from .ASR import VAD, TranscriberProtocol, get_audio_transcriber
+from .audio_io.sounddevice_io import SoundDeviceAudioIO
 from .core.audio_message import AudioMessage
 from .core.llm_processor import LanguageModelProcessor
+from .core.speech_player import SpeechPlayer
 from .core.tts_synthesizer import TextToSpeechSynthesizer
-from .core.voice_player import VoicePlayer
 from .TTS import tts_glados, tts_kokoro
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
 
 logger.remove(0)
-logger.add(sys.stderr, level="SUCCESS")
+logger.add(sys.stderr, level="DEBUG")
 
 
 class PersonalityPrompt(BaseModel):
@@ -162,7 +161,7 @@ class Glados:
 
         # Initialize sample queues and state flags
         self._samples: list[NDArray[np.float32]] = []
-        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
+        # self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
         self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
         self._recording_started = False
         self._gap_counter = 0
@@ -178,6 +177,17 @@ class Glados:
         self.llm_queue: queue.Queue[str] = queue.Queue()
         self.tts_queue: queue.Queue[str] = queue.Queue()
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()
+
+        # Initialize audio I/O
+        self.audio_io = SoundDeviceAudioIO(
+            sample_rate=self.SAMPLE_RATE,
+            vad_size=self.VAD_SIZE,
+            vad_model=self._vad_model,
+            vad_threshold=self.VAD_THRESHOLD,
+        )
+        self._sample_queue = self.audio_io._get_sample_queue()
+        self.audio_io.start_listening()
+        logger.info("Audio input started successfully.")
 
         self.component_threads: list[threading.Thread] = []
 
@@ -205,7 +215,8 @@ class Glados:
         )
 
         logger.info("Orchestrator: Initializing AudioPlayer...")
-        self.audio_player = VoicePlayer(
+        self.audio_player = SpeechPlayer(
+            audio_io=self.audio_io,
             audio_output_queue=self.audio_queue,
             conversation_history=self._messages,  # Shared
             tts_sample_rate=self._tts.sample_rate,
@@ -214,6 +225,9 @@ class Glados:
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
         )
+
+        # logger.info("Orchestrator: Initializing Speech Input Handler...")
+        # self.speech_
 
         thread_targets = {
             # "AudioInput": self.audio_input_handler.run,
@@ -228,44 +242,44 @@ class Glados:
             thread.start()
             logger.info(f"Orchestrator: {name} thread started.")
 
-        def audio_callback_for_sd_input_stream(
-            indata: np.dtype[np.float32],
-            frames: int,
-            time: sd.CallbackStop,
-            status: CallbackFlags,
-        ) -> None:
-            """
-            Callback function for processing audio input from a sounddevice input stream.
+        # def audio_callback_for_sd_input_stream(
+        #     indata: np.dtype[np.float32],
+        #     frames: int,
+        #     time: sd.CallbackStop,
+        #     status: CallbackFlags,
+        # ) -> None:
+        #     """
+        #     Callback function for processing audio input from a sounddevice input stream.
 
-            This method is responsible for handling incoming audio samples, performing voice activity detection (VAD),
-            and queuing the processed audio data for further analysis.
+        #     This method is responsible for handling incoming audio samples, performing voice activity detection (VAD),
+        #     and queuing the processed audio data for further analysis.
 
-            Parameters:
-                indata (np.ndarray): Input audio data from the sounddevice stream
-                frames (int): Number of audio frames in the current chunk
-                time (sd.CallbackStop): Timing information for the audio callback
-                status (CallbackFlags): Status flags for the audio callback
+        #     Parameters:
+        #         indata (np.ndarray): Input audio data from the sounddevice stream
+        #         frames (int): Number of audio frames in the current chunk
+        #         time (sd.CallbackStop): Timing information for the audio callback
+        #         status (CallbackFlags): Status flags for the audio callback
 
-            Returns:
-                None
+        #     Returns:
+        #         None
 
-            Notes:
-                - Copies and squeezes the input data to ensure single-channel processing
-                - Applies voice activity detection to determine speech presence
-                - Puts processed audio samples and VAD confidence into a thread-safe queue
-            """
+        #     Notes:
+        #         - Copies and squeezes the input data to ensure single-channel processing
+        #         - Applies voice activity detection to determine speech presence
+        #         - Puts processed audio samples and VAD confidence into a thread-safe queue
+        #     """
 
-            data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
-            vad_value = self._vad_model(np.expand_dims(data, 0))
-            vad_confidence = vad_value > self.VAD_THRESHOLD
-            self._sample_queue.put((data, bool(vad_confidence)))
+        #     data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
+        #     vad_value = self._vad_model(np.expand_dims(data, 0))
+        #     vad_confidence = vad_value > self.VAD_THRESHOLD
+        #     self._sample_queue.put((data, bool(vad_confidence)))
 
-        self.input_stream = sd.InputStream(
-            samplerate=self.SAMPLE_RATE,
-            channels=1,
-            callback=audio_callback_for_sd_input_stream,
-            blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
-        )
+        # self.input_stream = sd.InputStream(
+        #     samplerate=self.SAMPLE_RATE,
+        #     channels=1,
+        #     callback=audio_callback_for_sd_input_stream,
+        #     blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
+        # )
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -281,6 +295,7 @@ class Glados:
         if self.announcement:
             audio = self._tts.generate_speech_audio(self.announcement)
             logger.success(f"TTS text: {self.announcement}")
+
             sd.play(audio, self._tts.sample_rate)
             if not interruptible:
                 sd.wait()
@@ -368,9 +383,14 @@ class Glados:
         Raises:
             KeyboardInterrupt: Allows graceful termination of the listening loop
         """
-        self.input_stream.start()
+
+        # self.input_stream.start()
+        self.audio_io.start_listening()
+        
         logger.success("Audio Modules Operational")
         logger.success("Listening...")
+
+        logger.info(f"Shutdown event: {self.shutdown_event.is_set()}")
         # Loop forever, but is 'paused' when new samples are not available
         try:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
@@ -408,7 +428,9 @@ class Glados:
         self.shutdown_event.set()  # Set shutdown event first
 
         logger.info("Calling global sd.stop() to halt all sounddevice activity.")
-        sd.stop()
+
+        # sd.stop()
+        self.audio_io.stop_listening()
 
         logger.info("Glados engine stop sequence initiated. Threads should terminate.")
 
@@ -457,7 +479,9 @@ class Glados:
                 logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
                 return
 
-            sd.stop()  # Stop the audio stream to prevent overlap
+            # sd.stop()  # Stop the audio stream to prevent overlap
+            self.audio_io.stop_speaking()
+
             self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS!!!
             self._samples = list(self._buffer.queue)
             self._recording_started = True
@@ -613,7 +637,7 @@ def start() -> None:
     """
     glados_config = GladosConfig.from_yaml("glados_config.yaml")
     glados = Glados.from_config(glados_config)
-    glados.play_announcement()
+
     glados.start_listen_event_loop()
 
 

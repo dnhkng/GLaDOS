@@ -1,0 +1,307 @@
+from collections.abc import Callable
+import queue
+import threading
+from typing import Any
+
+from loguru import logger
+import numpy as np
+from numpy.typing import NDArray
+import sounddevice as sd  # type: ignore
+
+from .audio_io import AudioIO
+
+
+class SoundDeviceAudioIO(AudioIO):
+    """Audio I/O implementation using sounddevice for both input and output.
+
+    This class provides an implementation of the AudioIO interface using the
+    sounddevice library to interact with system audio devices. It handles
+    real-time audio capture with voice activity detection and audio playback.
+
+    Attributes:
+        sample_rate (int): Sample rate for audio streams in Hz
+        vad_size (int): Size of each VAD window in milliseconds
+        _vad_model (Callable): Voice Activity Detection model function
+        _vad_threshold (float): Threshold for VAD detection confidence
+        _sample_queue (queue.Queue): Queue containing audio samples and VAD results
+        input_stream (sd.InputStream): sounddevice input stream for audio capture
+        _is_playing (bool): Flag indicating if audio is currently playing
+        _playback_thread (threading.Thread): Thread for audio playback
+        _stop_event (threading.Event): Event to signal stopping audio playback
+    """
+
+    def __init__(self, sample_rate: int, vad_size: int, vad_model: Callable, vad_threshold: float = 0.8) -> None:
+        """Initialize the sounddevice audio I/O.
+
+        Parameters:
+            sample_rate: Sample rate for audio streams in Hz
+            vad_size: Size of each VAD window in milliseconds
+            vad_model: Voice Activity Detection model callable
+            vad_threshold: Threshold for VAD detection (default: 0.8)
+
+        Raises:
+            ImportError: If the sounddevice module is not available
+            ValueError: If invalid parameters are provided
+        """
+        if sample_rate <= 0:
+            raise ValueError("Sample rate must be positive")
+        if vad_size <= 0:
+            raise ValueError("VAD size must be positive")
+        if not 0 <= vad_threshold <= 1:
+            raise ValueError("VAD threshold must be between 0 and 1")
+
+        self.sample_rate = sample_rate
+        self.vad_size = vad_size
+        self._vad_model = vad_model
+        self._vad_threshold = vad_threshold
+        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
+        self.input_stream: sd.InputStream | None = None
+        self._is_playing = False
+        self._playback_thread = None
+        self._stop_event = threading.Event()
+
+    def start_listening(self) -> None:
+        """Start capturing audio from the system microphone.
+
+        Creates and starts a sounddevice InputStream that continuously captures
+        audio from the default input device. Each audio chunk is processed with
+        the VAD model and placed in the sample queue.
+
+        Raises:
+            RuntimeError: If the audio input stream cannot be started
+            sd.PortAudioError: If there's an issue with the audio hardware
+        """
+        if self.input_stream is not None:
+            self.stop_listening()
+
+        def audio_callback(
+            indata: np.dtype[np.float32],
+            frames: int,
+            time: sd.CallbackStop,
+            status: sd.CallbackFlags,
+        ) -> None:
+            """Process incoming audio data and put it in the queue with VAD confidence.
+
+            Parameters:
+                indata: Input audio data from the sounddevice stream
+                frames: Number of audio frames in the current chunk
+                time: Timing information for the audio callback
+                status: Status flags for the audio callback
+
+            Notes:
+                - Copies and squeezes the input data to ensure single-channel processing
+                - Applies voice activity detection to determine speech presence
+                - Puts processed audio samples and VAD confidence into a thread-safe queue
+            """
+            if status:
+                # Log any errors for debugging
+                print(f"Audio callback status: {status}")
+
+            data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
+            vad_value = self._vad_model(np.expand_dims(data, 0))
+            vad_confidence = vad_value > self._vad_threshold
+            self._sample_queue.put((data, bool(vad_confidence)))
+
+        try:
+            self.input_stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                callback=audio_callback,
+                blocksize=int(self.sample_rate * self.vad_size / 1000),
+            )
+            self.input_stream.start()
+        except sd.PortAudioError as e:
+            raise RuntimeError(f"Failed to start audio input stream: {e}") from e
+
+    def stop_listening(self) -> None:
+        """Stop capturing audio and clean up resources.
+
+        Stops the input stream if it's active and releases associated resources.
+        This method should be called when audio input is no longer needed or
+        before application shutdown.
+        """
+        if self.input_stream is not None:
+            try:
+                self.input_stream.stop()
+                self.input_stream.close()
+            except Exception as e:
+                print(f"Error stopping input stream: {e}")
+            finally:
+                self.input_stream = None
+
+    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None:
+        """Play audio through the system speakers.
+
+        Parameters:
+            audio_data: The audio data to play as a numpy float32 array
+            sample_rate: The sample rate of the audio data in Hz
+            text: Optional text associated with the audio (not used by this implementation)
+
+        Raises:
+            RuntimeError: If audio playback cannot be initiated
+            ValueError: If audio_data is empty or not a valid numpy array
+        """
+        if not isinstance(audio_data, np.ndarray) or audio_data.size == 0:
+            raise ValueError("Invalid audio data")
+
+        if sample_rate is None:
+            sample_rate = self.sample_rate
+
+        # Stop any existing playback
+        self.stop_speaking()
+
+        # Reset the stop event
+        self._stop_event.clear()
+
+        self._is_playing = True
+        sd.play(audio_data, sample_rate)
+
+    def measure_percentage_spoken(self, total_samples: int) -> tuple[bool, int]:
+        """
+        Monitor audio playback progress and return completion status with interrupt detection.
+
+        Streams audio samples through PortAudio and actively tracks the number of samples
+        that have been played. The playback can be interrupted by setting self.processing
+        to False or self.shutdown_event. Uses a non-blocking callback system with a completion event for
+        synchronization.
+
+        Args:
+            total_samples: Number of audio samples to be played in total. For example,
+                for 1 second of 48kHz audio, this would be 48000.
+
+        Returns:
+            A tuple containing:
+            - bool: True if playback was interrupted, False if completed normally
+            - int: Percentage of samples played (0-100), calculated as
+            (played_samples / total_samples * 100)
+
+        Raises:
+            sd.PortAudioError: If the audio stream encounters initialization or
+                playback errors
+            RuntimeError: If stream management fails during execution
+
+        Examples:
+            For 1 second of audio at 48kHz:
+            >>> interrupted, progress = audio.percentage_played(48000)
+            >>> print(f"Interrupted: {interrupted}, Progress: {progress}%")
+            Interrupted: False, Progress: 100%
+
+        Implementation Details:
+            - Uses a stream callback system to track sample count in real-time
+            - Handles interruption via self.processing flag
+            - Implements timeout based on audio duration plus 1 second buffer
+            - Caps progress percentage at 100 even if more samples are processed
+        """
+        interrupted = False
+        progress = 0
+        completion_event = threading.Event()
+
+        def stream_callback(
+            outdata: NDArray[np.float32], frames: int, time: dict[str, Any], status: sd.CallbackFlags
+        ) -> tuple[NDArray[np.float32], sd.CallbackStop | None]:
+            nonlocal progress, interrupted
+            progress += frames
+            if self._is_playing is False:
+                interrupted = True
+                completion_event.set()
+                return outdata, sd.CallbackStop
+            if progress >= total_samples:
+                completion_event.set()
+            return outdata, None
+
+        try:
+            stream = sd.OutputStream(
+                callback=stream_callback,
+                samplerate=self.sample_rate,
+                channels=1,
+                finished_callback=completion_event.set,
+            )
+            with stream:
+                # Wait with timeout to allow for interruption
+                completion_event.wait(timeout=total_samples / self.sample_rate + 1)
+
+        except (sd.PortAudioError, RuntimeError):
+            logger.debug("Audio stream already closed or invalid")
+
+        percentage_played = min(int(progress / total_samples * 100), 100)
+        return interrupted, percentage_played
+
+    # def _play_audio_thread(self, audio_data: NDArray[np.float32], sample_rate: int | None = None) -> None:
+    #     """Thread function to play audio and track when it finishes.
+
+    #     Parameters:
+    #         audio_data: The audio data to play
+    #         sample_rate: The sample rate of the audio data
+
+    #     Notes:
+    #         - Uses sounddevice.play to output audio through default audio device
+    #         - Monitors playback status to update the is_playing flag when complete
+    #         - Handles graceful interruption via the stop_event
+    #     """
+
+    #     if sample_rate is None:
+    #         sample_rate = self.sample_rate
+
+    #     try:
+    #         duration = len(audio_data) / sample_rate
+    #         # Start playback
+    #         sd.play(audio_data, sample_rate)
+    #         # sd.wait()  # Wait for playback to finish
+
+    #         # Track elapsed time
+    #         elapsed = 0.0
+    #         check_interval = 0.01  # Check every 50ms
+
+    #         # Wait for playback to finish or for stop to be called
+    #         while elapsed < duration and not self._stop_event.is_set():
+    #             sd.sleep(int(check_interval * 1000))  # sd.sleep expects milliseconds
+    #             elapsed += check_interval
+    #         # while True:
+    #         # # Wait for 50ms or until playback finishes
+    #         #     finished = sd.wait(timeout=0.05)
+
+    #         #     if finished or self._stop_event.is_set():
+    #         #         break
+    #         # Wait for playback to finish or for stop to be called
+    #         # while sd.get_stream().active and not self._stop_event.is_set():
+    #         #     print(f"get_stream().active: {sd.get_stream().active}")
+
+    #         #     sd.sleep(0.05)  # Short sleep to prevent CPU hogging
+
+        # except Exception as e:
+        #     print(f"Error in audio playback: {e}")
+
+        # finally:
+        #     # Clean up
+        #     sd.stop()
+        #     self._is_playing = False
+
+    def check_if_speaking(self) -> bool:
+        """Check if audio is currently being played.
+
+        Returns:
+            bool: True if audio is currently playing, False otherwise
+        """
+        return self._is_playing
+
+    def stop_speaking(self) -> None:
+        """Stop audio playback and clean up resources.
+
+        Interrupts any ongoing audio playback and waits for the playback thread
+        to terminate. This ensures clean resource management and prevents
+        multiple overlapping playbacks.
+        """
+        if self._is_playing:
+            self._stop_event.set()
+            sd.stop()
+
+            self._is_playing = False
+
+    def _get_sample_queue(self) -> queue.Queue:
+        """Get the queue containing audio samples and VAD confidence.
+
+        Returns:
+            queue.Queue: A thread-safe queue containing tuples of
+                        (audio_sample, vad_confidence)
+        """
+        return self._sample_queue
