@@ -10,7 +10,7 @@ import sounddevice as sd  # type: ignore
 import yaml
 
 from ..ASR import TranscriberProtocol, get_audio_transcriber
-from ..audio_io import VAD, AudioProtocol, get_audio_system
+from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import tts_glados, tts_kokoro
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
@@ -108,7 +108,6 @@ class Glados:
         self,
         asr_model: TranscriberProtocol,
         tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer,
-        vad_model: VAD,
         audio_io: AudioProtocol,
         completion_url: HttpUrl,
         llm_model: str,
@@ -147,9 +146,8 @@ class Glados:
         self.api_key = api_key
         self.wake_word = wake_word
         self.announcement = announcement
-        self._vad_model = vad_model
         
-
+        # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
 
         # warm up onnx ASR model
@@ -277,8 +275,6 @@ class Glados:
             engine_type=config.asr_engine,
         )
 
-        vad_model = VAD()
-
         tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer
         if config.voice == "glados":
             tts_model = tts_glados.Synthesizer()
@@ -292,7 +288,6 @@ class Glados:
         return cls(
             asr_model=asr_model,
             tts_model=tts_model,
-            vad_model=vad_model,
             audio_io=audio_io,
             completion_url=config.completion_url,
             llm_model=config.llm_model,

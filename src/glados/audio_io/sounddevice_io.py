@@ -36,17 +36,12 @@ class SoundDeviceAudioIO:
         """Initialize the sounddevice audio I/O.
 
         Parameters:
-            sample_rate: Sample rate for audio streams in Hz
-            vad_size: Size of each VAD window in milliseconds
-            vad_model: Voice Activity Detection model callable
             vad_threshold: Threshold for VAD detection (default: 0.8)
 
         Raises:
             ImportError: If the sounddevice module is not available
             ValueError: If invalid parameters are provided
         """
-
-
         if vad_threshold is None:
             self.vad_threshold = self.VAD_THRESHOLD
         else:
