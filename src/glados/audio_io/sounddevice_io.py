@@ -206,6 +206,7 @@ class SoundDeviceAudioIO(AudioIO):
                 completion_event.set()
                 return outdata, sd.CallbackStop
             if progress >= total_samples:
+                # logger.debug("Playback completed normally")
                 completion_event.set()
             return outdata, None
 
@@ -218,63 +219,14 @@ class SoundDeviceAudioIO(AudioIO):
             )
             with stream:
                 # Wait with timeout to allow for interruption
-                completion_event.wait(timeout=total_samples / self.sample_rate + 1)
+                completion_event.wait(timeout=total_samples / self.sample_rate)
+                pass
 
         except (sd.PortAudioError, RuntimeError):
             logger.debug("Audio stream already closed or invalid")
 
         percentage_played = min(int(progress / total_samples * 100), 100)
         return interrupted, percentage_played
-
-    # def _play_audio_thread(self, audio_data: NDArray[np.float32], sample_rate: int | None = None) -> None:
-    #     """Thread function to play audio and track when it finishes.
-
-    #     Parameters:
-    #         audio_data: The audio data to play
-    #         sample_rate: The sample rate of the audio data
-
-    #     Notes:
-    #         - Uses sounddevice.play to output audio through default audio device
-    #         - Monitors playback status to update the is_playing flag when complete
-    #         - Handles graceful interruption via the stop_event
-    #     """
-
-    #     if sample_rate is None:
-    #         sample_rate = self.sample_rate
-
-    #     try:
-    #         duration = len(audio_data) / sample_rate
-    #         # Start playback
-    #         sd.play(audio_data, sample_rate)
-    #         # sd.wait()  # Wait for playback to finish
-
-    #         # Track elapsed time
-    #         elapsed = 0.0
-    #         check_interval = 0.01  # Check every 50ms
-
-    #         # Wait for playback to finish or for stop to be called
-    #         while elapsed < duration and not self._stop_event.is_set():
-    #             sd.sleep(int(check_interval * 1000))  # sd.sleep expects milliseconds
-    #             elapsed += check_interval
-    #         # while True:
-    #         # # Wait for 50ms or until playback finishes
-    #         #     finished = sd.wait(timeout=0.05)
-
-    #         #     if finished or self._stop_event.is_set():
-    #         #         break
-    #         # Wait for playback to finish or for stop to be called
-    #         # while sd.get_stream().active and not self._stop_event.is_set():
-    #         #     print(f"get_stream().active: {sd.get_stream().active}")
-
-    #         #     sd.sleep(0.05)  # Short sleep to prevent CPU hogging
-
-        # except Exception as e:
-        #     print(f"Error in audio playback: {e}")
-
-        # finally:
-        #     # Clean up
-        #     sd.stop()
-        #     self._is_playing = False
 
     def check_if_speaking(self) -> bool:
         """Check if audio is currently being played.
@@ -297,7 +249,7 @@ class SoundDeviceAudioIO(AudioIO):
 
             self._is_playing = False
 
-    def _get_sample_queue(self) -> queue.Queue:
+    def _get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
         """Get the queue containing audio samples and VAD confidence.
 
         Returns:

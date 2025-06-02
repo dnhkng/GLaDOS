@@ -14,7 +14,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static
 from textual.worker import Worker, WorkerState
 
-from glados.engine import Glados, GladosConfig
+from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
 # Custom Widgets

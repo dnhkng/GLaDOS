@@ -2,6 +2,7 @@ from pathlib import Path
 import queue
 import sys
 import threading
+import time
 
 from loguru import logger
 import numpy as np
@@ -10,15 +11,16 @@ from pydantic import BaseModel, HttpUrl
 import sounddevice as sd  # type: ignore
 import yaml
 
-from .ASR import VAD, TranscriberProtocol, get_audio_transcriber
-from .audio_io.sounddevice_io import SoundDeviceAudioIO
-from .core.audio_data import AudioMessage
-from .core.llm_processor import LanguageModelProcessor
-from .core.speech_player import SpeechPlayer
-from .core.tts_synthesizer import TextToSpeechSynthesizer
-from .TTS import tts_glados, tts_kokoro
-from .utils import spoken_text_converter as stc
-from .utils.resources import resource_path
+from ..ASR import VAD, TranscriberProtocol, get_audio_transcriber
+from ..audio_io.sounddevice_io import SoundDeviceAudioIO
+from ..TTS import tts_glados, tts_kokoro
+from ..utils import spoken_text_converter as stc
+from ..utils.resources import resource_path
+from .audio_data import AudioMessage
+from .llm_processor import LanguageModelProcessor
+from .speech_listener import SpeechListener
+from .speech_player import SpeechPlayer
+from .tts_synthesizer import TextToSpeechSynthesizer
 
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
@@ -186,10 +188,21 @@ class Glados:
             vad_threshold=self.VAD_THRESHOLD,
         )
         self._sample_queue = self.audio_io._get_sample_queue()
-        self.audio_io.start_listening()
         logger.info("Audio input started successfully.")
 
         self.component_threads: list[threading.Thread] = []
+
+        logger.info("Orchestrator: Initializing SpeechListener...")
+        self.speech_listener = SpeechListener(
+            audio_io=self.audio_io,
+            llm_queue=self.llm_queue,
+            asr_model=self._asr_model,
+            wake_word=self.wake_word,
+            interruptible=self.interruptible,
+            shutdown_event=self.shutdown_event,
+            currently_speaking_event=self.currently_speaking_event,
+            processing_active_event=self.processing_active_event,
+        )
 
         logger.info("Orchestrator: Initializing LanguageModelProcessor...")
         self.llm_processor = LanguageModelProcessor(
@@ -226,13 +239,11 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
-
-
         # logger.info("Orchestrator: Initializing Speech Input Handler...")
         # self.speech_
 
         thread_targets = {
-            # "AudioInput": self.audio_input_handler.run,
+            "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.audio_player.run,
@@ -243,45 +254,6 @@ class Glados:
             self.component_threads.append(thread)
             thread.start()
             logger.info(f"Orchestrator: {name} thread started.")
-
-        # def audio_callback_for_sd_input_stream(
-        #     indata: np.dtype[np.float32],
-        #     frames: int,
-        #     time: sd.CallbackStop,
-        #     status: CallbackFlags,
-        # ) -> None:
-        #     """
-        #     Callback function for processing audio input from a sounddevice input stream.
-
-        #     This method is responsible for handling incoming audio samples, performing voice activity detection (VAD),
-        #     and queuing the processed audio data for further analysis.
-
-        #     Parameters:
-        #         indata (np.ndarray): Input audio data from the sounddevice stream
-        #         frames (int): Number of audio frames in the current chunk
-        #         time (sd.CallbackStop): Timing information for the audio callback
-        #         status (CallbackFlags): Status flags for the audio callback
-
-        #     Returns:
-        #         None
-
-        #     Notes:
-        #         - Copies and squeezes the input data to ensure single-channel processing
-        #         - Applies voice activity detection to determine speech presence
-        #         - Puts processed audio samples and VAD confidence into a thread-safe queue
-        #     """
-
-        #     data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
-        #     vad_value = self._vad_model(np.expand_dims(data, 0))
-        #     vad_confidence = vad_value > self.VAD_THRESHOLD
-        #     self._sample_queue.put((data, bool(vad_confidence)))
-
-        # self.input_stream = sd.InputStream(
-        #     samplerate=self.SAMPLE_RATE,
-        #     channels=1,
-        #     callback=audio_callback_for_sd_input_stream,
-        #     blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
-        # )
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -366,7 +338,7 @@ class Glados:
         """
         return cls.from_config(GladosConfig.from_yaml(path))
 
-    def start_listen_event_loop(self) -> None:
+    def run(self) -> None:
         """
         Start the voice assistant's listening event loop, continuously processing audio input.
 
@@ -388,7 +360,7 @@ class Glados:
 
         # self.input_stream.start()
         self.audio_io.start_listening()
-        
+
         logger.success("Audio Modules Operational")
         logger.success("Listening...")
 
@@ -396,252 +368,18 @@ class Glados:
         # Loop forever, but is 'paused' when new samples are not available
         try:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
-                try:
-                    # Use a timeout for the queue get
-                    sample, vad_confidence = self._sample_queue.get(timeout=self.PAUSE_TIME)
-                    self._handle_audio_sample(sample, vad_confidence)
-                except queue.Empty:
-                    # Timeout occurred, loop again to check shutdown_event
-                    continue
-                except Exception as e:  # Catch other potential errors during get or handle
-                    if not self.shutdown_event.is_set():  # Only log if not shutting down
-                        logger.error(f"Error in listen loop: {e}")
-                    continue
-
+                time.sleep(self.PAUSE_TIME)
             logger.info("Shutdown event detected in listen loop, exiting loop.")
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt in listen loop.")
+            self.shutdown_event.set()
         finally:
             logger.info("Listen event loop is stopping/exiting.")
-            self.stop_listen_event_loop()
-
-    def stop_listen_event_loop(self) -> None:
-        """
-        Stop the voice assistant's listening event loop and clean up resources.
-
-        This method stops the audio input stream and sets the shutdown event to terminate
-        any ongoing processing threads. It ensures that all resources are released properly.
-
-        Raises:
-            No explicit exceptions raised; handles cleanup gracefully.
-        """
-        logger.info("Setting Shutdown event")
-        self.shutdown_event.set()  # Set shutdown event first
-
-        logger.info("Calling global sd.stop() to halt all sounddevice activity.")
-
-        # sd.stop()
-        self.audio_io.stop_listening()
-
-        logger.info("Glados engine stop sequence initiated. Threads should terminate.")
-
-    def _handle_audio_sample(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
-        """
-        Handles the processing of each audio sample.
-
-        If the recording has not started, the sample is added to the circular buffer.
-
-        If the recording has started, the sample is added to the samples list, and the pause
-        limit is checked to determine when to process the detected audio.
-
-        Args:
-            sample (np.ndarray): The audio sample to process.
-            vad_confidence (bool): Whether voice activity is detected in the sample.
-        """
-        if not self._recording_started:
-            self._manage_pre_activation_buffer(sample, vad_confidence)
-        else:
-            self._process_activated_audio(sample, vad_confidence)
-
-    def _manage_pre_activation_buffer(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
-        """
-        Manages the pre-activation audio buffer and handles voice activity detection.
-
-        This method maintains a circular buffer of audio samples before voice activation,
-        discarding the oldest sample when the buffer is full. When voice activity is detected,
-        it stops the audio stream and prepares for audio processing.
-
-        Args:
-            sample (np.ndarray): The current audio sample to be added to the buffer.
-            vad_confidence (bool): Indicates whether voice activity is detected in the sample.
-
-        Side Effects:
-            - Modifies the internal circular buffer
-            - Stops the audio stream when voice is detected
-            - Disables processing on LLM and TTS threads
-            - Prepares samples for recording when voice is detected
-        """
-        if self._buffer.full():
-            self._buffer.get()  # Discard the oldest sample to make room for new ones
-        self._buffer.put(sample)
-
-        if vad_confidence:  # Voice activity detected
-            if not self.interruptible and self.currently_speaking_event.is_set():
-                logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
-                return
-
-            # sd.stop()  # Stop the audio stream to prevent overlap
-            self.audio_io.stop_speaking()
-
-            self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS!!!
-            self._samples = list(self._buffer.queue)
-            self._recording_started = True
-
-    def _process_activated_audio(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
-        """
-        Process audio samples, tracking speech pauses to capture complete utterances.
-
-        This method accumulates audio samples and monitors voice activity detection (VAD) confidence to determine
-        when a complete speech segment has been captured. It appends incoming samples to the internal buffer and
-        tracks silent gaps to trigger audio processing.
-
-        Parameters:
-            sample (np.ndarray): A single audio sample from the input stream
-            vad_confidence (bool): Indicates whether voice activity is currently detected
-
-        Side Effects:
-            - Appends audio samples to self._samples
-            - Increments or resets self._gap_counter
-            - Triggers audio processing via self._process_detected_audio() when pause limit is reached
-        """
-
-        self._samples.append(sample)
-
-        if not vad_confidence:
-            self._gap_counter += 1
-            if self._gap_counter >= self.PAUSE_LIMIT // self.VAD_SIZE:
-                self._process_detected_audio()
-        else:
-            self._gap_counter = 0
-
-    def _wakeword_detected(self, text: str) -> bool:
-        """
-        Check if the detected text contains a close match to the wake word using Levenshtein distance.
-
-        This method helps handle variations in wake word detection by calculating the minimum edit distance
-        between detected words and the configured wake word. It accounts for potential misheard
-        variations during speech recognition.
-
-        Parameters:
-            text (str): The transcribed text to check for wake word similarity
-
-        Returns:
-            bool: True if a word in the text is sufficiently similar to the wake word, False otherwise
-
-        Raises:
-            AssertionError: If the wake word is not configured (None)
-
-        Notes:
-            - Uses Levenshtein distance to measure text similarity
-            - Compares each word in the text against the wake word
-            - Considers a match if the distance is below a predefined similarity threshold
-        """
-        assert self.wake_word is not None, "Wake word should not be None"
-
-        words = text.split()
-        closest_distance = min([distance(word.lower(), self.wake_word) for word in words])
-        return bool(closest_distance < self.SIMILARITY_THRESHOLD)
-
-    def reset(self) -> None:
-        """
-        Reset the voice recording state and clear all audio buffers.
-
-        This method performs the following actions:
-        - Logs a debug message indicating the reset process
-        - Stops the current recording by setting `_recording_started` to False
-        - Clears the collected audio samples
-        - Resets the gap counter used for detecting speech pauses
-        - Empties the thread-safe audio buffer queue
-
-        Note:
-            Uses a mutex lock to safely clear the shared buffer queue to prevent
-            potential race conditions in multi-threaded audio processing.
-        """
-        logger.debug("Resetting recorder...")
-        self._recording_started = False
-        self._samples.clear()
-        self._gap_counter = 0
-        with self._buffer.mutex:
-            self._buffer.queue.clear()
-
-    def _process_detected_audio(self) -> None:
-        """
-        Process detected audio and generate a response after speech pause.
-
-        Transcribes audio samples and handles wake word detection and LLM processing. Manages the
-        audio input stream and processing state throughout the interaction.
-
-        Args:
-            None
-
-        Returns:
-            None
-
-        Side Effects:
-            - Stops the input audio stream
-            - Performs automatic speech recognition (ASR)
-            - Potentially sends text to LLM queue
-            - Resets audio recording state
-            - Restarts input audio stream
-
-        Raises:
-            No explicit exceptions raised
-        """
-        logger.debug("Detected pause after speech. Processing...")
-
-        detected_text = self.asr(self._samples)
-
-        if detected_text:
-            logger.success(f"ASR text: '{detected_text}'")
-
-            if self.wake_word and not self._wakeword_detected(detected_text):
-                logger.info(f"Required wake word {self.wake_word=} not detected.")
-            else:
-                self.llm_queue.put(detected_text)
-                self.processing_active_event.set()
-                self.currently_speaking_event.set()
-
-        self.reset()
-
-    def asr(self, samples: list[NDArray[np.float32]]) -> str:
-        """
-        Perform automatic speech recognition (ASR) on the provided audio samples.
-
-        Parameters:
-            samples (list[np.dtype[np.float32]]): A list of numpy arrays containing audio samples to be transcribed.
-
-        Returns:
-            str: The transcribed text from the input audio samples.
-
-        Notes:
-            - Concatenates multiple audio samples into a single continuous audio array
-            - Uses the pre-configured ASR model to transcribe the audio
-        """
-        audio = np.concatenate(samples)
-
-        # Normalize audio to [-0.5, 0.5] range to prevent clipping and ensure consistent levels
-        audio = audio / np.max(np.abs(audio)) / 2
-
-        detected_text = self._asr_model.transcribe(audio)
-        return detected_text
-
-
-def start() -> None:
-    """Set up the LLM server and start GlaDOS.
-
-    This function reads the configuration file, initializes the Glados voice assistant,
-    and starts the listening event loop.
-
-    Raises:
-        FileNotFoundError: If the configuration file is not found.
-        yaml.YAMLError: If there is an error parsing the YAML configuration file.
-    """
-    glados_config = GladosConfig.from_yaml("glados_config.yaml")
-    glados = Glados.from_config(glados_config)
-
-    glados.start_listen_event_loop()
 
 
 if __name__ == "__main__":
-    start()
+    glados_config = GladosConfig.from_yaml("glados_config.yaml")
+    glados = Glados.from_config(glados_config)
+
+    glados.run()

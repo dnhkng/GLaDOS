@@ -38,14 +38,18 @@ class SpeechListener:
         self,
         audio_io: Any,  # Replace with actual type if known
         llm_queue: queue.Queue[str],
+        shutdown_event: threading.Event,
+        currently_speaking_event: threading.Event,
+        processing_active_event: threading.Event,
+        asr_model: TranscriberProtocol,
         wake_word: str | None = None,
-        asr_model: TranscriberProtocol | None = None,  # Replace with actual ASR model type
         interruptible: bool = True,
-        pause_time: float = 0.1,
-        pause_limit: int = 10,
-        vad_size: int = 1024,
-        similarity_threshold: int = 3,
-        sample_rate: int = 16000,
+
+        # pause_time: float = 0.1,
+        # pause_limit: int = 10,
+        # vad_size: int = 1024,
+        # similarity_threshold: int = 3,
+        # sample_rate: int = 16000,
     ) -> None:
         """
         Initialize the SpeechListener with audio input/output, LLM queue, and configuration parameters.
@@ -65,13 +69,8 @@ class SpeechListener:
         self.audio_io = audio_io
         self.llm_queue = llm_queue
         self.wake_word = wake_word
-        self._asr_model = asr_model
         self.interruptible = interruptible
-
-        self.PAUSE_TIME = pause_time
-        self.PAUSE_LIMIT = pause_limit
-        self.VAD_SIZE = vad_size
-        self.SIMILARITY_THRESHOLD = similarity_threshold
+        self.asr_model = asr_model
 
         # Circular buffer to hold pre-activation samples
         self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
@@ -83,12 +82,17 @@ class SpeechListener:
         self._samples: list[NDArray[np.float32]] = []
         self._gap_counter = 0
 
-        # Event flags for controlling processing state
-        self.processing_active_event = threading.Event()
-        self.currently_speaking_event = threading.Event()
+        self.shutdown_event = shutdown_event
+        self.currently_speaking_event = currently_speaking_event
+        self.processing_active_event = processing_active_event
+
+
+        # # Event flags for controlling processing state
+        # self.processing_active_event = threading.Event()
+        # self.currently_speaking_event = threading.Event()
         
-        # Shutdown event to stop the listening loop gracefully
-        self.shutdown_event = threading.Event()
+        # # Shutdown event to stop the listening loop gracefully
+        # self.shutdown_event = threading.Event()
 
 
     def run(self) -> None:
@@ -348,5 +352,5 @@ class SpeechListener:
         # Normalize audio to [-0.5, 0.5] range to prevent clipping and ensure consistent levels
         audio = audio / np.max(np.abs(audio)) / 2
 
-        detected_text = self._asr_model.transcribe(audio)
+        detected_text = self.asr_model.transcribe(audio)
         return detected_text

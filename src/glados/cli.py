@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 import sounddevice as sd  # type: ignore
 
-from .engine import Glados, GladosConfig
+from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
@@ -241,7 +241,7 @@ def start(config_path: str | Path = "glados_config.yaml") -> None:
     glados_config = GladosConfig.from_yaml(str(config_path))
     glados = Glados.from_config(glados_config)
     glados.play_announcement()
-    glados.start_listen_event_loop()
+    glados.run()
 
 
 def tui(config_path: str | Path = "glados_config.yaml") -> None:
