@@ -6,7 +6,6 @@ from typing import Any, Protocol
 from numpy.typing import NDArray
 
 from .mel_spectrogram import MelSpectrogramCalculator
-from .vad import VAD
 
 
 class TranscriberProtocol(Protocol):
@@ -21,16 +20,16 @@ def get_audio_transcriber(
 ) -> TranscriberProtocol:  # Return type is now a Union of concrete types
     """
     Factory function to get an instance of an audio transcriber based on the specified engine type.
-    
+
     Parameters:
         engine_type (str): The type of ASR engine to use:
             - "ctc": Connectionist Temporal Classification model (faster, good accuracy)
             - "tdt": Token and Duration Transducer model (best accuracy, slightly slower)
         **kwargs: Additional keyword arguments to pass to the transcriber constructor
-    
+
     Returns:
         TranscriberProtocol: An instance of the requested audio transcriber
-        
+
     Raises:
         ValueError: If the specified engine type is not supported
     """
@@ -46,4 +45,4 @@ def get_audio_transcriber(
         raise ValueError(f"Unsupported ASR engine type: {engine_type}")
 
 
-__all__ = ["VAD", "MelSpectrogramCalculator", "TranscriberProtocol", "get_audio_transcriber"]
+__all__ = ["MelSpectrogramCalculator", "TranscriberProtocol", "get_audio_transcriber"]
