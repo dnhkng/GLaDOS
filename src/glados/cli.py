@@ -240,7 +240,8 @@ def start(config_path: str | Path = "glados_config.yaml") -> None:
     """
     glados_config = GladosConfig.from_yaml(str(config_path))
     glados = Glados.from_config(glados_config)
-    glados.play_announcement()
+    if glados.announcement:
+        glados.play_announcement()
     glados.run()
 
 

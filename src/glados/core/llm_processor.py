@@ -4,7 +4,7 @@ import queue
 import re
 import threading
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
@@ -12,6 +12,9 @@ import requests
 
 
 class LanguageModelProcessor:
+
+    PUNCTUATION_SET: ClassVar[set[str]] = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
+    
     def __init__(
         self,
         llm_input_queue: queue.Queue[str],
@@ -40,8 +43,7 @@ class LanguageModelProcessor:
             ),  # Consider better default
             "Content-Type": "application/json",
         }
-        # Define at class level or locally
-        self.PUNCTUATION_SET = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
+
 
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         # Copy from Glados._clean_raw_bytes
