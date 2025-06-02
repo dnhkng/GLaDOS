@@ -7,6 +7,8 @@ from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 
+from ..ASR import TranscriberProtocol
+
 
 class SpeechListener:
     """
@@ -16,13 +18,28 @@ class SpeechListener:
     It provides methods to start and stop the listening event loop, manage audio samples,
     and handle wake word detection.
     """
+    PAUSE_TIME: float = 0.05  # Time to wait between processing loops
+    SAMPLE_RATE: int = 16000  # Sample rate for input stream
+    VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
+    VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
+    BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
+    PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
+    SIMILARITY_THRESHOLD: int = 2  # Threshold for wake word similarity
+    PUNCTUATION_SET: tuple[str, ...] = (".", "!", "?", ":", ";", "?!", "\n", "\n\n")  # Sentence splitting punctuation
+    NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
+    DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
+        {
+            "role": "system",
+            "content": "You are a helpful AI assistant. You are here to assist the user in their tasks.",
+        },
+    )
 
     def __init__(
         self,
         audio_io: Any,  # Replace with actual type if known
         llm_queue: queue.Queue[str],
         wake_word: str | None = None,
-        asr_model: Any = None,  # Replace with actual ASR model type
+        asr_model: TranscriberProtocol | None = None,  # Replace with actual ASR model type
         interruptible: bool = True,
         pause_time: float = 0.1,
         pause_limit: int = 10,
@@ -57,7 +74,9 @@ class SpeechListener:
         self.SIMILARITY_THRESHOLD = similarity_threshold
 
         # Circular buffer to hold pre-activation samples
-        self._buffer = queue.Queue(maxsize=pause_limit)
+        self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
+        self._sample_queue = self.audio_io._get_sample_queue()
+
 
         # Internal state variables
         self._recording_started = False

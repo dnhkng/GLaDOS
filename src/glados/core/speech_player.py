@@ -5,7 +5,7 @@ from typing import Any
 
 from loguru import logger
 
-from .audio_message import AudioMessage
+from .audio_data import AudioMessage
 
 
 class SpeechPlayer:

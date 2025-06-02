@@ -7,7 +7,7 @@ import numpy as np
 
 from ..TTS import tts_glados, tts_kokoro
 from ..utils import spoken_text_converter as stc
-from .audio_message import AudioMessage
+from .audio_data import AudioMessage
 
 
 class TextToSpeechSynthesizer:

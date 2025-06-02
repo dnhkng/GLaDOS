@@ -12,7 +12,7 @@ import yaml
 
 from .ASR import VAD, TranscriberProtocol, get_audio_transcriber
 from .audio_io.sounddevice_io import SoundDeviceAudioIO
-from .core.audio_message import AudioMessage
+from .core.audio_data import AudioMessage
 from .core.llm_processor import LanguageModelProcessor
 from .core.speech_player import SpeechPlayer
 from .core.tts_synthesizer import TextToSpeechSynthesizer
@@ -225,6 +225,8 @@ class Glados:
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
         )
+
+
 
         # logger.info("Orchestrator: Initializing Speech Input Handler...")
         # self.speech_
