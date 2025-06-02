@@ -45,7 +45,7 @@ class PersonalityPrompt(BaseModel):
 
 class GladosConfig(BaseModel):
     completion_url: HttpUrl
-    model: str
+    llm_model: str
     api_key: str | None = None
     interruptible: bool = True
     asr_engine: str = "ctc"
@@ -111,7 +111,7 @@ class Glados:
         vad_model: VAD,
         audio_io: AudioProtocol,
         completion_url: HttpUrl,
-        model: str,
+        llm_model: str,
         api_key: str | None = None,
         interruptible: bool = True,
         wake_word: str | None = None,
@@ -143,7 +143,7 @@ class Glados:
         self._asr_model = asr_model
         self._tts = tts_model
         self.completion_url = completion_url
-        self.model = model
+        self.llm_model = llm_model
         self.api_key = api_key
         self.wake_word = wake_word
         self.announcement = announcement
@@ -192,7 +192,7 @@ class Glados:
             tts_input_queue=self.tts_queue,
             conversation_history=self._messages,  # Shared, to be refactored
             completion_url=self.completion_url,
-            model_name=self.model,
+            model_name=self.llm_model,
             api_key=self.api_key,
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
@@ -295,7 +295,7 @@ class Glados:
             vad_model=vad_model,
             audio_io=audio_io,
             completion_url=config.completion_url,
-            model=config.model,
+            llm_model=config.llm_model,
             api_key=config.api_key,
             interruptible=config.interruptible,
             wake_word=config.wake_word,
