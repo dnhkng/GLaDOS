@@ -1,4 +1,3 @@
-from collections.abc import Callable
 import queue
 import threading
 from typing import Any
@@ -8,10 +7,10 @@ import numpy as np
 from numpy.typing import NDArray
 import sounddevice as sd  # type: ignore
 
-from .audio_io import AudioIO
+from . import VAD
 
 
-class SoundDeviceAudioIO(AudioIO):
+class SoundDeviceAudioIO:
     """Audio I/O implementation using sounddevice for both input and output.
 
     This class provides an implementation of the AudioIO interface using the
@@ -29,8 +28,11 @@ class SoundDeviceAudioIO(AudioIO):
         _playback_thread (threading.Thread): Thread for audio playback
         _stop_event (threading.Event): Event to signal stopping audio playback
     """
+    SAMPLE_RATE: int = 16000  # Sample rate for input stream
+    VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
+    VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
 
-    def __init__(self, sample_rate: int, vad_size: int, vad_model: Callable, vad_threshold: float = 0.8) -> None:
+    def __init__(self, vad_threshold: float | None = None) -> None:
         """Initialize the sounddevice audio I/O.
 
         Parameters:
@@ -43,17 +45,18 @@ class SoundDeviceAudioIO(AudioIO):
             ImportError: If the sounddevice module is not available
             ValueError: If invalid parameters are provided
         """
-        if sample_rate <= 0:
-            raise ValueError("Sample rate must be positive")
-        if vad_size <= 0:
-            raise ValueError("VAD size must be positive")
-        if not 0 <= vad_threshold <= 1:
+
+
+        if vad_threshold is None:
+            self.vad_threshold = self.VAD_THRESHOLD
+        else:
+            self.vad_threshold = vad_threshold
+        
+        if not 0 <= self.vad_threshold <= 1:
             raise ValueError("VAD threshold must be between 0 and 1")
 
-        self.sample_rate = sample_rate
-        self.vad_size = vad_size
-        self._vad_model = vad_model
-        self._vad_threshold = vad_threshold
+        self._vad_model = VAD()
+        
         self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
         self.input_stream: sd.InputStream | None = None
         self._is_playing = False
@@ -99,15 +102,15 @@ class SoundDeviceAudioIO(AudioIO):
 
             data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
             vad_value = self._vad_model(np.expand_dims(data, 0))
-            vad_confidence = vad_value > self._vad_threshold
+            vad_confidence = vad_value > self.vad_threshold
             self._sample_queue.put((data, bool(vad_confidence)))
 
         try:
             self.input_stream = sd.InputStream(
-                samplerate=self.sample_rate,
+                samplerate=self.SAMPLE_RATE,
                 channels=1,
                 callback=audio_callback,
-                blocksize=int(self.sample_rate * self.vad_size / 1000),
+                blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
             )
             self.input_stream.start()
         except sd.PortAudioError as e:
@@ -145,7 +148,7 @@ class SoundDeviceAudioIO(AudioIO):
             raise ValueError("Invalid audio data")
 
         if sample_rate is None:
-            sample_rate = self.sample_rate
+            sample_rate = self.SAMPLE_RATE
 
         # Stop any existing playback
         self.stop_speaking()
@@ -213,13 +216,13 @@ class SoundDeviceAudioIO(AudioIO):
         try:
             stream = sd.OutputStream(
                 callback=stream_callback,
-                samplerate=self.sample_rate,
+                samplerate=self.SAMPLE_RATE,
                 channels=1,
                 finished_callback=completion_event.set,
             )
             with stream:
                 # Wait with timeout to allow for interruption
-                completion_event.wait(timeout=total_samples / self.sample_rate)
+                completion_event.wait(timeout=total_samples / self.SAMPLE_RATE)
                 pass
 
         except (sd.PortAudioError, RuntimeError):
