@@ -231,35 +231,13 @@ class Synthesizer:
             NDArray[np.float32]: An array of audio samples representing the synthesized speech
         """
         phonemes = self._phonemizer(text)
-        audio = self.say_phonemes(phonemes)
-        return np.array(audio, dtype=np.float32)
+        phoneme_ids_list = [self._phonemes_to_ids(sentence) for sentence in phonemes]
+        audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids) for phoneme_ids in phoneme_ids_list]
 
-    def say_phonemes(self, phonemes: list[str]) -> NDArray[np.float32]:
-        """
-        Convert a list of phoneme sentences to synthesized audio.
-
-        Generates audio for each phoneme sentence and concatenates the results into a single audio array.
-
-        Parameters:
-            phonemes (list[str]): A list of phoneme sentences to convert to speech.
-
-        Returns:
-            NDArray[np.float32]: A numpy array containing the synthesized audio, with each sentence concatenated.
-            Returns an empty float32 numpy array if no audio could be generated.
-
-        Notes:
-            - Processes each phoneme sentence individually using _say_phonemes()
-            - Concatenates audio chunks along the time axis
-            - Transposes the final audio array to ensure correct audio format
-        """
-        audio_list = []
-        for sentence in phonemes:
-            audio_chunk = self._say_phonemes(sentence)
-            audio_list.append(audio_chunk)
-        if audio_list:
-            audio: NDArray[np.float32] = np.concatenate(audio_list, axis=1).T
+        if audio_chunks:
+            audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T
             return audio
-        return np.array([], dtype=np.float32)
+        return np.array(audio, dtype=np.float32)
 
     def _phonemizer(self, input_text: str) -> list[str]:
         """
@@ -319,7 +297,7 @@ class Synthesizer:
 
         return ids
 
-    def _synthesize_ids_to_raw(
+    def _synthesize_ids_to_audio(
         self,
         phoneme_ids: list[int],
         length_scale: float | None = None,
@@ -381,29 +359,6 @@ class Synthesizer:
                 "sid": sid,
             },
         )[0].squeeze((0, 1))
-
-        return audio
-
-    def _say_phonemes(self, phonemes: str) -> NDArray[np.float32]:
-        """
-        Convert a string of phonemes to synthesized audio.
-
-        This method transforms phonemes into their corresponding numeric IDs and then generates
-        raw audio using the VITS model.
-
-        Parameters:
-            phonemes (str): A string containing phonemes to be synthesized into speech.
-
-        Returns:
-            NDArray[np.float32]: A NumPy array representing the synthesized audio waveform.
-
-        Example:
-            synthesizer = Synthesizer()
-            audio = synthesizer._say_phonemes("h ɛ l oʊ")  # Generates audio for "hello"
-        """
-
-        phoneme_ids = self._phonemes_to_ids(phonemes)
-        audio: NDArray[np.float32] = self._synthesize_ids_to_raw(phoneme_ids)
 
         return audio
 
