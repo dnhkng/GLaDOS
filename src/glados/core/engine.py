@@ -5,14 +5,12 @@ import threading
 import time
 
 from loguru import logger
-import numpy as np
-from numpy.typing import NDArray
 from pydantic import BaseModel, HttpUrl
 import sounddevice as sd  # type: ignore
 import yaml
 
-from ..ASR import VAD, TranscriberProtocol, get_audio_transcriber
-from ..audio_io.sounddevice_io import SoundDeviceAudioIO
+from ..ASR import TranscriberProtocol, get_audio_transcriber
+from ..audio_io import VAD, AudioProtocol, get_audio_system
 from ..TTS import tts_glados, tts_kokoro
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
@@ -98,13 +96,6 @@ class GladosConfig(BaseModel):
 
 class Glados:
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
-    SAMPLE_RATE: int = 16000  # Sample rate for input stream
-    VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
-    VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
-    BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
-    PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
-    SIMILARITY_THRESHOLD: int = 2  # Threshold for wake word similarity
-    PUNCTUATION_SET: tuple[str, ...] = (".", "!", "?", ":", ";", "?!", "\n", "\n\n")  # Sentence splitting punctuation
     NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
     DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
         {
@@ -118,6 +109,7 @@ class Glados:
         asr_model: TranscriberProtocol,
         tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer,
         vad_model: VAD,
+        audio_io: AudioProtocol,
         completion_url: HttpUrl,
         model: str,
         api_key: str | None = None,
@@ -148,51 +140,42 @@ class Glados:
             interruptible (bool, optional): Whether the assistant's speech can be interrupted.
                 Defaults to True.
         """
+        self._asr_model = asr_model
+        self._tts = tts_model
         self.completion_url = completion_url
         self.model = model
         self.api_key = api_key
         self.wake_word = wake_word
         self.announcement = announcement
         self._vad_model = vad_model
-        self._tts = tts_model
-        self._asr_model = asr_model
+        
+
         self._stc = stc.SpokenTextConverter()
 
         # warm up onnx ASR model
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
-        # Initialize sample queues and state flags
-        self._samples: list[NDArray[np.float32]] = []
-        # self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
-        self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
-        self._recording_started = False
-        self._gap_counter = 0
-
         self._messages: list[dict[str, str]] = list(personality_preprompt)
 
-        self.processing_active_event = threading.Event()
         self.interruptible = interruptible
 
-        self.currently_speaking_event = threading.Event()
-        self.shutdown_event = threading.Event()
+        # Initialize events for thread synchronization
+        self.processing_active_event = threading.Event()   # Indicates if input processing is active (ASR + LLM + TTS)
+        self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
+        self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
-        self.llm_queue: queue.Queue[str] = queue.Queue()
-        self.tts_queue: queue.Queue[str] = queue.Queue()
-        self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()
+        # Initialize queues for inter-thread communication
+        self.llm_queue: queue.Queue[str] = queue.Queue()  # Text from SpeechListener to LLMProcessor
+        self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
+        self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
 
-        # Initialize audio I/O
-        self.audio_io = SoundDeviceAudioIO(
-            sample_rate=self.SAMPLE_RATE,
-            vad_size=self.VAD_SIZE,
-            vad_model=self._vad_model,
-            vad_threshold=self.VAD_THRESHOLD,
-        )
-        self._sample_queue = self.audio_io._get_sample_queue()
+        # Initialize audio input/output system
+        self.audio_io: AudioProtocol = audio_io
         logger.info("Audio input started successfully.")
 
+        # Initialize threads for each component
         self.component_threads: list[threading.Thread] = []
 
-        logger.info("Orchestrator: Initializing SpeechListener...")
         self.speech_listener = SpeechListener(
             audio_io=self.audio_io,
             llm_queue=self.llm_queue,
@@ -204,11 +187,10 @@ class Glados:
             processing_active_event=self.processing_active_event,
         )
 
-        logger.info("Orchestrator: Initializing LanguageModelProcessor...")
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue,
             tts_input_queue=self.tts_queue,
-            conversation_history=self._messages,  # Shared
+            conversation_history=self._messages,  # Shared, to be refactored
             completion_url=self.completion_url,
             model_name=self.model,
             api_key=self.api_key,
@@ -217,7 +199,6 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
-        logger.info("Orchestrator: Initializing TextToSpeechSynthesizer...")
         self.tts_synthesizer = TextToSpeechSynthesizer(
             tts_input_queue=self.tts_queue,
             audio_output_queue=self.audio_queue,
@@ -227,11 +208,10 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
-        logger.info("Orchestrator: Initializing AudioPlayer...")
-        self.audio_player = SpeechPlayer(
+        self.speech_player = SpeechPlayer(
             audio_io=self.audio_io,
             audio_output_queue=self.audio_queue,
-            conversation_history=self._messages,  # Shared
+            conversation_history=self._messages,  # Shared, to be refactored
             tts_sample_rate=self._tts.sample_rate,
             shutdown_event=self.shutdown_event,
             currently_speaking_event=self.currently_speaking_event,
@@ -239,14 +219,11 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
-        # logger.info("Orchestrator: Initializing Speech Input Handler...")
-        # self.speech_
-
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
-            "AudioPlayer": self.audio_player.run,
+            "AudioPlayer": self.speech_player.run,
         }
 
         for name, target_func in thread_targets.items():
@@ -268,7 +245,7 @@ class Glados:
         logger.success("Playing announcement...")
         if self.announcement:
             audio = self._tts.generate_speech_audio(self.announcement)
-            logger.success(f"TTS text: {self.announcement}")
+            logger.success(f"TTS Announcement text: {self.announcement}")
 
             sd.play(audio, self._tts.sample_rate)
             if not interruptible:
@@ -309,10 +286,14 @@ class Glados:
             assert config.voice in tts_kokoro.get_voices(), f"Voice '{config.voice}' not available"
             tts_model = tts_kokoro.Synthesizer(voice=config.voice)
 
+        audio_io: AudioProtocol
+        audio_io = get_audio_system(backend_type="sounddevice")
+
         return cls(
             asr_model=asr_model,
             tts_model=tts_model,
             vad_model=vad_model,
+            audio_io=audio_io,
             completion_url=config.completion_url,
             model=config.model,
             api_key=config.api_key,
