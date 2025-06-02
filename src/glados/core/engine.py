@@ -44,14 +44,15 @@ class PersonalityPrompt(BaseModel):
 
 
 class GladosConfig(BaseModel):
-    completion_url: HttpUrl
     llm_model: str
-    api_key: str | None = None
-    interruptible: bool = True
-    asr_engine: str = "ctc"
-    wake_word: str | None = None
+    completion_url: HttpUrl
+    api_key: str | None
+    interruptible: bool
+    audio_io: str
+    asr_engine: str
+    wake_word: str | None
     voice: str
-    announcement: str | None = None
+    announcement: str | None
     personality_preprompt: list[PersonalityPrompt]
 
     @classmethod
