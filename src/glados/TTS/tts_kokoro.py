@@ -66,8 +66,8 @@ class Synthesizer:
         else:
             assert voice in self.voices.keys(), f"voice '{voice}' not found"
         phonemes = self.phonemizer.convert_to_phonemes([text], "en_us")
-        ids = self._phonemes_to_ids(phonemes[0])
-        audio = self._synthesize_ids_to_audio(ids, voice)
+        phoneme_ids = self._phonemes_to_ids(phonemes[0])
+        audio = self._synthesize_ids_to_audio(phoneme_ids, voice)
         return np.array(audio, dtype=np.float32)
 
     @staticmethod
