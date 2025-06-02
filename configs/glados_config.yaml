@@ -3,6 +3,7 @@ Glados:
   model: "llama3.2"
   api_key: "Bearer your_api_key_here"
   interruptible: true
+  audio_system: "sounddevice"
   asr_engine: "tdt"
   wake_word: null
   voice: "glados"
