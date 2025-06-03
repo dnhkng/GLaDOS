@@ -141,10 +141,11 @@ class SoundDeviceAudioIO:
         # Reset the stop event
         self._stop_event.clear()
 
+        logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio_data)} samples")
         self._is_playing = True
         sd.play(audio_data, sample_rate)
 
-    def measure_percentage_spoken(self, total_samples: int) -> tuple[bool, int]:
+    def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]:
         """
         Monitor audio playback progress and return completion status with interrupt detection.
 
