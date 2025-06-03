@@ -356,7 +356,7 @@ class Glados:
                         break
             self.shutdown_event.set()
             # Give threads a moment to notice the shutdown event
-            time.sleep(0.1)
+            time.sleep(self.PAUSE_TIME)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
             exit()
