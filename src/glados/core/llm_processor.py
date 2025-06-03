@@ -109,14 +109,15 @@ class LanguageModelProcessor:
             return None
 
     def _process_sentence_for_tts(self, current_sentence_parts: list[str]) -> None:
-        # Copy from Glados._process_sentence
+        """
+        Process the current sentence parts and send the complete sentence to the TTS queue.
+        Cleans up the sentence by removing unwanted characters and formatting it for TTS.
+        Args:
+            current_sentence_parts (list[str]): List of sentence parts to be processed.
+        """
         sentence = "".join(current_sentence_parts)
-        # Be careful with aggressive replacements if LLM might output code or structured text
-        sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence)  # Remove *text* and (text)
-        sentence = sentence.replace("\n\n", ". ").replace("\n", ". ")  # Replace newlines
-        sentence = re.sub(r"\s+", " ", sentence)  # Replace multiple spaces with a single space
-        sentence = re.sub(r"[.!?;:]+", ". ", sentence)  # Normalize punctuation
-        sentence = sentence.strip()  # Normalize spaces and strip
+        sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence)
+        sentence = sentence.replace("\n\n", ". ").replace("\n", ". ").replace("  ", " ").replace(":", " ")
 
         if sentence and sentence != ".":  # Avoid sending just a period
             logger.info(f"LLM Processor: Sending to TTS queue: '{sentence}'")

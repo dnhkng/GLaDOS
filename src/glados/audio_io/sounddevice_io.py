@@ -182,7 +182,7 @@ class SoundDeviceAudioIO:
             return outdata, None
 
         try:
-            logger.debug(f"using sammple rate: {sample_rate} Hz, total samples: {total_samples}")
+            logger.debug(f"Using sample rate: {sample_rate} Hz, total samples: {total_samples}")
             stream = sd.OutputStream(
                 callback=stream_callback,
                 samplerate=sample_rate,

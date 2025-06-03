@@ -102,7 +102,7 @@ class SpeechPlayer:
             except Exception as e:
                 logger.exception(f"AudioPlayer: Unexpected error in run loop: {e}")
                 time.sleep(self.pause_time)  # small sleep here to prevent tight loop on persistent error
-        logger.info("VoicePlayer thread finished.")
+        logger.info("AudioPlayer thread finished.")
 
     def _clear_audio_queue(self) -> None:
         """Clears the audio output queue and resets the speaking event.
