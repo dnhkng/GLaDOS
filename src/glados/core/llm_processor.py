@@ -193,12 +193,18 @@ class LanguageModelProcessor:
 
                 except requests.exceptions.ConnectionError as e:
                     logger.error(f"LLM Processor: Connection error to LLM service: {e}")
-                    self.tts_input_queue.put("I'm unable to connect to my thinking module. Please check the LLM service connection.")
+                    self.tts_input_queue.put(
+                        "I'm unable to connect to my thinking module. Please check the LLM service connection."
+                    )
                 except requests.exceptions.Timeout as e:
                     logger.error(f"LLM Processor: Request to LLM timed out: {e}")
                     self.tts_input_queue.put("My brain seems to be taking too long to respond. It might be overloaded.")
                 except requests.exceptions.HTTPError as e:
-                    status_code = e.response.status_code if hasattr(e, 'response') and hasattr(e.response, 'status_code') else "unknown"
+                    status_code = (
+                        e.response.status_code
+                        if hasattr(e, "response") and hasattr(e.response, "status_code")
+                        else "unknown"
+                    )
                     logger.error(f"LLM Processor: HTTP error {status_code} from LLM service: {e}")
                     self.tts_input_queue.put(f"I received an error from my thinking module. HTTP status {status_code}.")
                 except requests.exceptions.RequestException as e:

@@ -40,7 +40,7 @@ class PersonalityPrompt(BaseModel):
         fields = self.model_dump(exclude_none=True)
         if len(fields) != 1:
             raise ValueError("PersonalityPrompt must have exactly one non-null field")
-            
+
         field, value = next(iter(fields.items()))
         return {"role": field, "content": value}
 

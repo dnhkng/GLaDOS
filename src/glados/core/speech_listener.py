@@ -262,7 +262,7 @@ class SpeechListener:
         if not samples:
             logger.warning("ASR received empty sample list")
             return ""
-            
+
         audio = np.concatenate(samples)
 
         # Check for silent audio
@@ -270,7 +270,7 @@ class SpeechListener:
         if max_abs_val < 1e-10:  # Threshold for effectively silent audio
             logger.warning("ASR received effectively silent audio")
             return ""
-            
+
         # Normalize to full range [-1.0, 1.0]
         audio = audio / max_abs_val
 
