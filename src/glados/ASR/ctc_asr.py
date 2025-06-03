@@ -85,10 +85,8 @@ class AudioTranscriber:
         num_tokens = len(self.idx2token)
         if num_tokens != self.config["decoder"]["vocab_size"]:
             raise ValueError(
-                
-                    f"Mismatch between number of tokens in vocabulary ({num_tokens}) "
-                    f"and decoder vocab size ({self.config['decoder']['vocab_size']})."
-                
+                f"Mismatch between number of tokens in vocabulary ({num_tokens}) "
+                f"and decoder vocab size ({self.config['decoder']['vocab_size']})."
             )
 
         # Add blank token to vocab

@@ -12,9 +12,8 @@ import requests
 
 
 class LanguageModelProcessor:
-
     PUNCTUATION_SET: ClassVar[set[str]] = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
-    
+
     def __init__(
         self,
         llm_input_queue: queue.Queue[str],
@@ -44,7 +43,6 @@ class LanguageModelProcessor:
             "Content-Type": "application/json",
         }
 
-
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         # Copy from Glados._clean_raw_bytes
         try:
@@ -66,7 +64,7 @@ class LanguageModelProcessor:
             # Or just noise.
             logger.trace(
                 f"LLM Processor: Failed to parse non-JSON server response line: "
-                f"{line[:100].decode('utf-8', errors='replace')}"  
+                f"{line[:100].decode('utf-8', errors='replace')}"
             )  # Log only a part
             return None
         except Exception as e:
@@ -124,7 +122,6 @@ class LanguageModelProcessor:
                 logger.info(f"LLM Processor: Received text for LLM: '{detected_text}'")
                 self.conversation_history.append({"role": "user", "content": detected_text})
 
-
                 data = {
                     "model": self.model_name,
                     "stream": True,
@@ -164,9 +161,7 @@ class LanguageModelProcessor:
                                     elif cleaned_line_data.get("done_marker"):  # OpenAI [DONE]
                                         break
                                     # Ollama end
-                                    elif (
-                                        cleaned_line_data.get("done") and cleaned_line_data.get("response") == ""
-                                    ):  
+                                    elif cleaned_line_data.get("done") and cleaned_line_data.get("response") == "":
                                         break
 
                         # After loop, process any remaining buffer content if not interrupted
