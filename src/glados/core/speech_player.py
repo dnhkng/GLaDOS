@@ -1,17 +1,17 @@
 import queue
 import threading
 import time
-from typing import Any
 
 from loguru import logger
 
+from ..audio_io import AudioProtocol
 from .audio_data import AudioMessage
 
 
 class SpeechPlayer:
     def __init__(
         self,
-        audio_io: Any,  # Replace with actual type if known
+        audio_io: AudioProtocol,  # Replace with actual type if known
         audio_output_queue: queue.Queue[AudioMessage],
         conversation_history: list[dict[str, str]],
         tts_sample_rate: int,
@@ -26,7 +26,7 @@ class SpeechPlayer:
         self.tts_sample_rate = tts_sample_rate
         self.shutdown_event = shutdown_event
         self.currently_speaking_event = currently_speaking_event
-        self.processing_active_event = processing_active_event  # Used to know when to stop
+        self.processing_active_event = processing_active_event  # Used to know when to stop ToDo
         self.pause_time = pause_time
 
     def run(self) -> None:
@@ -76,6 +76,7 @@ class SpeechPlayer:
                             }
                         )
                         assistant_text_accumulator = []  # Reset accumulator
+                        self.currently_speaking_event.clear()
                         self._clear_audio_queue()
 
                     else:  # Playback completed normally
@@ -90,7 +91,7 @@ class SpeechPlayer:
             except Exception as e:
                 logger.exception(f"AudioPlayer: Unexpected error in run loop: {e}")
                 # Potentially add a small sleep here to prevent tight loop on persistent error
-                time.sleep(0.1)
+                time.sleep(self.pause_time)
         logger.info("VoicePlayer thread finished.")
 
     def _clear_audio_queue(self) -> None:

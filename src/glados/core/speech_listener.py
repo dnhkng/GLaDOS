@@ -1,6 +1,5 @@
 import queue
 import threading
-from typing import Any
 
 from Levenshtein import distance
 from loguru import logger
@@ -8,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..ASR import TranscriberProtocol
+from ..audio_io import AudioProtocol
 
 
 class SpeechListener:
@@ -18,25 +18,16 @@ class SpeechListener:
     It provides methods to start and stop the listening event loop, manage audio samples,
     and handle wake word detection.
     """
+
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
-    SAMPLE_RATE: int = 16000  # Sample rate for input stream
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
-    VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
     BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
     PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
     SIMILARITY_THRESHOLD: int = 2  # Threshold for wake word similarity
-    PUNCTUATION_SET: tuple[str, ...] = (".", "!", "?", ":", ";", "?!", "\n", "\n\n")  # Sentence splitting punctuation
-    NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
-    DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
-        {
-            "role": "system",
-            "content": "You are a helpful AI assistant. You are here to assist the user in their tasks.",
-        },
-    )
 
     def __init__(
         self,
-        audio_io: Any,  # Replace with actual type if known
+        audio_io: AudioProtocol,  # Replace with actual type if known
         llm_queue: queue.Queue[str],
         shutdown_event: threading.Event,
         currently_speaking_event: threading.Event,
@@ -44,12 +35,6 @@ class SpeechListener:
         asr_model: TranscriberProtocol,
         wake_word: str | None = None,
         interruptible: bool = True,
-
-        # pause_time: float = 0.1,
-        # pause_limit: int = 10,
-        # vad_size: int = 1024,
-        # similarity_threshold: int = 3,
-        # sample_rate: int = 16000,
     ) -> None:
         """
         Initialize the SpeechListener with audio input/output, LLM queue, and configuration parameters.
@@ -76,7 +61,6 @@ class SpeechListener:
         self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
         self._sample_queue = self.audio_io._get_sample_queue()
 
-
         # Internal state variables
         self._recording_started = False
         self._samples: list[NDArray[np.float32]] = []
@@ -85,15 +69,6 @@ class SpeechListener:
         self.shutdown_event = shutdown_event
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event
-
-
-        # # Event flags for controlling processing state
-        # self.processing_active_event = threading.Event()
-        # self.currently_speaking_event = threading.Event()
-        
-        # # Shutdown event to stop the listening loop gracefully
-        # self.shutdown_event = threading.Event()
-
 
     def run(self) -> None:
         """
@@ -111,17 +86,9 @@ class SpeechListener:
         - Processes each audio sample with VAD confidence
         - Handles keyboard interrupts by stopping the input stream and setting a shutdown event
 
-        Raises:
-            KeyboardInterrupt: Allows graceful termination of the listening loop
         """
-
-        # self.input_stream.start()
-        self.audio_io.start_listening()
-        
         logger.success("Audio Modules Operational")
-        logger.success("Listening...")
 
-        logger.info(f"Shutdown event: {self.shutdown_event.is_set()}")
         # Loop forever, but is 'paused' when new samples are not available
         try:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
@@ -139,31 +106,11 @@ class SpeechListener:
 
             logger.info("Shutdown event detected in listen loop, exiting loop.")
 
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt in listen loop.")
         finally:
+            self.audio_io.stop_listening()
             logger.info("Listen event loop is stopping/exiting.")
-            self.stop_listen_event_loop()
 
-    def stop_listen_event_loop(self) -> None:
-        """
-        Stop the voice assistant's listening event loop and clean up resources.
-
-        This method stops the audio input stream and sets the shutdown event to terminate
-        any ongoing processing threads. It ensures that all resources are released properly.
-
-        Raises:
-            No explicit exceptions raised; handles cleanup gracefully.
-        """
-        logger.info("Setting Shutdown event")
-        self.shutdown_event.set()  # Set shutdown event first
-
-        logger.info("Calling global sd.stop() to halt all sounddevice activity.")
-
-        # sd.stop()
-        self.audio_io.stop_listening()
-
-        logger.info("Glados engine stop sequence initiated. Threads should terminate.")
+        logger.info("Speech Listener thread finished.")
 
     def _handle_audio_sample(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
@@ -210,10 +157,9 @@ class SpeechListener:
                 logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
                 return
 
-            # sd.stop()  # Stop the audio stream to prevent overlap
             self.audio_io.stop_speaking()
 
-            self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS!!!
+            self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS
             self._samples = list(self._buffer.queue)
             self._recording_started = True
 
@@ -329,7 +275,6 @@ class SpeechListener:
             else:
                 self.llm_queue.put(detected_text)
                 self.processing_active_event.set()
-                self.currently_speaking_event.set()
 
         self.reset()
 

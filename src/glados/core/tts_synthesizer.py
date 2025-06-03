@@ -63,6 +63,6 @@ class TextToSpeechSynthesizer:
             except Exception as e:
                 logger.exception(f"TextToSpeechSynthesizer: Unexpected error in run loop: {e}")
                 # Potentially add a small sleep here
-                time.sleep(0.1)
+                time.sleep(self.pause_time)
 
         logger.info("TextToSpeechSynthesizer thread finished.")

@@ -6,12 +6,11 @@ import time
 
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
-import sounddevice as sd  # type: ignore
 import yaml
 
 from ..ASR import TranscriberProtocol, get_audio_transcriber
 from ..audio_io import AudioProtocol, get_audio_system
-from ..TTS import tts_glados, tts_kokoro
+from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
 from .audio_data import AudioMessage
@@ -108,7 +107,7 @@ class Glados:
     def __init__(
         self,
         asr_model: TranscriberProtocol,
-        tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer,
+        tts_model: SpeechSynthesizerProtocol,
         audio_io: AudioProtocol,
         completion_url: HttpUrl,
         llm_model: str,
@@ -147,7 +146,7 @@ class Glados:
         self.api_key = api_key
         self.wake_word = wake_word
         self.announcement = announcement
-        
+
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
 
@@ -159,7 +158,7 @@ class Glados:
         self.interruptible = interruptible
 
         # Initialize events for thread synchronization
-        self.processing_active_event = threading.Event()   # Indicates if input processing is active (ASR + LLM + TTS)
+        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS)
         self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
@@ -239,16 +238,13 @@ class Glados:
             interruptible (bool | None): Whether the announcement can be interrupted. If None, uses the instance's
                 interruptible setting.
         """
+
         if interruptible is None:
             interruptible = self.interruptible
         logger.success("Playing announcement...")
         if self.announcement:
-            audio = self._tts.generate_speech_audio(self.announcement)
-            logger.success(f"TTS Announcement text: {self.announcement}")
-
-            sd.play(audio, self._tts.sample_rate)
-            if not interruptible:
-                sd.wait()
+            self.tts_queue.put(self.announcement)
+            self.processing_active_event.set()
 
     @property
     def messages(self) -> list[dict[str, str]]:
@@ -276,12 +272,8 @@ class Glados:
             engine_type=config.asr_engine,
         )
 
-        tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer
-        if config.voice == "glados":
-            tts_model = tts_glados.Synthesizer()
-        else:
-            assert config.voice in tts_kokoro.get_voices(), f"Voice '{config.voice}' not available"
-            tts_model = tts_kokoro.Synthesizer(voice=config.voice)
+        tts_model: SpeechSynthesizerProtocol
+        tts_model = get_speech_synthesizer(config.voice)
 
         audio_io: AudioProtocol
         audio_io = get_audio_system(backend_type="sounddevice")
@@ -334,14 +326,11 @@ class Glados:
         Raises:
             KeyboardInterrupt: Allows graceful termination of the listening loop
         """
-
-        # self.input_stream.start()
         self.audio_io.start_listening()
 
         logger.success("Audio Modules Operational")
         logger.success("Listening...")
 
-        logger.info(f"Shutdown event: {self.shutdown_event.is_set()}")
         # Loop forever, but is 'paused' when new samples are not available
         try:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
@@ -349,14 +338,23 @@ class Glados:
             logger.info("Shutdown event detected in listen loop, exiting loop.")
 
         except KeyboardInterrupt:
-            logger.info("Keyboard interrupt in listen loop.")
+            logger.info("Keyboard interrupt in main run loop.")
+            # Make sure any ongoing audio playback is stopped
+            if self.currently_speaking_event.is_set():
+                for component in self.component_threads:
+                    if component.name == "AudioPlayer":
+                        self.audio_io.stop_speaking()
+                        self.currently_speaking_event.clear()
+                        break
             self.shutdown_event.set()
+            # Give threads a moment to notice the shutdown event
+            time.sleep(0.1)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
+            exit()
 
 
 if __name__ == "__main__":
     glados_config = GladosConfig.from_yaml("glados_config.yaml")
     glados = Glados.from_config(glados_config)
-
     glados.run()
