@@ -261,10 +261,9 @@ class SpeechListener:
         """
         audio = np.concatenate(samples)
 
-        # Normalize audio to [-0.5, 0.5] range to prevent clipping and ensure consistent levels
         max_abs_val = np.max(np.abs(audio))
         if max_abs_val > 0:  # Prevent division by zero if audio is completely silent
-            audio = audio / max_abs_val / 2
+            audio = audio / max_abs_val
 
         detected_text = self.asr_model.transcribe(audio)
         return detected_text
