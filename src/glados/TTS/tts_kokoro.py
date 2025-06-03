@@ -32,7 +32,8 @@ class SpeechSynthesizer:
         self.sample_rate = self.SAMPLE_RATE
         self.voices: dict[str, NDArray[np.float32]] = np.load(VOICES_PATH)
         self.vocab = self._get_vocab()
-        self.voice = voice
+
+        self.set_voice(voice)
 
         providers = ort.get_available_providers()
         if "TensorrtExecutionProvider" in providers:
@@ -47,7 +48,18 @@ class SpeechSynthesizer:
         )
         self.phonemizer = Phonemizer()
 
-    def generate_speech_audio(self, text: str, voice: str | None = None) -> NDArray[np.float32]:
+    def set_voice(self, voice: str) -> None:
+        """
+        Set the voice for the synthesizer.
+
+        Parameters:
+            voice (str): The name of the voice to use for synthesis
+        """
+        if voice not in self.voices:
+            raise ValueError(f"Voice '{voice}' not found. Available voices: {list(self.voices.keys())}")
+        self.voice = voice
+
+    def generate_speech_audio(self, text: str) -> NDArray[np.float32]:
         """
         Convert input text to synthesized speech audio.
 
@@ -60,13 +72,9 @@ class SpeechSynthesizer:
         Returns:
             NDArray[np.float32]: An array of audio samples representing the synthesized speech
         """
-        if voice is None:
-            voice = self.voice
-        else:
-            assert voice in self.voices.keys(), f"voice '{voice}' not found"
         phonemes = self.phonemizer.convert_to_phonemes([text], "en_us")
         phoneme_ids = self._phonemes_to_ids(phonemes[0])
-        audio = self._synthesize_ids_to_audio(phoneme_ids, voice)
+        audio = self._synthesize_ids_to_audio(phoneme_ids)
         return np.array(audio, dtype=np.float32)
 
     @staticmethod
@@ -89,12 +97,8 @@ class SpeechSynthesizer:
             raise ValueError(f"text is too long, must be less than {self.MAX_PHONEME_LENGTH} phonemes")
         return [i for i in map(self.vocab.get, phonemes) if i is not None]
 
-    def _synthesize_ids_to_audio(self, ids: list[int], voice: str | None = None) -> NDArray[np.float32]:
-        if voice is None:
-            voice = self.voice
-        else:
-            assert voice in self.voices, f"voice '{voice}' not found"
-        voice_vector = self.voices[voice]
+    def _synthesize_ids_to_audio(self, ids: list[int]) -> NDArray[np.float32]:
+        voice_vector = self.voices[self.voice]
         voice_array = voice_vector[len(ids)]
 
         tokens = [[0, *ids, 0]]
