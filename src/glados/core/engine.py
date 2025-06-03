@@ -122,8 +122,8 @@ class Glados:
         api_key: str | None = None,
         interruptible: bool = True,
         wake_word: str | None = None,
-        personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
         announcement: str | None = None,
+        personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -134,36 +134,32 @@ class Glados:
         processing LLM responses and TTS output.
 
         Args:
-            voice_model (str): Path to the voice model for text-to-speech synthesis.
-            speaker_id (int | None): Identifier for the specific speaker voice, if applicable.
-            completion_url (str): URL endpoint for language model completions.
-            model (str): Identifier for the language model being used.
-            api_key (str | None, optional): Authentication key for the language model API. Defaults to None.
-            wake_word (str | None, optional): Activation word to trigger voice assistant. Defaults to None.
-            personality_preprompt (list[dict[str, str]], optional): Initial context or personality
-                configuration for the language model. Defaults to DEFAULT_PERSONALITY_PREPROMPT.
-            announcement (str | None, optional): Initial announcement to be spoken upon initialization.
-                Defaults to None.
-            interruptible (bool, optional): Whether the assistant's speech can be interrupted.
-                Defaults to True.
+            asr_model (TranscriberProtocol): The ASR model for transcribing audio input.
+            tts_model (SpeechSynthesizerProtocol): The TTS model for synthesizing spoken output.
+            audio_io (AudioProtocol): The audio input/output system to use.
+            completion_url (HttpUrl): The URL for the LLM completion endpoint.
+            llm_model (str): The name of the LLM model to use.
+            api_key (str | None): API key for accessing the LLM service, if required.
+            interruptible (bool): Whether the assistant can be interrupted while speaking.
+            wake_word (str | None): Optional wake word to trigger the assistant.
+            announcement (str | None): Optional announcement to play on startup.
+            personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
         """
         self._asr_model = asr_model
         self._tts = tts_model
         self.completion_url = completion_url
         self.llm_model = llm_model
         self.api_key = api_key
+        self.interruptible = interruptible
         self.wake_word = wake_word
         self.announcement = announcement
+        self._messages: list[dict[str, str]] = list(personality_preprompt)
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
 
-        # warm up onnx ASR model
+        # warm up onnx ASR model, this is needed to avoid long pauses on first request
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
-
-        self._messages: list[dict[str, str]] = list(personality_preprompt)
-
-        self.interruptible = interruptible
 
         # Initialize events for thread synchronization
         self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS)
