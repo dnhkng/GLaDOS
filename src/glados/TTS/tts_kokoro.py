@@ -22,10 +22,9 @@ def get_voices(path: Path = VOICES_PATH) -> list[str]:
     return list(voices.keys())
 
 
-class Synthesizer:
+class SpeechSynthesizer:
     MODEL_PATH: Path = resource_path("models/TTS/kokoro-v1.0.fp16.onnx")
     DEFAULT_VOICE: str = "af_alloy"
-
     MAX_PHONEME_LENGTH: int = 510
     SAMPLE_RATE: int = 24000
 

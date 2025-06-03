@@ -5,7 +5,7 @@ import time
 from loguru import logger
 import numpy as np
 
-from ..TTS import tts_glados, tts_kokoro
+from ..TTS import SpeechSynthesizerProtocol
 from ..utils import spoken_text_converter as stc
 from .audio_data import AudioMessage
 
@@ -15,7 +15,7 @@ class TextToSpeechSynthesizer:
         self,
         tts_input_queue: queue.Queue[str],
         audio_output_queue: queue.Queue[AudioMessage],
-        tts_model: tts_glados.Synthesizer | tts_kokoro.Synthesizer,
+        tts_model: SpeechSynthesizerProtocol,
         stc_instance: stc.SpokenTextConverter,
         shutdown_event: threading.Event,
         pause_time: float,

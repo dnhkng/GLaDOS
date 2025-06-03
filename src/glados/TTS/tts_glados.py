@@ -97,7 +97,7 @@ class PiperConfig:
         )
 
 
-class Synthesizer:
+class SpeechSynthesizer:
     """Synthesizer, based on the VITS model.
 
     Trained using the Piper project (https://github.com/rhasspy/piper)
