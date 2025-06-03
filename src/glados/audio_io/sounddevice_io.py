@@ -28,6 +28,7 @@ class SoundDeviceAudioIO:
         _playback_thread (threading.Thread): Thread for audio playback
         _stop_event (threading.Event): Event to signal stopping audio playback
     """
+
     SAMPLE_RATE: int = 16000  # Sample rate for input stream
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
@@ -46,12 +47,12 @@ class SoundDeviceAudioIO:
             self.vad_threshold = self.VAD_THRESHOLD
         else:
             self.vad_threshold = vad_threshold
-        
+
         if not 0 <= self.vad_threshold <= 1:
             raise ValueError("VAD threshold must be between 0 and 1")
 
         self._vad_model = VAD()
-        
+
         self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
         self.input_stream: sd.InputStream | None = None
         self._is_playing = False
@@ -217,8 +218,14 @@ class SoundDeviceAudioIO:
             )
             with stream:
                 # Wait with timeout to allow for interruption
-                completion_event.wait(timeout=total_samples / self.SAMPLE_RATE)
-                pass
+                # Add a reasonable maximum timeout to prevent indefinite blocking
+                max_timeout = max(total_samples / self.SAMPLE_RATE * 1.5, 5.0)  # 1.5x audio length or minimum 5 seconds
+                completed = completion_event.wait(timeout=max_timeout)
+                if not completed:
+                    # If the event timed out, force interruption
+                    self._is_playing = False
+                    interrupted = True
+                    logger.debug("Audio playback timed out, forcing interruption")
 
         except (sd.PortAudioError, RuntimeError):
             logger.debug("Audio stream already closed or invalid")
