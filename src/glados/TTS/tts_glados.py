@@ -98,36 +98,38 @@ class PiperConfig:
 
 
 class SpeechSynthesizer:
-    """Synthesizer, based on the VITS model.
+    """Text to Synthesizer, based on the VITS model.
 
     Trained using the Piper project (https://github.com/rhasspy/piper)
 
     Attributes:
-    -----------
-    session: onnxruntime.InferenceSession
-        The loaded VITS model.
-    id_map: dict
-        A dictionary mapping phonemes to ids.
-
+        MAX_WAV_VALUE (float): Maximum value for audio samples.
+        MODEL_PATH (Path): Path to the ONNX model file.
+        PHONEME_TO_ID_PATH (Path): Path to the phoneme-to-ID mapping file.
+        USE_CUDA (bool): Whether to use CUDA for inference.
+        PAD (str): Padding token.
+        BOS (str): Beginning of sentence token.
+        EOS (str): End of sentence token.
     Methods:
-    --------
-    __init__(self, model_path, use_cuda):
-        Initializes the Synthesizer class, loading the VITS model.
-
-    generate_speech_audio(self, text):
-        Generates speech audio from the given text.
-
-    _phonemizer(self, input_text):
-        Converts text to phonemes using espeak-ng.
-
-    _phonemes_to_ids(self, phonemes):
-        Converts the given phonemes to ids.
-
-    _synthesize_ids_to_raw(self, phoneme_ids, speaker_id, length_scale, noise_scale, noise_w):
-        Synthesizes raw audio from phoneme ids.
-
-    say_phonemes(self, phonemes):
-        Converts the given phonemes to audio.
+        __init__(
+            model_path: Path,
+            phoneme_path: Path,
+            speaker_id: int | None
+        ): Initializes the synthesizer with a model and optional speaker.
+        generate_speech_audio(text: str) -> NDArray[np.float32]: Converts input text to synthesized speech audio.
+        _phonemizer(input_text: str) -> list[str]: Converts input text to phonemes using espeak-ng phonemization.
+        _phonemes_to_ids(phonemes: str) -> list[int]: Converts phonemes to their corresponding integer IDs.
+        _synthesize_ids_to_audio(
+            phoneme_ids: list[int],
+            length_scale: float | None = None,
+            noise_scale: float | None = None,
+            noise_w: float | None = None,
+        ) -> NDArray[np.float32]:
+        Synthesizes raw audio from phoneme IDs using the VITS model.
+    Notes:
+        - The model is loaded using ONNX Runtime, with support for multiple speakers.
+        - Phonemization is done using the espeak-ng phonemizer.
+        - The synthesizer supports configurable parameters for audio generation.
     """
 
     # Constants

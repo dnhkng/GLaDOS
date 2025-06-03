@@ -12,6 +12,13 @@ import requests
 
 
 class LanguageModelProcessor:
+    """
+    A thread that processes text input for a language model, streaming responses and sending them to TTS.
+    This class is designed to run in a separate thread, continuously checking for new text to process
+    until a shutdown event is set. It handles conversation history, manages streaming responses,
+    and sends synthesized sentences to a TTS queue.
+    """
+
     PUNCTUATION_SET: ClassVar[set[str]] = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
 
     def __init__(
@@ -44,7 +51,15 @@ class LanguageModelProcessor:
         }
 
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
-        # Copy from Glados._clean_raw_bytes
+        """
+        Clean and parse a raw byte line from the LLM response.
+        Handles both OpenAI and Ollama formats, returning a dictionary or None if parsing fails.
+
+        Args:
+            line (bytes): The raw byte line from the LLM response.
+        Returns:
+            dict[str, str] | None: Parsed JSON dictionary or None if parsing fails.
+        """
         try:
             # Handle OpenAI format
             if line.startswith(b"data: "):
@@ -108,7 +123,14 @@ class LanguageModelProcessor:
             self.tts_input_queue.put(sentence)
 
     def run(self) -> None:
-        """Main loop for the LanguageModelProcessor thread."""
+        """
+        Starts the main loop for the LanguageModelProcessor thread.
+
+        This method continuously checks the LLM input queue for text to process.
+        It processes the text, sends it to the LLM API, and streams the response.
+        It handles conversation history, manages streaming responses, and sends synthesized sentences
+        to a TTS queue. The thread will run until the shutdown event is set, at which point it will exit gracefully.
+        """
         logger.info("LanguageModelProcessor thread started.")
         while not self.shutdown_event.is_set():
             try:

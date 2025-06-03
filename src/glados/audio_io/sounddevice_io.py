@@ -16,17 +16,6 @@ class SoundDeviceAudioIO:
     This class provides an implementation of the AudioIO interface using the
     sounddevice library to interact with system audio devices. It handles
     real-time audio capture with voice activity detection and audio playback.
-
-    Attributes:
-        sample_rate (int): Sample rate for audio streams in Hz
-        vad_size (int): Size of each VAD window in milliseconds
-        _vad_model (Callable): Voice Activity Detection model function
-        _vad_threshold (float): Threshold for VAD detection confidence
-        _sample_queue (queue.Queue): Queue containing audio samples and VAD results
-        input_stream (sd.InputStream): sounddevice input stream for audio capture
-        _is_playing (bool): Flag indicating if audio is currently playing
-        _playback_thread (threading.Thread): Thread for audio playback
-        _stop_event (threading.Event): Event to signal stopping audio playback
     """
 
     SAMPLE_RATE: int = 16000  # Sample rate for input stream
@@ -36,7 +25,7 @@ class SoundDeviceAudioIO:
     def __init__(self, vad_threshold: float | None = None) -> None:
         """Initialize the sounddevice audio I/O.
 
-        Parameters:
+        Args:
             vad_threshold: Threshold for VAD detection (default: 0.8)
 
         Raises:
@@ -165,31 +154,11 @@ class SoundDeviceAudioIO:
         synchronization.
 
         Args:
-            total_samples: Number of audio samples to be played in total. For example,
-                for 1 second of 48kHz audio, this would be 48000.
-
+            total_samples (int): Total number of samples in the audio data being played.
         Returns:
-            A tuple containing:
-            - bool: True if playback was interrupted, False if completed normally
-            - int: Percentage of samples played (0-100), calculated as
-            (played_samples / total_samples * 100)
-
-        Raises:
-            sd.PortAudioError: If the audio stream encounters initialization or
-                playback errors
-            RuntimeError: If stream management fails during execution
-
-        Examples:
-            For 1 second of audio at 48kHz:
-            >>> interrupted, progress = audio.percentage_played(48000)
-            >>> print(f"Interrupted: {interrupted}, Progress: {progress}%")
-            Interrupted: False, Progress: 100%
-
-        Implementation Details:
-            - Uses a stream callback system to track sample count in real-time
-            - Handles interruption via self.processing flag
-            - Implements timeout based on audio duration plus 1 second buffer
-            - Caps progress percentage at 100 even if more samples are processed
+            tuple[bool, int]: A tuple containing:
+                - bool: True if playback was interrupted, False if completed normally
+                - int: Percentage of audio played (0-100)
         """
         interrupted = False
         progress = 0

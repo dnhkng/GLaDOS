@@ -11,6 +11,12 @@ from .audio_data import AudioMessage
 
 
 class TextToSpeechSynthesizer:
+    """
+    A thread that synthesizes text to speech using a TTS model and a spoken text converter.
+    It reads text from a queue, processes it, generates audio, and puts the audio messages into an output queue.
+    This class is designed to run in a separate thread, continuously checking for new text to synthesize until a shutdown event is set.
+    """
+
     def __init__(
         self,
         tts_input_queue: queue.Queue[str],
@@ -28,7 +34,16 @@ class TextToSpeechSynthesizer:
         self.pause_time = pause_time
 
     def run(self) -> None:
-        """Main loop for the TTS Synthesizer thread."""
+        """
+        Starts the m ain loop for the TTS Synthesizer thread.
+
+        This method continuously checks the TTS input queue for text to synthesize.
+        It processes the text, generates speech audio using the TTS model, and puts the audio messages
+        into the audio output queue. It handles end-of-stream tokens and logs processing times.
+        If an empty or whitespace-only string is received, it logs a warning without processing it.
+
+        The thread will run until the shutdown event is set, at which point it will exit gracefully.
+        """
         logger.info("TextToSpeechSynthesizer thread started.")
         while not self.shutdown_event.is_set():
             try:

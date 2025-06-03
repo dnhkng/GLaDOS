@@ -17,7 +17,7 @@ class VAD:
     def __init__(self, model_path: Path = VAD_MODEL) -> None:
         """Initialize a Voice Activity Detection (VAD) model with an ONNX runtime inference session.
 
-        Parameters:
+        Args:
             model_path (str, optional): Path to the ONNX VAD model. Defaults to VAD_MODEL.
 
         Notes:

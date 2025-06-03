@@ -9,6 +9,12 @@ from .audio_data import AudioMessage
 
 
 class SpeechPlayer:
+    """
+    A thread that plays audio messages from a queue, handling interruptions and end-of-stream tokens.
+    This class is designed to run in a separate thread, continuously checking for audio messages to play
+    until a shutdown event is set. It manages conversation history and handles interruptions gracefully.
+    """
+
     def __init__(
         self,
         audio_io: AudioProtocol,  # Replace with actual type if known
@@ -30,7 +36,11 @@ class SpeechPlayer:
         self.pause_time = pause_time
 
     def run(self) -> None:
-        """Main loop for the AudioPlayer thread."""
+        """
+        Starts the main loop for the AudioPlayer thread.
+        This method continuously checks the audio output queue for messages to process.
+        It plays audio messages, handles end-of-stream tokens, and manages the conversation history.
+        """
         assistant_text_accumulator: list[str] = []
 
         logger.info("AudioPlayer thread started.")
@@ -90,12 +100,14 @@ class SpeechPlayer:
 
             except Exception as e:
                 logger.exception(f"AudioPlayer: Unexpected error in run loop: {e}")
-                # Potentially add a small sleep here to prevent tight loop on persistent error
-                time.sleep(self.pause_time)
+                time.sleep(self.pause_time)  # small sleep here to prevent tight loop on persistent error
         logger.info("VoicePlayer thread finished.")
 
     def _clear_audio_queue(self) -> None:
-        """Clears the audio output queue and resets the speaking event."""
+        """Clears the audio output queue and resets the speaking event.
+
+        This is called when an interruption occurs to ensure no stale audio messages remain.
+        """
 
         logger.debug("AudioPlayer: Clearing audio queue due to interruption.")
         self.currently_speaking_event.clear()
@@ -105,6 +117,11 @@ class SpeechPlayer:
     def clip_interrupted_sentence(self, generated_text: str, percentage_played: float) -> str:
         """
         Clips the generated text based on the percentage of audio played before interruption.
+        Args:
+            generated_text (str): The full text that was being spoken.
+            percentage_played (float): The percentage of the audio that was played before interruption.
+        Returns:
+            str: The clipped text that corresponds to the percentage of audio played.
         """
         tokens = generated_text.split()
         percentage_played = max(0.0, min(100.0, float(percentage_played)))  # Ensure percentage_played is within 0-100

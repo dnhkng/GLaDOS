@@ -95,6 +95,14 @@ class GladosConfig(BaseModel):
 
 
 class Glados:
+    """
+    Glados voice assistant orchestrator.
+    This class manages the components of the Glados voice assistant, including speech recognition,
+    language model processing, text-to-speech synthesis, and audio playback.
+    It initializes the necessary components, starts background threads for processing, and provides
+    methods for interaction with the assistant.
+    """
+
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
     NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
     DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
@@ -234,9 +242,13 @@ class Glados:
         """
         Play the announcement using text-to-speech (TTS) synthesis.
 
-        Parameters:
-            interruptible (bool | None): Whether the announcement can be interrupted. If None, uses the instance's
-                interruptible setting.
+        This method checks if an announcement is set and, if so, places it in the TTS queue for processing.
+        If the `interruptible` parameter is set to `True`, it allows the announcement to be interrupted by other
+        audio playback. If `interruptible` is `None`, it defaults to the instance's `interruptible` setting.
+
+        Args:
+            interruptible (bool | None): Whether the announcement can be interrupted by other audio playback.
+                If `None`, it defaults to the instance's `interruptible` setting.
         """
 
         if interruptible is None:

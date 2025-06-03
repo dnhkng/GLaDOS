@@ -12,11 +12,12 @@ from ..audio_io import AudioProtocol
 
 class SpeechListener:
     """
-    A class to handle speech input for a voice assistant, managing audio input and processing.
-    This class is responsible for capturing audio samples, detecting voice activity,
-    and processing speech input using automatic speech recognition (ASR) and language models (LLM).
-    It provides methods to start and stop the listening event loop, manage audio samples,
-    and handle wake word detection.
+    Manages audio input and speech processing for a voice assistant.
+
+    This class handles capturing audio, performing Voice Activity Detection (VAD),
+    buffering pre-activation audio, triggering Automatic Speech Recognition (ASR),
+    and coordinating with Language Model (LLM) and Text-to-Speech (TTS) components
+    via shared events and queues. It supports optional wake word detection.
     """
 
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
@@ -37,23 +38,21 @@ class SpeechListener:
         interruptible: bool = True,
     ) -> None:
         """
-        Initialize the SpeechListener with audio input/output, LLM queue, and configuration parameters.
+        Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
 
-        Parameters:
-            audio_io: An instance of an audio input/output interface for capturing and playing audio.
+        Args:
+            audio_io: An instance conforming to `AudioProtocol` for audio input/output.
             llm_queue: A queue for sending transcribed text to the language model.
-            wake_word: Optional wake word to trigger voice assistant activation.
-            asr_model: The automatic speech recognition model used for transcribing audio.
-            interruptible: Whether the assistant can be interrupted while speaking.
-            pause_time: Time in seconds to wait for new audio samples before checking for shutdown.
-            pause_limit: Number of silent samples before processing detected audio.
-            vad_size: Size of each audio sample chunk for voice activity detection.
-            similarity_threshold: Threshold for wake word similarity using Levenshtein distance.
-            sample_rate: Sample rate for audio processing (default is 16000 Hz).
+            shutdown_event: A threading.Event to signal the application to shut down.
+            currently_speaking_event: A threading.Event indicating if the assistant is currently speaking.
+            processing_active_event: A threading.Event indicating if processing is active (e.g., for LLM/TTS).
+            asr_model: An instance conforming to `TranscriberProtocol` for speech recognition.
+            wake_word: Optional wake word string to activate the assistant. Defaults to None.
+            interruptible: If True, allows new speech input to interrupt ongoing assistant speech.
         """
         self.audio_io = audio_io
         self.llm_queue = llm_queue
-        self.wake_word = wake_word
+        self.wake_word = wake_word.lower() if wake_word else None
         self.interruptible = interruptible
         self.asr_model = asr_model
 
@@ -72,20 +71,17 @@ class SpeechListener:
 
     def run(self) -> None:
         """
-        Start the voice assistant's listening event loop, continuously processing audio input.
+        Starts the main listening event loop, continuously processing audio input.
 
-        This method initializes the audio input stream and enters an infinite loop to handle incoming audio samples.
-        The loop retrieves audio samples and their voice activity detection (VAD) confidence from a queue and processes
-        each sample using the `_handle_audio_sample` method.
+        This method initializes the audio input stream and enters a loop that
+        listens for incoming audio samples and their Voice Activity Detection (VAD) confidence.
+        It retrieves samples from an internal queue and processes them via `_handle_audio_sample`.
+        The loop runs until the `shutdown_event` is set. It also handles brief pauses
+        in audio input using a timeout.
 
-        Behavior:
-        - Starts the audio input stream
-        - Logs successful initialization of audio modules
-        - Enters an infinite listening loop
-        - Retrieves audio samples from a queue
-        - Processes each audio sample with VAD confidence
-        - Handles keyboard interrupts by stopping the input stream and setting a shutdown event
-
+        Raises:
+            Exception: Catches and logs general exceptions encountered during the listening loop,
+                       without stopping the loop unless `shutdown_event` is set.
         """
         logger.success("Audio Modules Operational")
 
@@ -114,16 +110,15 @@ class SpeechListener:
 
     def _handle_audio_sample(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
-        Handles the processing of each audio sample.
+        Routes the processing of an individual audio sample based on the current recording state.
 
-        If the recording has not started, the sample is added to the circular buffer.
-
-        If the recording has started, the sample is added to the samples list, and the pause
-        limit is checked to determine when to process the detected audio.
+        If recording has not started, the sample contributes to the pre-activation buffer.
+        Once recording is active, the sample is added to the main speech segment
+        and contributes to the voice activity gap detection.
 
         Args:
-            sample (np.ndarray): The audio sample to process.
-            vad_confidence (bool): Whether voice activity is detected in the sample.
+            sample: The audio sample (numpy array) to process.
+            vad_confidence: True if voice activity is detected in the sample, False otherwise.
         """
         if not self._recording_started:
             self._manage_pre_activation_buffer(sample, vad_confidence)
@@ -132,21 +127,18 @@ class SpeechListener:
 
     def _manage_pre_activation_buffer(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
-        Manages the pre-activation audio buffer and handles voice activity detection.
+        Manages the pre-activation circular buffer and handles voice activity detection.
 
-        This method maintains a circular buffer of audio samples before voice activation,
-        discarding the oldest sample when the buffer is full. When voice activity is detected,
-        it stops the audio stream and prepares for audio processing.
+        Samples are continuously added to a circular buffer until voice activity is detected.
+        Upon VAD detection:
+        - It checks for interruptibility if the assistant is currently speaking.
+        - The assistant's speaking is stopped (`audio_io.stop_speaking()`).
+        - The `processing_active_event` is cleared, pausing LLM/TTS activity.
+        - The buffered samples are moved to `_samples`, and `_recording_started` is set to True.
 
         Args:
-            sample (np.ndarray): The current audio sample to be added to the buffer.
-            vad_confidence (bool): Indicates whether voice activity is detected in the sample.
-
-        Side Effects:
-            - Modifies the internal circular buffer
-            - Stops the audio stream when voice is detected
-            - Disables processing on LLM and TTS threads
-            - Prepares samples for recording when voice is detected
+            sample: The current audio sample (numpy array) to be added to the buffer.
+            vad_confidence: True if voice activity is detected in the sample, False otherwise.
         """
         if self._buffer.full():
             self._buffer.get()  # Discard the oldest sample to make room for new ones
@@ -165,22 +157,17 @@ class SpeechListener:
 
     def _process_activated_audio(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
-        Process audio samples, tracking speech pauses to capture complete utterances.
+        Accumulates audio samples and tracks pauses after voice activation.
 
-        This method accumulates audio samples and monitors voice activity detection (VAD) confidence to determine
-        when a complete speech segment has been captured. It appends incoming samples to the internal buffer and
-        tracks silent gaps to trigger audio processing.
+        This method appends incoming audio samples to `self._samples`. It increments
+        `_gap_counter` when no voice activity is detected. If the `_gap_counter`
+        exceeds `PAUSE_LIMIT`, it signifies the end of a speech segment, triggering
+        `_process_detected_audio`. Otherwise, if voice is detected, the gap counter is reset.
 
-        Parameters:
-            sample (np.ndarray): A single audio sample from the input stream
-            vad_confidence (bool): Indicates whether voice activity is currently detected
-
-        Side Effects:
-            - Appends audio samples to self._samples
-            - Increments or resets self._gap_counter
-            - Triggers audio processing via self._process_detected_audio() when pause limit is reached
+        Args:
+            sample: A single audio sample (numpy array) from the input stream.
+            vad_confidence: True if voice activity is currently detected, False otherwise.
         """
-
         self._samples.append(sample)
 
         if not vad_confidence:
@@ -192,25 +179,21 @@ class SpeechListener:
 
     def _wakeword_detected(self, text: str) -> bool:
         """
-        Check if the detected text contains a close match to the wake word using Levenshtein distance.
+        Checks if the transcribed text contains a sufficiently similar match to the configured wake word.
 
-        This method helps handle variations in wake word detection by calculating the minimum edit distance
-        between detected words and the configured wake word. It accounts for potential misheard
-        variations during speech recognition.
+        This method iterates through words in the `text` and calculates the Levenshtein distance
+        (edit distance) between each word (converted to lowercase) and the `wake_word`.
+        A match is considered found if the `closest_distance` is less than `SIMILARITY_THRESHOLD`.
+        This helps account for minor misrecognitions of the wake word.
 
-        Parameters:
-            text (str): The transcribed text to check for wake word similarity
+        Args:
+            text: The transcribed text string to check for wake word similarity.
 
         Returns:
-            bool: True if a word in the text is sufficiently similar to the wake word, False otherwise
+            True if a word in the text matches the wake word within the similarity threshold, False otherwise.
 
         Raises:
-            AssertionError: If the wake word is not configured (None)
-
-        Notes:
-            - Uses Levenshtein distance to measure text similarity
-            - Compares each word in the text against the wake word
-            - Considers a match if the distance is below a predefined similarity threshold
+            AssertionError: If `self.wake_word` is None.
         """
         assert self.wake_word is not None, "Wake word should not be None"
 
@@ -220,18 +203,13 @@ class SpeechListener:
 
     def reset(self) -> None:
         """
-        Reset the voice recording state and clear all audio buffers.
+        Resets the internal state of the speech listener, clearing all audio buffers and counters.
 
-        This method performs the following actions:
-        - Logs a debug message indicating the reset process
-        - Stops the current recording by setting `_recording_started` to False
-        - Clears the collected audio samples
-        - Resets the gap counter used for detecting speech pauses
-        - Empties the thread-safe audio buffer queue
-
-        Note:
-            Uses a mutex lock to safely clear the shared buffer queue to prevent
-            potential race conditions in multi-threaded audio processing.
+        This prepares the listener for a new speech segment by:
+        - Setting `_recording_started` to False.
+        - Clearing the accumulated `_samples`.
+        - Resetting the `_gap_counter`.
+        - Emptying the pre-activation circular buffer (`_buffer.queue`), safely using its internal mutex.
         """
         logger.debug("Resetting recorder...")
         self._recording_started = False
@@ -242,26 +220,15 @@ class SpeechListener:
 
     def _process_detected_audio(self) -> None:
         """
-        Process detected audio and generate a response after speech pause.
+        Processes the accumulated audio samples once a speech pause is detected.
 
-        Transcribes audio samples and handles wake word detection and LLM processing. Manages the
-        audio input stream and processing state throughout the interaction.
-
-        Args:
-            None
-
-        Returns:
-            None
-
-        Side Effects:
-            - Stops the input audio stream
-            - Performs automatic speech recognition (ASR)
-            - Potentially sends text to LLM queue
-            - Resets audio recording state
-            - Restarts input audio stream
-
-        Raises:
-            No explicit exceptions raised
+        This method performs the following steps:
+        1. Transcribes the collected audio samples using the ASR model.
+        2. If transcription is successful:
+            a. Checks for the `wake_word` (if configured).
+            b. If the wake word is detected (or not required), the transcribed text is
+               placed into the `llm_queue`, and `processing_active_event` is set.
+        3. Resets the listener's internal state using `self.reset()`, preparing for the next input.
         """
         logger.debug("Detected pause after speech. Processing...")
 

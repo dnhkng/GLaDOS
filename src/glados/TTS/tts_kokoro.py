@@ -15,7 +15,8 @@ VOICES_PATH = resource_path("models/TTS/kokoro-voices-v1.0.bin")
 
 
 def get_voices(path: Path = VOICES_PATH) -> list[str]:
-    """Outside of the class to allow for easy access to the list of voices without
+    """
+    Outside of the class to allow for easy access to the list of voices without
     creating an instance of the Synthesizer class
     """
     voices = np.load(path)
@@ -93,11 +94,28 @@ class SpeechSynthesizer:
         return dicts
 
     def _phonemes_to_ids(self, phonemes: str) -> list[int]:
+        """
+        Convert a string of phonemes to their corresponding integer IDs based on the vocabulary.
+
+        Parameters:
+            phonemes (str): A string of phonemes to be converted
+        Returns:
+            list[int]: A list of integer IDs corresponding to the phonemes
+        Raises:
+            ValueError: If the phoneme string exceeds the maximum length
+        """
         if len(phonemes) > self.MAX_PHONEME_LENGTH:
             raise ValueError(f"text is too long, must be less than {self.MAX_PHONEME_LENGTH} phonemes")
         return [i for i in map(self.vocab.get, phonemes) if i is not None]
 
     def _synthesize_ids_to_audio(self, ids: list[int]) -> NDArray[np.float32]:
+        """
+        Convert a list of phoneme IDs to synthesized audio using the ONNX model.
+        Parameters:
+            ids (list[int]): A list of phoneme IDs to be converted to audio
+        Returns:
+            NDArray[np.float32]: An array of audio samples representing the synthesized speech
+        """
         voice_vector = self.voices[self.voice]
         voice_array = voice_vector[len(ids)]
 
