@@ -250,7 +250,7 @@ class SpeechListener:
         Performs Automatic Speech Recognition (ASR) on a list of audio samples.
 
         The samples are first concatenated into a single audio array. This combined
-        audio is then normalized to a range of [-0.5, 0.5] to ensure consistent
+        audio is then normalized to a range of [-1.0, 1.0] to ensure consistent
         volume levels before being passed to the ASR model for transcription.
 
         Args:
@@ -259,11 +259,20 @@ class SpeechListener:
         Returns:
             The transcribed text as a string.
         """
+        if not samples:
+            logger.warning("ASR received empty sample list")
+            return ""
+            
         audio = np.concatenate(samples)
 
+        # Check for silent audio
         max_abs_val = np.max(np.abs(audio))
-        if max_abs_val > 0:  # Prevent division by zero if audio is completely silent
-            audio = audio / max_abs_val
+        if max_abs_val < 1e-10:  # Threshold for effectively silent audio
+            logger.warning("ASR received effectively silent audio")
+            return ""
+            
+        # Normalize to full range [-1.0, 1.0]
+        audio = audio / max_abs_val
 
         detected_text = self.asr_model.transcribe(audio)
         return detected_text
