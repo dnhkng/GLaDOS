@@ -247,22 +247,24 @@ class SpeechListener:
 
     def asr(self, samples: list[NDArray[np.float32]]) -> str:
         """
-        Perform automatic speech recognition (ASR) on the provided audio samples.
+        Performs Automatic Speech Recognition (ASR) on a list of audio samples.
 
-        Parameters:
-            samples (list[np.dtype[np.float32]]): A list of numpy arrays containing audio samples to be transcribed.
+        The samples are first concatenated into a single audio array. This combined
+        audio is then normalized to a range of [-0.5, 0.5] to ensure consistent
+        volume levels before being passed to the ASR model for transcription.
+
+        Args:
+            samples: A list of numpy arrays (float32) containing audio sample chunks.
 
         Returns:
-            str: The transcribed text from the input audio samples.
-
-        Notes:
-            - Concatenates multiple audio samples into a single continuous audio array
-            - Uses the pre-configured ASR model to transcribe the audio
+            The transcribed text as a string.
         """
         audio = np.concatenate(samples)
 
         # Normalize audio to [-0.5, 0.5] range to prevent clipping and ensure consistent levels
-        audio = audio / np.max(np.abs(audio)) / 2
+        max_abs_val = np.max(np.abs(audio))
+        if max_abs_val > 0:  # Prevent division by zero if audio is completely silent
+            audio = audio / max_abs_val / 2
 
         detected_text = self.asr_model.transcribe(audio)
         return detected_text
