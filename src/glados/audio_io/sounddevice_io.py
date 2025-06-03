@@ -160,6 +160,9 @@ class SoundDeviceAudioIO:
                 - bool: True if playback was interrupted, False if completed normally
                 - int: Percentage of audio played (0-100)
         """
+        if sample_rate is None:
+            sample_rate = self.SAMPLE_RATE
+
         interrupted = False
         progress = 0
         completion_event = threading.Event()
@@ -174,22 +177,21 @@ class SoundDeviceAudioIO:
                 completion_event.set()
                 return outdata, sd.CallbackStop
             if progress >= total_samples:
-                # logger.debug("Playback completed normally")
                 completion_event.set()
             return outdata, None
 
         try:
+            logger.debug(f"using sammple rate: {sample_rate} Hz, total samples: {total_samples}")
             stream = sd.OutputStream(
                 callback=stream_callback,
-                samplerate=self.SAMPLE_RATE,
+                samplerate=sample_rate,
                 channels=1,
                 finished_callback=completion_event.set,
             )
             with stream:
-                # Wait with timeout to allow for interruption
                 # Add a reasonable maximum timeout to prevent indefinite blocking
-                max_timeout = max(total_samples / self.SAMPLE_RATE * 1.5, 5.0)  # 1.5x audio length or minimum 5 seconds
-                completed = completion_event.wait(timeout=max_timeout)
+                max_timeout = total_samples / sample_rate
+                completed = completion_event.wait(max_timeout + 1)  # Add a small buffer to ensure completion
                 if not completed:
                     # If the event timed out, force interruption
                     self._is_playing = False
