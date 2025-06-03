@@ -20,7 +20,7 @@ from .speech_player import SpeechPlayer
 from .tts_synthesizer import TextToSpeechSynthesizer
 
 logger.remove(0)
-logger.add(sys.stderr, level="DEBUG")
+logger.add(sys.stderr, level="SUCCESS")
 
 
 class PersonalityPrompt(BaseModel):
@@ -37,9 +37,12 @@ class PersonalityPrompt(BaseModel):
         Raises:
             ValueError: If the prompt does not contain exactly one non-null field
         """
-        for field, value in self.model_dump(exclude_none=True).items():
-            return {"role": field, "content": value}
-        raise ValueError("PersonalityPrompt must have exactly one non-null field")
+        fields = self.model_dump(exclude_none=True)
+        if len(fields) != 1:
+            raise ValueError("PersonalityPrompt must have exactly one non-null field")
+            
+        field, value = next(iter(fields.items()))
+        return {"role": field, "content": value}
 
 
 class GladosConfig(BaseModel):
