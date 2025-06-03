@@ -22,11 +22,11 @@ from .vad import VAD
 
 
 class AudioProtocol(Protocol):
-    def __init__(self, model_path: str, *args: str, **kwargs: dict[str, str]) -> None: ...
+    def __init__(self, vad_threshold: float | None = None) -> None: ...
     def start_listening(self) -> None: ...
     def stop_listening(self) -> None: ...
-    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int, text: str = "") -> None: ...
-    def measure_percentage_spoken(self, total_samples: int, sample_rate: int) -> tuple[bool, int]: ...
+    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None: ...
+    def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]: ...
     def check_if_speaking(self) -> bool: ...
     def stop_speaking(self) -> None: ...
     def _get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]: ...
@@ -35,21 +35,21 @@ class AudioProtocol(Protocol):
 # Factory function
 def get_audio_system(
     backend_type: str = "sounddevice", vad_threshold: float | None = None
-) -> AudioProtocol:  # Return type is now a Union of concrete types
+) -> AudioProtocol:
     """
-    Factory function to get an instance of an audio transcriber based on the specified engine type.
+    Factory function to get an instance of an audio I/O system based on the specified backend type.
 
     Parameters:
         backend_type (str): The type of audio backend to use:
-            - "sounddevice": Connectionist Temporal Classification model (faster, good accuracy)
-            - "websocket": ToDo
-        **kwargs: Additional keyword arguments to pass to the transcriber constructor
+            - "sounddevice": Uses the sounddevice library for local audio I/O
+            - "websocket": Network-based audio I/O (not yet implemented)
+        vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
-        TranscriberProtocol: An instance of the requested audio transcriber
+        AudioProtocol: An instance of the requested audio I/O system
 
     Raises:
-        ValueError: If the specified engine type is not supported
+        ValueError: If the specified backend type is not supported
     """
     if backend_type == "sounddevice":
         from .sounddevice_io import SoundDeviceAudioIO
