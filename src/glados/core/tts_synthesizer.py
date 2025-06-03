@@ -14,7 +14,8 @@ class TextToSpeechSynthesizer:
     """
     A thread that synthesizes text to speech using a TTS model and a spoken text converter.
     It reads text from a queue, processes it, generates audio, and puts the audio messages into an output queue.
-    This class is designed to run in a separate thread, continuously checking for new text to synthesize until a shutdown event is set.
+    This class is designed to run in a separate thread, continuously checking for new text to
+    synthesize until a shutdown event is set.
     """
 
     def __init__(

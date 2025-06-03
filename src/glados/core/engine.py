@@ -318,21 +318,11 @@ class Glados:
     def run(self) -> None:
         """
         Start the voice assistant's listening event loop, continuously processing audio input.
+        This method initializes the audio input system, starts listening for audio samples,
+        and enters a loop that waits for audio input until a shutdown event is triggered.
+        It handles keyboard interrupts gracefully and ensures that all components are properly shut down.
 
-        This method initializes the audio input stream and enters an infinite loop to handle incoming audio samples.
-        The loop retrieves audio samples and their voice activity detection (VAD) confidence from a queue and processes
-        each sample using the `_handle_audio_sample` method.
-
-        Behavior:
-        - Starts the audio input stream
-        - Logs successful initialization of audio modules
-        - Enters an infinite listening loop
-        - Retrieves audio samples from a queue
-        - Processes each audio sample with VAD confidence
-        - Handles keyboard interrupts by stopping the input stream and setting a shutdown event
-
-        Raises:
-            KeyboardInterrupt: Allows graceful termination of the listening loop
+        This method is the main entry point for running the Glados voice assistant.
         """
         self.audio_io.start_listening()
 

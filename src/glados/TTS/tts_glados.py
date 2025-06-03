@@ -102,34 +102,10 @@ class SpeechSynthesizer:
 
     Trained using the Piper project (https://github.com/rhasspy/piper)
 
-    Attributes:
-        MAX_WAV_VALUE (float): Maximum value for audio samples.
-        MODEL_PATH (Path): Path to the ONNX model file.
-        PHONEME_TO_ID_PATH (Path): Path to the phoneme-to-ID mapping file.
-        USE_CUDA (bool): Whether to use CUDA for inference.
-        PAD (str): Padding token.
-        BOS (str): Beginning of sentence token.
-        EOS (str): End of sentence token.
-    Methods:
-        __init__(
-            model_path: Path,
-            phoneme_path: Path,
-            speaker_id: int | None
-        ): Initializes the synthesizer with a model and optional speaker.
-        generate_speech_audio(text: str) -> NDArray[np.float32]: Converts input text to synthesized speech audio.
-        _phonemizer(input_text: str) -> list[str]: Converts input text to phonemes using espeak-ng phonemization.
-        _phonemes_to_ids(phonemes: str) -> list[int]: Converts phonemes to their corresponding integer IDs.
-        _synthesize_ids_to_audio(
-            phoneme_ids: list[int],
-            length_scale: float | None = None,
-            noise_scale: float | None = None,
-            noise_w: float | None = None,
-        ) -> NDArray[np.float32]:
-        Synthesizes raw audio from phoneme IDs using the VITS model.
-    Notes:
-        - The model is loaded using ONNX Runtime, with support for multiple speakers.
-        - Phonemization is done using the espeak-ng phonemizer.
-        - The synthesizer supports configurable parameters for audio generation.
+    This class provides methods to convert text into speech audio using a pre-trained ONNX model.
+    It supports phonemization of input text, synthesis of audio from phoneme IDs, and configuration
+    for different speakers and audio parameters.
+    It uses the espeak-ng phonemizer for converting text to phonemes and ONNX Runtime for audio synthesis.
     """
 
     # Constants
@@ -151,20 +127,7 @@ class SpeechSynthesizer:
         """
         Initialize the text-to-speech synthesizer with a specified model and optional speaker configuration.
 
-        Parameters:
-            model_path (str, optional): Path to the ONNX model file. Defaults to the predefined MODEL_PATH.
-            speaker_id (int | None, optional): Identifier for the desired speaker voice. Defaults to None.
-
-        Raises:
-            FileNotFoundError: If the configuration file cannot be found.
-            ValueError: If the configuration file contains invalid JSON.
-            RuntimeError: If an unexpected error occurs while reading the configuration file.
-
-        Notes:
-            - Removes TensorRT execution provider from available providers to prevent potential compatibility issues.
-            - Loads the ONNX model using the specified providers.
-            - Initializes a phonemizer and loads phoneme-to-ID mapping.
-            - Configures speaker settings based on the model's configuration.
+        Args:
         """
         providers = ort.get_available_providers()
         if "TensorrtExecutionProvider" in providers:
@@ -266,25 +229,15 @@ class SpeechSynthesizer:
     def _phonemes_to_ids(self, phonemes: str) -> list[int]:
         """
         Convert a sequence of phonemes to their corresponding integer IDs.
+        This method takes a string of phonemes and converts each phoneme into its corresponding
+        integer ID based on the pre-defined phoneme ID mapping. It also adds special tokens
+        for beginning of sentence (BOS) and end of sentence (EOS), as well as padding (PAD)
+        tokens to ensure consistent input length for the model.
 
-        This method transforms phonemes into a list of integer identifiers used by the text-to-speech
-        model. It handles the conversion by:
-        - Starting with the beginning-of-sentence (BOS) marker
-        - Mapping each valid phoneme to its corresponding ID
-        - Adding padding between phonemes
-        - Appending the end-of-sentence (EOS) marker
-
-        Parameters:
-            phonemes (str): A string of phonemes to convert
-
+        Args:
+            phonemes (str): A string of phonemes to be converted.
         Returns:
-            list[int]: A list of integer IDs representing the input phonemes, including sentence
-            boundary markers and padding
-
-        Notes:
-            - Skips phonemes not found in the ID mapping
-            - Adds padding between each valid phoneme
-            - Ensures consistent input format for the speech synthesis model
+            list[int]: A list of integer IDs corresponding to the phonemes, with special tokens included.
         """
 
         ids: list[int] = list(self.id_map[self.BOS])
@@ -323,11 +276,6 @@ class SpeechSynthesizer:
 
         Returns:
             NDArray[np.float32]: A numpy array containing the synthesized audio waveform.
-
-        Notes:
-            - Uses ONNX runtime for efficient audio synthesis
-            - Supports optional speaker ID for voice-specific generation
-            - Audio is generated with configurable noise and length parameters
         """
         if length_scale is None:
             length_scale = self.config.length_scale
@@ -365,6 +313,8 @@ class SpeechSynthesizer:
         return audio
 
     def __del__(self) -> None:
-        """Clean up ONNX session to prevent context leaks."""
+        """
+        Clean up ONNX session to prevent context leaks.
+        """
         if hasattr(self, "ort_sess"):
             del self.ort_sess
