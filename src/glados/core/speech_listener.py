@@ -21,7 +21,6 @@ class SpeechListener:
     via shared events and queues. It supports optional wake word detection.
     """
 
-    PAUSE_TIME: float = 0.05  # Time to wait between processing loops
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
     PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
@@ -35,7 +34,8 @@ class SpeechListener:
         currently_speaking_event: threading.Event,
         processing_active_event: threading.Event,
         asr_model: TranscriberProtocol,
-        wake_word: str | None = None,
+        wake_word: str | None,
+        pause_time: float,
         interruptible: bool = True,
     ) -> None:
         """
@@ -92,7 +92,7 @@ class SpeechListener:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
                 try:
                     # Use a timeout for the queue get
-                    sample, vad_confidence = self._sample_queue.get(timeout=self.PAUSE_TIME)
+                    sample, vad_confidence = self._sample_queue.get(timeout=self.pause_time)
                     self._handle_audio_sample(sample, vad_confidence)
                 except queue.Empty:
                     # Timeout occurred, loop again to check shutdown_event
