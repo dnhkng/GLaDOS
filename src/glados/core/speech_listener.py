@@ -58,7 +58,7 @@ class SpeechListener:
 
         # Circular buffer to hold pre-activation samples
         self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
-        self._sample_queue = self.audio_io._get_sample_queue()
+        self._sample_queue = self.audio_io.get_sample_queue()
 
         # Internal state variables
         self._recording_started = False

@@ -226,7 +226,7 @@ class SoundDeviceAudioIO:
 
             self._is_playing = False
 
-    def _get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
+    def get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
         """Get the queue containing audio samples and VAD confidence.
 
         Returns:
