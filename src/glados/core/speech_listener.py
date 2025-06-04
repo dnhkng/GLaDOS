@@ -196,6 +196,8 @@ class SpeechListener:
             AssertionError: If `self.wake_word` is None.
         """
         assert self.wake_word is not None, "Wake word should not be None"
+        if self.wake_word is None:
+            raise ValueError("Wake word should not be None")
 
         words = text.split()
         closest_distance = min(distance(word.lower(), self.wake_word) for word in words)
