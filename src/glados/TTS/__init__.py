@@ -1,3 +1,15 @@
+"""Text-to-Speech (TTS) synthesis components.
+
+This module provides a protocol-based interface for text-to-speech synthesis
+and a factory function to create synthesizer instances for different voices.
+
+Classes:
+    SpeechSynthesizerProtocol: Protocol defining the TTS interface
+
+Functions:
+    get_speech_synthesizer: Factory function to create TTS instances
+"""
+
 from typing import Protocol
 
 import numpy as np

@@ -16,15 +16,24 @@ VOICES_PATH = resource_path("models/TTS/kokoro-voices-v1.0.bin")
 
 def get_voices(path: Path = VOICES_PATH) -> list[str]:
     """
+    Get the list of available voices without creating a synthesizer instance.
+
     Outside of the class to allow for easy access to the list of voices without
     creating an instance of the Synthesizer class
+
+    Args:
+        path: Path to the voices binary file.
+
+    Returns:
+        List of available voice names.
     """
     voices = np.load(path)
     return list(voices.keys())
 
 
 class SpeechSynthesizer:
-    """Kokoro-based speech synthesizer for text-to-speech conversion.
+    """
+    Kokoro-based speech synthesizer for text-to-speech conversion.
 
     This class provides speech synthesis using the Kokoro TTS model with support
     for multiple voices. It converts text to phonemes and then to audio using
