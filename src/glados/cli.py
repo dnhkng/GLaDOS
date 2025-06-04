@@ -208,7 +208,7 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
     Example:
         say("Hello, world!")  # Speaks the text using GLaDOS voice
     """
-    glados_tts = tts_glados.Synthesizer()
+    glados_tts = tts_glados.SpeechSynthesizer()
     converter = stc.SpokenTextConverter()
     converted_text = converter.text_to_spoken(text)
     # Generate the audio to from the text
@@ -334,6 +334,7 @@ def main() -> None:
         download_models()
     else:
         if models_valid() is False:
+            print("Model files are invalid or missing. Please run 'uv run glados download'")
             return
         if args.command == "say":
             say(args.text, args.config)
