@@ -104,9 +104,9 @@ class SpeechListener:
                 except queue.Empty:
                     # Timeout occurred, loop again to check shutdown_event
                     continue
-                except Exception as e:  # Catch other potential errors during get or handle
+                except (OSError, RuntimeError) as e:  # More specific exceptions
                     if not self.shutdown_event.is_set():  # Only log if not shutting down
-                        logger.error(f"Error in listen loop: {e}")
+                        logger.error(f"Error in listen loop ({type(e).__name__}): {e}")
                     continue
 
             logger.info("Shutdown event detected in listen loop, exiting loop.")
@@ -201,7 +201,6 @@ class SpeechListener:
         Raises:
             AssertionError: If `self.wake_word` is None.
         """
-        assert self.wake_word is not None, "Wake word should not be None"
         if self.wake_word is None:
             raise ValueError("Wake word should not be None")
 
