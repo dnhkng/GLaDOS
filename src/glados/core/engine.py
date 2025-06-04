@@ -1,3 +1,10 @@
+"""
+Core engine module for the Glados voice assistant.
+
+This module provides the main orchestration classes including the Glados assistant,
+configuration management, and component coordination.
+"""
+
 from pathlib import Path
 import queue
 import sys

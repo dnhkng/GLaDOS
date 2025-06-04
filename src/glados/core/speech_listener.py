@@ -1,3 +1,10 @@
+"""
+Speech listener module for the Glados voice assistant.
+
+This module provides the SpeechListener class that handles audio input streaming,
+voice activity detection, speech recognition, and wake word detection.
+"""
+
 from collections import deque
 import queue
 import threading
