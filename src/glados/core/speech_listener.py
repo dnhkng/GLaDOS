@@ -1,3 +1,4 @@
+from collections import deque
 import queue
 import threading
 
@@ -52,12 +53,13 @@ class SpeechListener:
         """
         self.audio_io = audio_io
         self.llm_queue = llm_queue
-        self.wake_word = wake_word.lower() if wake_word else None
-        self.interruptible = interruptible
         self.asr_model = asr_model
+        self.wake_word = wake_word.lower() if wake_word else None
+        self.pause_time = pause_time
+        self.interruptible = interruptible
 
         # Circular buffer to hold pre-activation samples
-        self._buffer: queue.Queue[NDArray[np.float32]] = queue.Queue(maxsize=self.BUFFER_SIZE // self.VAD_SIZE)
+        self._buffer: deque[NDArray[np.float32]] = deque(maxlen=self.BUFFER_SIZE // self.VAD_SIZE)
         self._sample_queue = self.audio_io.get_sample_queue()
 
         # Internal state variables
@@ -140,19 +142,16 @@ class SpeechListener:
             sample: The current audio sample (numpy array) to be added to the buffer.
             vad_confidence: True if voice activity is detected in the sample, False otherwise.
         """
-        if self._buffer.full():
-            self._buffer.get()  # Discard the oldest sample to make room for new ones
-        self._buffer.put(sample)
+        self._buffer.append(sample)  # Automatically handles overflow
 
-        if vad_confidence:  # Voice activity detected
+        if vad_confidence:
             if not self.interruptible and self.currently_speaking_event.is_set():
                 logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
                 return
 
             self.audio_io.stop_speaking()
-
-            self.processing_active_event.clear()  # Turns off processing on threads for the LLM and TTS
-            self._samples = list(self._buffer.queue)
+            self.processing_active_event.clear()
+            self._samples = list(self._buffer)  # Clean conversion
             self._recording_started = True
 
     def _process_activated_audio(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
@@ -217,8 +216,7 @@ class SpeechListener:
         self._recording_started = False
         self._samples.clear()
         self._gap_counter = 0
-        with self._buffer.mutex:
-            self._buffer.queue.clear()
+        self._buffer.clear()
 
     def _process_detected_audio(self) -> None:
         """
