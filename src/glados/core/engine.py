@@ -105,7 +105,7 @@ class GladosConfig(BaseModel):
                 break
             except UnicodeDecodeError:
                 if encoding == "utf-8-sig":
-                    raise
+                    raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
 
         # Navigate through nested keys
         config = data
