@@ -351,7 +351,7 @@ class Glados:
             time.sleep(self.PAUSE_TIME)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
-            exit()
+            sys.exit()
 
 
 if __name__ == "__main__":

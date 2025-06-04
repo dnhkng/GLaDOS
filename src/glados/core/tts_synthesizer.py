@@ -36,7 +36,7 @@ class TextToSpeechSynthesizer:
 
     def run(self) -> None:
         """
-        Starts the m ain loop for the TTS Synthesizer thread.
+        Starts the main loop for the TTS Synthesizer thread.
 
         This method continuously checks the TTS input queue for text to synthesize.
         It processes the text, generates speech audio using the TTS model, and puts the audio messages

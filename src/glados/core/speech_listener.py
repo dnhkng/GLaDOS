@@ -199,7 +199,7 @@ class SpeechListener:
 
         words = text.split()
         closest_distance = min([distance(word.lower(), self.wake_word) for word in words])
-        return bool(closest_distance < self.SIMILARITY_THRESHOLD)
+        return closest_distance < self.SIMILARITY_THRESHOLD
 
     def reset(self) -> None:
         """

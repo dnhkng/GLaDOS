@@ -60,7 +60,7 @@ def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | N
     elif backend_type == "websocket":
         raise ValueError("WebSocket audio backend is not yet implemented.")
     else:
-        raise ValueError(f"Unsupported ASR engine type: {backend_type}")
+        raise ValueError(f"Unsupported audio backend type: {backend_type}")
 
 
 __all__ = [

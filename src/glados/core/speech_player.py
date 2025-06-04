@@ -112,8 +112,13 @@ class SpeechPlayer:
 
         logger.debug("AudioPlayer: Clearing audio queue due to interruption.")
         self.currently_speaking_event.clear()
-        with self.audio_output_queue.mutex:
-            self.audio_output_queue.queue.clear()
+        # with self.audio_output_queue.mutex:
+        #     self.audio_output_queue.queue.clear()
+        try:
+            while True:
+                self.audio_output_queue.get_nowait()
+        except queue.Empty:
+            pass
 
     def clip_interrupted_sentence(self, generated_text: str, percentage_played: float) -> str:
         """
