@@ -198,7 +198,7 @@ class SpeechListener:
         assert self.wake_word is not None, "Wake word should not be None"
 
         words = text.split()
-        closest_distance = min([distance(word.lower(), self.wake_word) for word in words])
+        closest_distance = min(distance(word.lower(), self.wake_word) for word in words)
         return closest_distance < self.SIMILARITY_THRESHOLD
 
     def reset(self) -> None:
