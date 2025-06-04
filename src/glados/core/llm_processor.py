@@ -43,12 +43,9 @@ class LanguageModelProcessor:
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
 
-        self.prompt_headers = {
-            "Authorization": (
-                f"Bearer {api_key}" if api_key else "Bearer your_api_key_here"
-            ),  # Consider better default
-            "Content-Type": "application/json",
-        }
+        self.prompt_headers = {"Content-Type": "application/json"}
+        if api_key:
+            self.prompt_headers["Authorization"] = f"Bearer {api_key}"
 
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         """

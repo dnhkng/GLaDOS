@@ -286,8 +286,7 @@ class Glados:
         tts_model: SpeechSynthesizerProtocol
         tts_model = get_speech_synthesizer(config.voice)
 
-        audio_io: AudioProtocol
-        audio_io = get_audio_system(backend_type="sounddevice")
+        audio_io = get_audio_system(backend_type=config.audio_io)
 
         return cls(
             asr_model=asr_model,
