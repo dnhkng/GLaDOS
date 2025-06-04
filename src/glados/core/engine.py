@@ -190,6 +190,7 @@ class Glados:
             shutdown_event=self.shutdown_event,
             currently_speaking_event=self.currently_speaking_event,
             processing_active_event=self.processing_active_event,
+            pause_time=self.PAUSE_TIME,
         )
 
         self.llm_processor = LanguageModelProcessor(
