@@ -63,7 +63,7 @@ class SoundDeviceAudioIO:
             self.stop_listening()
 
         def audio_callback(
-            indata: np.dtype[np.float32],
+            indata: NDArray[np.float32],
             frames: int,
             time: sd.CallbackStop,
             status: sd.CallbackFlags,
@@ -83,7 +83,7 @@ class SoundDeviceAudioIO:
             """
             if status:
                 # Log any errors for debugging
-                print(f"Audio callback status: {status}")
+                logger.debug(f"Audio callback status: {status}")
 
             data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
             vad_value = self._vad_model(np.expand_dims(data, 0))
@@ -113,7 +113,7 @@ class SoundDeviceAudioIO:
                 self.input_stream.stop()
                 self.input_stream.close()
             except Exception as e:
-                print(f"Error stopping input stream: {e}")
+                logger.error(f"Error stopping input stream: {e}")
             finally:
                 self.input_stream = None
 

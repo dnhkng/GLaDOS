@@ -17,13 +17,13 @@ class SpeechPlayer:
 
     def __init__(
         self,
-        audio_io: AudioProtocol,  # Replace with actual type if known
+        audio_io: AudioProtocol,
         audio_output_queue: queue.Queue[AudioMessage],
         conversation_history: list[dict[str, str]],
         tts_sample_rate: int,
         shutdown_event: threading.Event,
         currently_speaking_event: threading.Event,
-        processing_active_event: threading.Event,  # To check if we should interrupt
+        processing_active_event: threading.Event,
         pause_time: float,
     ) -> None:
         self.audio_io = audio_io
@@ -32,7 +32,7 @@ class SpeechPlayer:
         self.tts_sample_rate = tts_sample_rate
         self.shutdown_event = shutdown_event
         self.currently_speaking_event = currently_speaking_event
-        self.processing_active_event = processing_active_event  # Used to know when to stop ToDo
+        self.processing_active_event = processing_active_event
         self.pause_time = pause_time
 
     def run(self) -> None:
