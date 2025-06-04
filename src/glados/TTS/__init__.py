@@ -30,11 +30,13 @@ def get_speech_synthesizer(
 
         return tts_glados.SpeechSynthesizer()
 
-    else:
-        from ..TTS import tts_kokoro
+    from ..TTS import tts_kokoro
 
-        assert voice in tts_kokoro.get_voices(), f"Voice '{voice}' not available"
-        return tts_kokoro.SpeechSynthesizer(voice=voice)
+    available_voices = tts_kokoro.get_voices()
+    if voice not in available_voices:
+        raise ValueError(f"Voice '{voice}' not available. Available voices: {available_voices}")
+
+    return tts_kokoro.SpeechSynthesizer(voice=voice)
 
 
 __all__ = ["SpeechSynthesizerProtocol", "get_speech_synthesizer"]

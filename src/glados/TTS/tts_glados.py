@@ -128,6 +128,9 @@ class SpeechSynthesizer:
         Initialize the text-to-speech synthesizer with a specified model and optional speaker configuration.
 
         Args:
+            model_path (Path): Path to the ONNX model file. Defaults to MODEL_PATH.
+            phoneme_path (Path): Path to the phoneme-to-ID mapping file. Defaults to PHONEME_TO_ID_PATH.
+            speaker_id (int | None): Optional speaker ID for multi-speaker models. Defaults to None.
         """
         providers = ort.get_available_providers()
         if "TensorrtExecutionProvider" in providers:
@@ -135,7 +138,7 @@ class SpeechSynthesizer:
         if "CoreMLExecutionProvider" in providers:
             providers.remove("CoreMLExecutionProvider")
 
-        self.session = ort.InferenceSession(
+        self.ort_sess = ort.InferenceSession(
             model_path,
             sess_options=ort.SessionOptions(),
             providers=providers,
@@ -202,7 +205,7 @@ class SpeechSynthesizer:
         if audio_chunks:
             audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T
             return audio
-        return np.array(audio, dtype=np.float32)
+        return np.array([], dtype=np.float32)
 
     def _phonemizer(self, input_text: str) -> list[str]:
         """
@@ -300,7 +303,7 @@ class SpeechSynthesizer:
             sid = np.array([self.speaker_id], dtype=np.int64)
 
         # Synthesize through Onnx
-        audio: NDArray[np.float32] = self.session.run(
+        audio: NDArray[np.float32] = self.ort_sess.run(
             None,
             {
                 "input": phoneme_ids_array,

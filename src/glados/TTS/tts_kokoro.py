@@ -24,6 +24,18 @@ def get_voices(path: Path = VOICES_PATH) -> list[str]:
 
 
 class SpeechSynthesizer:
+    """Kokoro-based speech synthesizer for text-to-speech conversion.
+
+    This class provides speech synthesis using the Kokoro TTS model with support
+    for multiple voices. It converts text to phonemes and then to audio using
+    an ONNX runtime model.
+
+    Attributes:
+        SAMPLE_RATE: Audio sample rate (24000 Hz)
+        DEFAULT_VOICE: Default voice name
+        MAX_PHONEME_LENGTH: Maximum allowed phoneme sequence length
+    """
+
     MODEL_PATH: Path = resource_path("models/TTS/kokoro-v1.0.fp16.onnx")
     DEFAULT_VOICE: str = "af_alloy"
     MAX_PHONEME_LENGTH: int = 510
@@ -42,7 +54,7 @@ class SpeechSynthesizer:
         if "CoreMLExecutionProvider" in providers:
             providers.remove("CoreMLExecutionProvider")
 
-        self.session = ort.InferenceSession(
+        self.ort_sess = ort.InferenceSession(
             model_path,
             sess_options=ort.SessionOptions(),
             providers=providers,
@@ -121,7 +133,7 @@ class SpeechSynthesizer:
 
         tokens = [[0, *ids, 0]]
         speed = 1.0
-        audio = self.session.run(
+        audio = self.ort_sess.run(
             None,
             {
                 "tokens": tokens,
