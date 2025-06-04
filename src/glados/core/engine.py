@@ -31,6 +31,13 @@ logger.add(sys.stderr, level="SUCCESS")
 
 
 class PersonalityPrompt(BaseModel):
+    """
+    Represents a single personality prompt message for the assistant.
+
+    Contains exactly one of: system, user, or assistant message content.
+    Used to configure the assistant's personality and behavior.
+    """
+
     system: str | None = None
     user: str | None = None
     assistant: str | None = None
@@ -53,6 +60,14 @@ class PersonalityPrompt(BaseModel):
 
 
 class GladosConfig(BaseModel):
+    """
+    Configuration model for the Glados voice assistant.
+
+    Defines all necessary parameters for initializing the assistant including
+    LLM settings, audio I/O backend, ASR/TTS engines, and personality configuration.
+    Supports loading from YAML files with nested key navigation.
+    """
+
     llm_model: str
     completion_url: HttpUrl
     api_key: str | None
