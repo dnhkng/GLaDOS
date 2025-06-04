@@ -1,8 +1,10 @@
 Glados:
-  completion_url: "http://localhost:11434/api/chat"
   llm_model: "llama3.2"
-  api_key: "Bearer your_api_key_here"
+  completion_url: "http://localhost:11434/api/chat"
+  api_key: null  # Add your API key here if needed!
   interruptible: true
+  audio_io: "sounddevice"
+  asr_engine: "ctc"
   wake_word: null
   voice: "af_bella"
   announcement: "Hi there, I am now up and running, and listening for your commands"

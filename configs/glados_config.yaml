@@ -1,7 +1,7 @@
 Glados:
   llm_model: "llama3.2"
   completion_url: "http://localhost:11434/api/chat"
-  api_key: "Bearer your_api_key_here"
+  api_key: null  # Add your API key here if needed!
   interruptible: true
   audio_io: "sounddevice"
   asr_engine: "tdt"
