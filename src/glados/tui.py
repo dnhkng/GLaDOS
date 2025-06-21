@@ -365,35 +365,11 @@ class GladosUI(App[None]):
 
     async def action_quit(self) -> None:
         logger.info("Quit action initiated in TUI.")
+        # Quit the TUI app
+        self.exit()
         if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
             logger.info("Signalling GLaDOS engine to stop...")
-            self.glados_engine_instance.stop_listen_event_loop()
-
-            if hasattr(self, "glados_worker") and self.glados_worker is not None:
-                if isinstance(self.glados_worker, Worker) and self.glados_worker.is_running:
-                    logger.warning("Waiting for GLaDOS worker to complete...")
-                    try:
-                        await self.glados_worker.wait()
-                        if self.glados_worker.is_running:
-                            logger.warning("GLaDOS worker is still running after wait.")
-                        else:
-                            logger.info("GLaDOS worker has completed.")
-                    except TimeoutError:
-                        logger.warning("Timeout waiting for GLaDOS worker to complete.")
-                    except Exception as e:
-                        logger.error(f"Error waiting for GLaDOS worker: {e}")
-                else:
-                    logger.info("GLaDOS worker was not running or already finished.")
-            else:
-                logger.warning("GLaDOS worker attribute not found.")
-
-            # del self.glados_engine_instance
-            self.glados_engine_instance = None
-        else:
-            logger.info("GLaDOS engine instance not found or already cleaned up.")
-
-        logger.info("Exiting Textual application.")
-        self.exit()
+            self.glados_engine_instance.shutdown_event.set()
 
     def on_worker_state_changed(self, message: Worker.StateChanged) -> None:
         """Handle messages from workers."""
@@ -420,9 +396,7 @@ class GladosUI(App[None]):
         try:
             # Run in a thread to avoid blocking the UI
             if self.glados_engine_instance is not None:
-                self.glados_worker = self.run_worker(
-                    self.glados_engine_instance.start_listen_event_loop, exclusive=True, thread=True
-                )
+                self.glados_worker = self.run_worker(self.glados_engine_instance.run, exclusive=True, thread=True)
                 logger.info("GLaDOS worker started.")
             else:
                 logger.error("Cannot start GLaDOS worker: glados_engine_instance is None.")
