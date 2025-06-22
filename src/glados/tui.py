@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 import random
 import sys
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 from loguru import logger
 from rich.text import Text
@@ -195,16 +195,16 @@ class SplashScreen(Screen[None]):
 
         This method is triggered when a key is pressed during the splash screen display.
         All keybinds which are active in the main app are active here automatically
-        so, for example, ctrl-q will terminate the app.
-        Any other key will dismiss the splash screen.
+        so, for example, ctrl-q will terminate the app. They do not need to be handled.
+        Any other key will start the GlaDOS engine and then dismiss the splash screen.
 
         Args:
             event (events.Key): The key event that was triggered.
         """
-
-        if self.app.glados_engine_instance:
-            self.app.glados_engine_instance.play_announcement()
-            self.app.start_glados()
+        app = cast(GladosUI, self.app)  # mypy gets confused about app's type
+        if app.glados_engine_instance:
+            app.glados_engine_instance.play_announcement()
+            app.start_glados()
             self.dismiss()
 
 
