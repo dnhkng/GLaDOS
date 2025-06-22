@@ -189,26 +189,23 @@ class SplashScreen(Screen[None]):
         """
         self.set_interval(0.5, self.scroll_end)
 
-    # Removed duplicated on_key method. Python uses the last definition.
     def on_key(self, event: events.Key) -> None:
         """
         Handle key press events on the splash screen.
 
         This method is triggered when a key is pressed during the splash screen display.
-        If the 'q' key is pressed, it triggers the application quit action.
-        Regardless of the key pressed, it dismisses the current splash screen
-        and starts the main GLADOS application.
+        All keybinds which are active in the main app are active here automatically
+        so, for example, ctrl-q will terminate the app.
+        Any other key will dismiss the splash screen.
 
         Args:
             event (events.Key): The key event that was triggered.
         """
-        if event.key == "q":
-            self.app.action_quit()
-        else:
-            if self.app.glados_engine_instance:
-                self.app.glados_engine_instance.play_announcement()
-                self.app.start_glados()
-                self.dismiss()
+
+        if self.app.glados_engine_instance:
+            self.app.glados_engine_instance.play_announcement()
+            self.app.start_glados()
+            self.dismiss()
 
 
 class HelpScreen(ModalScreen[None]):
@@ -355,6 +352,17 @@ class GladosUI(App[None]):
         self.push_screen(SplashScreen())
         self.notify("Loading AI engine...", title="GLaDOS", timeout=6)
 
+    def on_unmount(self) -> None:
+        """
+        Called when the app is quitting.
+
+        Makes sure that the GLaDOS engine is gracefully shut down.
+        """
+        logger.info("Quit action initiated in TUI.")
+        if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
+            logger.info("Signalling GLaDOS engine to stop...")
+            self.glados_engine_instance.shutdown_event.set()
+
     def action_help(self) -> None:
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
@@ -362,14 +370,6 @@ class GladosUI(App[None]):
     # def on_key(self, event: events.Key) -> None:
     #     """Useful for debugging via key presses."""
     #     logger.success(f"Key pressed: {self.glados_worker}")
-
-    async def action_quit(self) -> None:
-        logger.info("Quit action initiated in TUI.")
-        # Quit the TUI app
-        self.exit()
-        if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
-            logger.info("Signalling GLaDOS engine to stop...")
-            self.glados_engine_instance.shutdown_event.set()
 
     def on_worker_state_changed(self, message: Worker.StateChanged) -> None:
         """Handle messages from workers."""
@@ -436,21 +436,21 @@ class GladosUI(App[None]):
 
     @classmethod
     def run_app(cls, config_path: str | Path = "glados_config.yaml") -> None:
-        app = None  # Initialize app to None
+        app: GladosUI | None = None  # Initialize app to None
         try:
             app = cls()
             app.run()
         except KeyboardInterrupt:
             logger.info("Application interrupted by user. Exiting.")
-            if app is not None and hasattr(app, "action_quit") and callable(app.action_quit):
-                app.action_quit()  # This will now call the improved action_quit
+            if app is not None:
+                app.exit()
             # No explicit sys.exit(0) here; Textual's app.exit() will handle it.
         except Exception:
             logger.opt(exception=True).critical("Unhandled exception in app run:")
-            if app is not None and hasattr(app, "action_quit") and callable(app.action_quit):
+            if app is not None:
                 # Attempt a graceful shutdown even on other exceptions
                 logger.info("Attempting graceful shutdown due to unhandled exception...")
-                app.action_quit()
+                app.exit()
             sys.exit(1)  # Exit with error for unhandled exceptions
 
 
