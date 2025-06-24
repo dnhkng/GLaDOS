@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 import random
 import sys
-from typing import Any, ClassVar, cast
+from typing import ClassVar, cast
 
 from loguru import logger
 from rich.text import Text
@@ -88,10 +88,16 @@ class Typewriter(Static):
         id: str | None = None,  # Consistent with typical Textual widget `id` parameter
         speed: float = 0.01,  # time between each character
         repeat: bool = False,  # whether to start again at the end
-        *args: str,  # Passed to super().__init__
-        **kwargs: str,  # Passed to super().__init__
+        # Static widget parameters
+        content: str = "",
+        expand: bool = False,
+        shrink: bool = False,
+        markup: bool = True,
+        name: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
     ) -> None:
-        super().__init__(*args, **kwargs)  # Pass all kwargs to parent
+        # Initialize our custom attributes first
         self._text = text
         self.__id_for_child = id  # Store id specifically for the child VerticalScroll
         self._speed = speed
@@ -102,6 +108,18 @@ class Typewriter(Static):
         if "[" in text or "]" in text:
             # If there are brackets in the text, disable markup to avoid conflicts
             self._use_markup = False
+
+        # Call parent constructor with proper parameters
+        super().__init__(
+            content,
+            expand=expand,
+            shrink=shrink,
+            markup=markup,
+            name=name,
+            id=id,
+            classes=classes,
+            disabled=disabled,
+        )
 
     def compose(self) -> ComposeResult:
         self._static = Static(markup=self._use_markup)
