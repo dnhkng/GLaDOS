@@ -35,6 +35,8 @@ def install_uv() -> None:
     if platform.system() == "Windows":
         subprocess.run(["pip", "install", "uv"])
         subprocess.run(["uv", "self", "update"])
+    elif platform.system() == "PotatOS":
+        raise Exception("Oh no. Not again.")
     else:
         subprocess.run("curl -LsSf https://astral.sh/uv/install.sh | sh", shell=True)
         subprocess.run(["uv", "self", "update"])
