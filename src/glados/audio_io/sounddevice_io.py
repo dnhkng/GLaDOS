@@ -170,16 +170,15 @@ class SoundDeviceAudioIO:
 
         def stream_callback(
             outdata: NDArray[np.float32], frames: int, time: dict[str, Any], status: sd.CallbackFlags
-        ) -> tuple[NDArray[np.float32], sd.CallbackStop | None]:
+        ) -> None:
             nonlocal progress, interrupted
             progress += frames
             if self._is_playing is False:
                 interrupted = True
                 completion_event.set()
-                return outdata, sd.CallbackStop
             if progress >= total_samples:
                 completion_event.set()
-            return outdata, None
+            outdata.fill(0)
 
         try:
             logger.debug(f"Using sample rate: {sample_rate} Hz, total samples: {total_samples}")
