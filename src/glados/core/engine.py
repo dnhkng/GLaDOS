@@ -10,6 +10,7 @@ import queue
 import sys
 import threading
 import time
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
@@ -24,6 +25,7 @@ from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
+from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 
 logger.remove(0)
@@ -192,7 +194,8 @@ class Glados:
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
         # Initialize queues for inter-thread communication
-        self.llm_queue: queue.Queue[str] = queue.Queue()  # Text from SpeechListener to LLMProcessor
+        self.llm_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Data from SpeechListener and ToolExecutor to LLMProcessor
+        self.tool_calls_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Tool calls from LLMProcessor to ToolExecutor
         self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
 
@@ -217,11 +220,20 @@ class Glados:
 
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue,
+            tool_calls_queue=self.tool_calls_queue,
             tts_input_queue=self.tts_queue,
             conversation_history=self._messages,  # Shared, to be refactored
             completion_url=self.completion_url,
             model_name=self.llm_model,
             api_key=self.api_key,
+            processing_active_event=self.processing_active_event,
+            shutdown_event=self.shutdown_event,
+            pause_time=self.PAUSE_TIME,
+        )
+
+        self.tool_executor = ToolExecutor(
+            llm_queue=self.llm_queue,
+            tool_calls_queue=self.tool_calls_queue,
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
@@ -250,6 +262,7 @@ class Glados:
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
+            "ToolExecutor": self.tool_executor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
