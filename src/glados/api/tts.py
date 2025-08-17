@@ -14,7 +14,7 @@ def write_glados_audio_file(f: str | io.BytesIO, text: str, *, format: str) -> N
         text: Text to convert to speech
         format: Audio format (e.g., "mp3", "wav", "ogg")
     """
-    glados_tts = tts_glados.Synthesizer()
+    glados_tts = tts_glados.SpeechSynthesizer()
     converter = spoken_text_converter.SpokenTextConverter()
     converted_text = converter.text_to_spoken(text)
     audio = glados_tts.generate_speech_audio(converted_text)
