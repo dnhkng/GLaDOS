@@ -13,6 +13,7 @@ from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
+from .utils.automated_install import main as automated_install
 
 # Type aliases for clarity
 type FileHash = str
@@ -286,9 +287,19 @@ def main() -> int:
     if args.command == "download":
         return asyncio.run(download_models())
     else:
+        is_pyapp = (Path.home() / ".local/share/pyapp/glados").exists()
+
         if not models_valid():
-            print("Some model files are invalid or missing. Please run 'uv run glados download'")
-            return 1
+            if is_pyapp:
+                print("Some model files are invalid or missing, downloading...")
+                asyncio.run(download_models())
+            else:
+                print("Some model files are invalid or missing. Please run 'uv run glados download'")
+                return 1
+
+        if is_pyapp:
+            automated_install(DEFAULT_CONFIG)
+
         if args.command == "say":
             say(args.text, args.config)
         elif args.command == "start":

@@ -16,4 +16,7 @@ def get_package_root() -> Path:
 
 def resource_path(relative_path: str) -> Path:
     """Return absolute path to a model file."""
-    return get_package_root() / relative_path
+    root_path = get_package_root()
+    is_pyapp = (Path.home() / ".local/share/pyapp/glados").exists()
+    root_path = Path(os.getcwd()) if is_pyapp else root_path
+    return root_path / relative_path
