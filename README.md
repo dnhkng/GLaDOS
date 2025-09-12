@@ -213,3 +213,14 @@ Want to mess around with the AI models? You can test the systems by exploring th
 
 ## Star History
 [![Star History Chart](https://api.star-history.com/svg?repos=dnhkng/GlaDOS&type=Date)](https://star-history.com/#dnhkng/GlaDOS&Date)
+
+
+## Sponsors
+Companies supporting the development of GLaDOS:
+
+<div align="center">
+
+[![Sponsor](https://raw.githubusercontent.com/dnhkng/assets/refs/heads/main/Flow-symbol.svg)](https://ref.wisprflow.ai/qbHPGg8)
+### Wispr Flow
+Don't type, just speak
+</div>
