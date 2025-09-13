@@ -3,6 +3,7 @@ import asyncio
 from hashlib import sha256
 from pathlib import Path
 import sys
+import os
 
 import httpx
 from rich import print as rprint
@@ -287,18 +288,14 @@ def main() -> int:
     if args.command == "download":
         return asyncio.run(download_models())
     else:
-        is_pyapp = (Path.home() / ".local/share/pyapp/glados").exists()
+        if os.getenv("PYAPP_RUNNING") == "1":
+            automated_install()
+            tui(DEFAULT_CONFIG)
+            return 0
 
         if not models_valid():
-            if is_pyapp:
-                print("Some model files are invalid or missing, downloading...")
-                asyncio.run(download_models())
-            else:
-                print("Some model files are invalid or missing. Please run 'uv run glados download'")
-                return 1
-
-        if is_pyapp:
-            automated_install(DEFAULT_CONFIG)
+            print("Some model files are invalid or missing. Please run 'uv run glados download'")
+            return 1
 
         if args.command == "say":
             say(args.text, args.config)
