@@ -23,6 +23,8 @@ BINARY_NAME="GLaDOS"
 VERSION="0.1.0"
 EXE_BASE="${BINARY_NAME}-${VERSION}"
 WHEEL_PATH="$(pwd)/dist/${PROJECT_NAME}-${VERSION}-py3-none-any.whl"
+COMMENT="Genetic Lifeform and Disk Operating System"
+APPDIR="dist/glados.AppDir"
 
 # Export PYAPP variables
 export PYAPP_PROJECT_NAME="${PROJECT_NAME}"
@@ -31,10 +33,6 @@ export PYAPP_PROJECT_PATH="${WHEEL_PATH}"
 export PYAPP_EXEC_MODULE="${PROJECT_NAME}"
 export PYAPP_PYTHON_VERSION="3.12"
 export PYAPP_DISTRIBUTION_EMBED=1
-
-# Build wheel
-uv sync
-uv build --wheel
 
 # Ensure cross-rs is installed
 cargo install cross --git https://github.com/cross-rs/cross
@@ -54,6 +52,15 @@ if [ ! -d "pyapp-latest" ]; then
 volumes = ["PYAPP_PROJECT_PATH"]
 EOF
 fi
+
+# Clean up previous builds to avoid potential issues
+rm -rf dist/$EXE_BASE-*
+rm -rf "${WHEEL_PATH}"
+rm -rf "${APPDIR}"
+
+# Build wheel
+uv sync
+uv build --wheel
 
 # Cross-compile targets: os arch target ext
 targets=(
@@ -82,13 +89,10 @@ for target in "${targets[@]}"; do
     rustup target add "${target}"
   fi
 
-  binary_path="pyapp-latest/target/${target}/release/pyapp${ext}"  # Cargo names it pyapp or pyapp.exe
-  if [ ! -f "${binary_path}" ]; then
-    pushd pyapp-latest
-    CROSS_USE_SYSTEM_LIBS=0 cross build --release --target "${target}"
-    popd
-  fi
-  cp "${binary_path}" "dist/${EXE_BASE}-${os}-${arch}${ext}"
+  pushd pyapp-latest
+  CROSS_USE_SYSTEM_LIBS=0 cross build --release --target "${target}"
+  popd
+  cp "pyapp-latest/target/${target}/release/pyapp${ext}" "dist/${EXE_BASE}-${os}-${arch}${ext}"
 done
 
 # Download appimagetool if not present
@@ -99,8 +103,6 @@ fi
 chmod +x "dist/${appimagetool_file}"
 
 # Create AppDir
-APPDIR="dist/glados.AppDir"
-rm -rf "${APPDIR}" # Clean up previous builds to avoid potential issues
 mkdir -p "${APPDIR}/usr/bin"
 mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
 mkdir -p "${APPDIR}/usr/share/metainfo/"
@@ -114,7 +116,7 @@ cat <<EOF > "${APPDIR}/glados.desktop"
 Type=Application
 Name=${BINARY_NAME}
 X-AppImage-Version=${VERSION}
-Comment=Genetic Lifeform and Disk Operating System
+Comment=${COMMENT}
 Exec=AppRun
 Icon=aperture_icon
 Categories=Utility;
@@ -154,11 +156,23 @@ cp images/aperture_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/aper
 cat <<'EOF' > "${APPDIR}/AppRun"
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
-export PYAPP_RUNNING=1
-export PYAPP_RELATIVE_DIR="$(pwd)"
 x-terminal-emulator -e "$HERE/usr/bin/GLaDOS" "$@"
 EOF
 chmod +x "${APPDIR}/AppRun"
 
 # Build AppImage
 "./dist/${appimagetool_file}" "${APPDIR}" "dist/GLaDOS-${VERSION}-linux-x86_64.AppImage"
+
+# Modify metadata of windows binary
+sudo apt install wine
+if [ ! -f dist/rcedit-x64.exe ]; then
+  wget https://github.com/electron/rcedit/releases/download/v1.1.1/rcedit-x64.exe -O dist/rcedit-x64.exe
+fi
+echo "Executing a wine command, this may cause your PC to freeze for a minute"
+wine dist/rcedit-x64.exe "dist/${EXE_BASE}-windows-x86_64.exe" \
+  --set-icon "images/aperture_icon.ico" \
+  --set-version-string "FileDescription" "${COMMENT}" \
+  --set-version-string "ProductName" "${BINARY_NAME}" \
+  --set-version-string "CompanyName" "dnhkng" \
+  --set-file-version "${VERSION}" \
+  --set-product-version "${VERSION}"
