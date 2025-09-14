@@ -126,4 +126,4 @@ def main():
         raise RuntimeError(f"Failed to pull model: {llm_model}")
 
 if __name__ == "__main__":
-    main("configs/glados_config.yaml")
+    main()

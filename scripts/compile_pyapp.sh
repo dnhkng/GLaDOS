@@ -3,8 +3,8 @@
 set -e  # Stop on error
 set -x # Echo commands
 
-# Assert uv, rustup and docker are installed
-for cmd in uv rustup docker; do
+# Assert some commands are installed
+for cmd in uv rustup docker wine; do
   if ! command -v "$cmd" &> /dev/null; then
     echo "$cmd could not be found, please install it first."
     exit 1
@@ -126,11 +126,10 @@ EOF
 # AppData metadata
 cat <<EOF > "${APPDIR}/usr/share/metainfo/io.github.glados.metainfo.xml"
 <?xml version="1.0" encoding="UTF-8"?>
-<component type="desktop-application">
+<component type="desktop-application" license="MIT">
 <id>io.github.glados</id>
 <name>GLaDOS</name>
 <summary>Genetic Lifeform and Disk Operating System</summary>
-<component type="desktop-application" license="MIT">
 <content_rating type="oars-1.1"/>
 <developer_name>dnhkng</developer_name>
 <url type="homepage">https://github.com/dnhkng/GLaDOS</url>
@@ -164,7 +163,6 @@ chmod +x "${APPDIR}/AppRun"
 "./dist/${appimagetool_file}" "${APPDIR}" "dist/GLaDOS-${VERSION}-linux-x86_64.AppImage"
 
 # Modify metadata of windows binary
-sudo apt install wine
 if [ ! -f dist/rcedit-x64.exe ]; then
   wget https://github.com/electron/rcedit/releases/download/v1.1.1/rcedit-x64.exe -O dist/rcedit-x64.exe
 fi
