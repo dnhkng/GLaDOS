@@ -8,15 +8,14 @@ import glados
 @lru_cache(maxsize=1)
 def get_package_root() -> Path:
     """Get the absolute path to the package root directory (cached)."""
-    
     # Get the directory where the glados module is located
     package_dir = Path(os.path.dirname(os.path.abspath(glados.__file__)))
 
-    # Go up to the project root (src/glados -> src -> project_root)
-    package_dir = package_dir.parent.parent
-
-    if os.getenv("PYAPP") == "1":
-        package_dir = package_dir / "site-packages/glados"
+    # During pyapp runtime, the python package glados is located here:
+    # /home/yourUsername/.local/share/pyapp/glados/12151318069254528956/0.1.0/lib/python3.12/site-packages/glados
+    if os.getenv("PYAPP") != "1":
+        # Go up to the project root (src/glados -> src -> project_root)
+        package_dir = package_dir.parent.parent
 
     return package_dir
 

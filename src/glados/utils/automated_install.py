@@ -36,6 +36,7 @@ def install_ollama_linux():
     except subprocess.CalledProcessError:
         raise RuntimeError("Failed to install Ollama on Linux")
 
+# This has not been tested yet !
 def install_ollama_macos():
     """Install Ollama on macOS using Homebrew or direct download."""
     try:
