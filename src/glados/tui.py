@@ -17,6 +17,8 @@ from textual.worker import Worker, WorkerState
 from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
 
+from .utils.resources import resource_path, get_package_root
+
 # Custom Widgets
 
 
@@ -167,7 +169,7 @@ class SplashScreen(Screen[None]):
     # Ensure this path is correct relative to your project structure/runtime directory
     # Using a try-except block for robustness if the file is missing
     try:
-        with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
+        with open(get_package_root() / "glados_ui/images/splash.ansi", encoding="utf-8") as f:
             SPLASH_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
     except FileNotFoundError:
         logger.error("Splash screen ANSI art file not found. Using placeholder.")
@@ -276,7 +278,7 @@ class GladosUI(App[None]):
     SUB_TITLE = "(c) 1982 Aperture Science, Inc."
 
     try:
-        with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
+        with open(get_package_root() / "glados_ui/images/logo.ansi", encoding="utf-8") as f:
             LOGO_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
     except FileNotFoundError:
         logger.error("Logo ANSI art file not found. Using placeholder.")
@@ -434,7 +436,7 @@ class GladosUI(App[None]):
             Glados: An instance of the GLaDOS engine.
         """
 
-        config_path = Path("configs/glados_config.yaml")
+        config_path = resource_path("configs/glados_config.yaml")
         if not config_path.exists():
             logger.error(f"GLaDOS config file not found: {config_path}")
 

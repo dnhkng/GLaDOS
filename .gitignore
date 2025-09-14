@@ -164,3 +164,6 @@ cython_debug/
 *.bin
 *.gguf
 *.onnx
+
+# pyapp build directory
+pyapp-latest/
