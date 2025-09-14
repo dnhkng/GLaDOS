@@ -288,7 +288,7 @@ def main() -> int:
     if args.command == "download":
         return asyncio.run(download_models())
     else:
-        if os.getenv("PYAPP_RUNNING") == "1":
+        if os.getenv("PYAPP") == "1":
             automated_install()
             tui(DEFAULT_CONFIG)
             return 0

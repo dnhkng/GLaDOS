@@ -15,7 +15,7 @@ def get_package_root() -> Path:
     # Go up to the project root (src/glados -> src -> project_root)
     package_dir = package_dir.parent.parent
 
-    if os.getenv("PYAPP_RUNNING") == "1":
+    if os.getenv("PYAPP") == "1":
         package_dir = package_dir / "site-packages/glados"
 
     return package_dir
@@ -23,7 +23,7 @@ def get_package_root() -> Path:
 
 def resource_path(relative_path: str) -> Path:
     """Return absolute path to a model file."""
-    if os.getenv("PYAPP_RUNNING") == "1":
+    if os.getenv("PYAPP") == "1":
         root_path = Path(os.getenv("PYAPP_RELATIVE_DIR")) # Relative path to the executable
     else:
         root_path = get_package_root()
