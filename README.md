@@ -222,5 +222,5 @@ Companies supporting the development of GLaDOS:
 
 [![Sponsor](https://raw.githubusercontent.com/dnhkng/assets/refs/heads/main/Flow-symbol.svg)](https://ref.wisprflow.ai/qbHPGg8)
 ### Wispr Flow
-Don't type, just speak
+Talk to code, stay in the Flow.
 </div>
