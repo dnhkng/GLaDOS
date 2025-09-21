@@ -196,6 +196,16 @@ To use these new settings, use the command:
 
     uv run glados start --config configs/assistant_config.yaml
 
+## Build releases
+
+This project can be packaged into a single executable using [pyapp](https://github.com/ofek/pyapp). The resulting binary is fully self-contained and automatically installs all required dependencies.
+
+To build releases, cd to this project root directory and run `./scripts/compile_pyapp.sh`.
+This will produce the following executables (version 0.1.0 in this example):
+- dist/GLaDOS-0.1.0-windows-x86_64.exe
+- dist/GLaDOS-0.1.0-linux-x86_64
+- dist/GLaDOS-0.1.0-linux-x86_64.AppImage
+
 ## Common Issues
 1. If you find you are getting stuck in loops, as GLaDOS is hearing herself speak, you have two options:
    1. Solve this by upgrading your hardware. You need to you either headphone, so she can't physically hear herself speak, or a conference-style room microphone/speaker. These have hardware sound cancellation, and prevent these loops.

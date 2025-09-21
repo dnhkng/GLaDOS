@@ -3,6 +3,7 @@ import asyncio
 from hashlib import sha256
 from pathlib import Path
 import sys
+import os
 
 import httpx
 from rich import print as rprint
@@ -13,6 +14,7 @@ from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
+from .utils.automated_install import main as automated_install
 
 # Type aliases for clarity
 type FileHash = str
@@ -286,6 +288,11 @@ def main() -> int:
     if args.command == "download":
         return asyncio.run(download_models())
     else:
+        if os.getenv("PYAPP") == "1":
+            automated_install()
+            tui(DEFAULT_CONFIG)
+            return 0
+
         if not models_valid():
             print("Some model files are invalid or missing. Please run 'uv run glados download'")
             return 1
