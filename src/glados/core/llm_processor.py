@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
-
+from ..tools import tool_definitions
 
 class LanguageModelProcessor:
     """
@@ -23,7 +23,8 @@ class LanguageModelProcessor:
 
     def __init__(
         self,
-        llm_input_queue: queue.Queue[str],
+        llm_input_queue: queue.Queue[dict[str, Any]],
+        tool_calls_queue: queue.Queue[dict[str, Any]],
         tts_input_queue: queue.Queue[str],
         conversation_history: list[dict[str, str]],  # Shared
         completion_url: HttpUrl,
@@ -34,6 +35,7 @@ class LanguageModelProcessor:
         pause_time: float = 0.05,
     ) -> None:
         self.llm_input_queue = llm_input_queue
+        self.tool_calls_queue = tool_calls_queue
         self.tts_input_queue = tts_input_queue
         self.conversation_history = conversation_history
         self.completion_url = completion_url
@@ -95,15 +97,83 @@ class LanguageModelProcessor:
             if line.get("done_marker"):  # Handle [DONE] marker
                 return None
             elif "choices" in line:  # OpenAI format
-                content = line.get("choices", [{}])[0].get("delta", {}).get("content")
+                delta = line.get("choices", [{}])[0].get("delta", {})
+                tool_calls = delta.get("tool_calls")
+                if tool_calls:
+                    return tool_calls
+
+                content = delta.get("content")
                 return str(content) if content else None
             # Handle Ollama format
             else:
-                content = line.get("message", {}).get("content")
+                message = line.get("message", {})
+                tool_calls = message.get("tool_calls")
+                if tool_calls:
+                    return tool_calls
+
+                content = message.get("content")
                 return content if content else None
         except Exception as e:
             logger.error(f"LLM Processor: Error processing chunk: {e}, chunk: {line}")
             return None
+
+    def _process_tool_chunks(
+        self,
+        tool_calls_buffer: list[dict[str, Any]],
+        tool_chunks: list[dict[str, Any]]
+    ) -> None:
+        """
+        Extract tool call data from chunks to populate final tool_calls_buffer.
+        Args:
+            tool_calls_buffer (list[dict[str, Any]]): List of tool calls to be run.
+            tool_chunks (list[dict[str, Any]]): List of streaming tool call data split into chunks.
+        """
+        for tool_chunk in tool_chunks:
+            tool_chunk_index = tool_chunk.get("index", 0)
+            if tool_chunk_index >= len(tool_calls_buffer):
+                # we have a new tool call to initialize
+                tool_calls_buffer.append({
+                    "id": "",
+                    "type": "function",
+                    "function": {
+                        "name": "",
+                        "arguments": ""
+                    }
+                })
+
+            tool_call = tool_calls_buffer[tool_chunk_index]
+
+            # retrieve values for the tool call from the chunk
+            tool_id = tool_chunk.get("id")
+            name = tool_chunk.get("function", {}).get("name")
+            arguments = tool_chunk.get("function", {}).get("arguments")
+
+            # update values for the tool call from the new chunk data
+            if tool_id:
+                tool_call["id"] += tool_id
+            if name:
+                tool_call["function"]["name"] += name
+            if arguments:
+                if isinstance(arguments, str):
+                    # OpenAI format
+                    tool_call["function"]["arguments"] += arguments
+                else:
+                    # Ollama format
+                    tool_call["function"]["arguments"] = arguments
+
+    def _process_tool_call(self, tool_calls: list[dict[str, Any]]) -> None:
+        """
+        Add tool calls to conversation history and send each to the tool calls
+        queue
+        Args:
+            tool_calls (list[dict[str, Any]]): List of tool calls to be run.
+        """
+        self.conversation_history.append(
+            {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
+        )
+        for tool_call in tool_calls:
+            logger.info(f"LLM Processor: Sending to tool calls queue: '{tool_call}'")
+            self.tool_calls_queue.put(tool_call)
 
     def _process_sentence_for_tts(self, current_sentence_parts: list[str]) -> None:
         """
@@ -132,23 +202,25 @@ class LanguageModelProcessor:
         logger.info("LanguageModelProcessor thread started.")
         while not self.shutdown_event.is_set():
             try:
-                detected_text = self.llm_input_queue.get(timeout=self.pause_time)
+                llm_input = self.llm_input_queue.get(timeout=self.pause_time)
                 if not self.processing_active_event.is_set():  # Check if we were interrupted before starting
                     logger.info("LLM Processor: Interruption signal active, discarding LLM request.")
                     # Ensure EOS is sent if a previous stream was cut short by this interruption
                     # This logic might need refinement based on state. For now, assume no prior stream.
                     continue
 
-                logger.info(f"LLM Processor: Received text for LLM: '{detected_text}'")
-                self.conversation_history.append({"role": "user", "content": detected_text})
+                logger.info(f"LLM Processor: Received input for LLM: '{llm_input}'")
+                self.conversation_history.append(llm_input)
 
                 data = {
                     "model": self.model_name,
                     "stream": True,
                     "messages": self.conversation_history,
+                    "tools": tool_definitions,
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
 
+                tool_calls_buffer: list[dict[str, Any]] = []
                 sentence_buffer: list[str] = []
                 try:
                     with requests.post(
@@ -170,13 +242,16 @@ class LanguageModelProcessor:
                                 if cleaned_line_data:
                                     chunk = self._process_chunk(cleaned_line_data)
                                     if chunk:  # Chunk can be an empty string, but None means no actual content
-                                        sentence_buffer.append(chunk)
-                                        # Split on defined punctuation or if chunk itself is punctuation
-                                        if chunk.strip() in self.PUNCTUATION_SET and (
-                                            len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()
-                                        ):
-                                            self._process_sentence_for_tts(sentence_buffer)
-                                            sentence_buffer = []
+                                        if isinstance(chunk, list):
+                                            self._process_tool_chunks(tool_calls_buffer, chunk)
+                                        else:
+                                            sentence_buffer.append(chunk)
+                                            # Split on defined punctuation or if chunk itself is punctuation
+                                            if chunk.strip() in self.PUNCTUATION_SET and (
+                                                len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()
+                                            ):
+                                                self._process_sentence_for_tts(sentence_buffer)
+                                                sentence_buffer = []
                                     # OpenAI [DONE]
                                     elif cleaned_line_data.get("done_marker"):  # OpenAI [DONE]
                                         break
@@ -185,7 +260,9 @@ class LanguageModelProcessor:
                                         break
 
                         # After loop, process any remaining buffer content if not interrupted
-                        if self.processing_active_event.is_set() and sentence_buffer:
+                        if self.processing_active_event.is_set() and tool_calls_buffer:
+                            self._process_tool_call(tool_calls_buffer)
+                        elif self.processing_active_event.is_set() and sentence_buffer:
                             self._process_sentence_for_tts(sentence_buffer)
 
                 except requests.exceptions.ConnectionError as e:
