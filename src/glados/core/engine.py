@@ -20,6 +20,8 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
+from ..vision import VisionConfig
+from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
@@ -78,6 +80,7 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None
     personality_preprompt: list[PersonalityPrompt]
+    vision: VisionConfig | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -149,6 +152,7 @@ class Glados:
         wake_word: str | None = None,
         announcement: str | None = None,
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
+        vision_config: VisionConfig | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -179,6 +183,16 @@ class Glados:
         self.wake_word = wake_word
         self.announcement = announcement
         self._messages: list[dict[str, str]] = list(personality_preprompt)
+        self.vision_config = vision_config
+
+        if self.vision_config:
+            # Add instructions to system prompt to correctly handle [vision] marked messages
+            for message in self._messages:
+                if message.get("role") == "system" and isinstance(message.get("content"), str):
+                    message["content"] = f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"
+                    break
+            else:
+                self._messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING})
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
@@ -187,7 +201,7 @@ class Glados:
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
         # Initialize events for thread synchronization
-        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS)
+        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
         self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
@@ -247,12 +261,24 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
+        self.vision_processor = None
+        if self.vision_config:
+            from ..vision import VisionProcessor
+            self.vision_processor = VisionProcessor(
+                llm_queue=self.llm_queue,
+                processing_active_event=self.processing_active_event,
+                shutdown_event=self.shutdown_event,
+                config=self.vision_config,
+            )
+
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
+        if self.vision_processor:
+            thread_targets["VisionProcessor"] = self.vision_processor.run
 
         for name, target_func in thread_targets.items():
             thread = threading.Thread(target=target_func, name=name, daemon=True)
@@ -322,6 +348,7 @@ class Glados:
             wake_word=config.wake_word,
             announcement=config.announcement,
             personality_preprompt=tuple(config.to_chat_messages()),
+            vision_config=config.vision,
         )
 
     @classmethod
