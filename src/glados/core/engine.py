@@ -21,6 +21,8 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
+from ..vision import VisionConfig
+from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
@@ -82,6 +84,7 @@ class GladosConfig(BaseModel):
     personality_preprompt: list[PersonalityPrompt]
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0
+    vision: VisionConfig | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -155,6 +158,7 @@ class Glados:
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
         tool_config: dict[str, Any] | None = None,
         tool_timeout: float = 30.0,
+        vision_config: VisionConfig | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -177,6 +181,7 @@ class Glados:
             personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
             tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
             tool_timeout (float): Timeout in seconds for tool execution.
+            vision_config (VisionConfig | None): Optional vision configuration.
         """
         self._asr_model = asr_model
         self._tts = tts_model
@@ -189,6 +194,16 @@ class Glados:
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
         self._messages: list[dict[str, str]] = list(personality_preprompt)
+        self.vision_config = vision_config
+
+        if self.vision_config:
+            # Add instructions to system prompt to correctly handle [vision] marked messages
+            for message in self._messages:
+                if message.get("role") == "system" and isinstance(message.get("content"), str):
+                    message["content"] = f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"
+                    break
+            else:
+                self._messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING})
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
@@ -197,7 +212,7 @@ class Glados:
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
         # Initialize events for thread synchronization
-        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS)
+        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
         self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
@@ -269,6 +284,16 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
+        self.vision_processor = None
+        if self.vision_config:
+            from ..vision import VisionProcessor
+            self.vision_processor = VisionProcessor(
+                llm_queue=self.llm_queue,
+                processing_active_event=self.processing_active_event,
+                shutdown_event=self.shutdown_event,
+                config=self.vision_config,
+            )
+
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
@@ -276,6 +301,8 @@ class Glados:
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
+        if self.vision_processor:
+            thread_targets["VisionProcessor"] = self.vision_processor.run
 
         for name, target_func in thread_targets.items():
             thread = threading.Thread(target=target_func, name=name, daemon=True)
@@ -347,6 +374,7 @@ class Glados:
             personality_preprompt=tuple(config.to_chat_messages()),
             tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
             tool_timeout=config.tool_timeout,
+            vision_config=config.vision,
         )
 
     @classmethod
