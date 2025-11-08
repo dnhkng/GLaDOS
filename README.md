@@ -7,6 +7,12 @@ NEW: If you want to chat or join the community, [Join our discord!](https://disc
 
 https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
+## Update Nov 2025 *GLaDOS has a vision module*
+
+See [vision.md](/vision.md) for details.
+
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/JDd9Rc4toEo?si=VL4KiIbW89INx_Ql" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Update 3-1-2025 *Got GLaDOS running on an 8Gb SBC!*
 
 https://github.com/user-attachments/assets/99e599bb-4701-438a-a311-8e6cd595796c
@@ -20,8 +26,8 @@ Don't expect support for this, it's in active development, and requires lots of 
 This will entail:
 - [x] Train GLaDOS voice generator
 - [x] Generate a prompt that leads to a realistic "Personality Core"
+- [x] Give GLaDOS vision via a VLM
 - [ ] Generate a medium- and long-term memory for GLaDOS (Probably a custom vector DB in a simpy Numpy array!) 
-- [ ] Give GLaDOS vision via a VLM (either a full VLM for everything, or a 'vision module' using a tiny VLM the GLaDOS can function call!)
 - [ ] Create 3D-printable parts
 - [ ] Design the animatronics system
 
