@@ -9,9 +9,7 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 ## Update Nov 2025 *GLaDOS has a vision module*
 
-See [vision.md](/vision.md) for details.
-
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/JDd9Rc4toEo?si=VL4KiIbW89INx_Ql" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+See [vision.md](/vision.md) for details. [**Demo video**](https://www.youtube.com/watch?v=JDd9Rc4toEo).
 
 ## Update 3-1-2025 *Got GLaDOS running on an 8Gb SBC!*
 
