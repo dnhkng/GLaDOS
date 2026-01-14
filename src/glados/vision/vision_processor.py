@@ -53,6 +53,7 @@ class VisionProcessor:
 
         # Frame differencing for scene change detection
         self._last_frame: NDArray[np.uint8] | None = None
+        self._last_features: NDArray[np.float32] | None = None
 
     def run(self) -> None:
         """Main processing loop for the vision processor thread."""
@@ -198,7 +199,13 @@ class VisionProcessor:
             Scene description or None if inference failed
         """
         try:
-            description = self._model.describe(frame, prompt=prompt, max_tokens=max_tokens)
+            vision_features = self._model.encode_image(frame)
+            description = self._model.describe_from_features(
+                vision_features,
+                prompt=prompt,
+                max_tokens=max_tokens,
+            )
+            self._last_features = vision_features
             return description
         except Exception as e:
             logger.error("FastVLM inference failed: {}", e)
@@ -223,11 +230,23 @@ class VisionProcessor:
             request.response_queue.put("error: failed to capture frame")
             return True
 
-        description = self._get_description(
-            frame,
-            prompt=request.prompt,
-            max_tokens=request.max_tokens,
-        )
+        processed = self._preprocess_frame(frame)
+        reuse_cached = self._last_features is not None and not self._scene_changed(processed)
+
+        if reuse_cached:
+            logger.debug("VisionProcessor: Reusing cached vision features for tool request.")
+            description = self._model.describe_from_features(
+                self._last_features,
+                prompt=request.prompt,
+                max_tokens=request.max_tokens,
+            )
+        else:
+            self._last_frame = processed.copy()
+            description = self._get_description(
+                frame,
+                prompt=request.prompt,
+                max_tokens=request.max_tokens,
+            )
         if not description:
             request.response_queue.put("error: vision inference failed")
             return True

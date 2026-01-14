@@ -332,12 +332,23 @@ class FastVLM:
         Returns:
             Generated text description
         """
-        prompt = prompt.strip() if prompt else "Describe the image."
+        vision_features = self.encode_image(image)
+        return self.describe_from_features(vision_features, prompt, max_tokens)
 
+    def encode_image(self, image: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """Encode an image into vision features using the vision encoder."""
         pixel_values = self._preprocess_image(image)
-
         vision_outputs = self.vision_encoder.run(None, {"pixel_values": pixel_values})
-        vision_features = vision_outputs[0]
+        return vision_outputs[0]
+
+    def describe_from_features(
+        self,
+        vision_features: NDArray[np.float32],
+        prompt: str,
+        max_tokens: int = 64,
+    ) -> str:
+        """Generate a description from precomputed vision features."""
+        prompt = prompt.strip() if prompt else "Describe the image."
 
         prompt_text = self._apply_chat_template(f"<image>{prompt}")
         prompt_token_ids = self._tokenizer.encode(prompt_text)
@@ -346,8 +357,7 @@ class FastVLM:
             logger.warning("FastVLM: <image> token missing from prompt; description may be degraded.")
 
         generated_ids = self._generate(vision_features, prompt_token_ids, max_tokens)
-        generated_text = self._tokenizer.decode(generated_ids[len(prompt_token_ids):])
-        return generated_text
+        return self._tokenizer.decode(generated_ids[len(prompt_token_ids):])
 
     def _apply_chat_template(self, content: str) -> str:
         """Apply the Qwen2 chat template for a single user message."""
