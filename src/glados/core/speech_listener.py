@@ -8,6 +8,7 @@ voice activity detection, speech recognition, and wake word detection.
 from collections import deque
 import queue
 import threading
+from typing import Any
 
 from Levenshtein import distance
 from loguru import logger
@@ -36,7 +37,7 @@ class SpeechListener:
     def __init__(
         self,
         audio_io: AudioProtocol,  # Replace with actual type if known
-        llm_queue: queue.Queue[str],
+        llm_queue: queue.Queue[dict[str, Any]],
         shutdown_event: threading.Event,
         currently_speaking_event: threading.Event,
         processing_active_event: threading.Event,
@@ -246,7 +247,10 @@ class SpeechListener:
             if self.wake_word and not self._wakeword_detected(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
-                self.llm_queue.put(detected_text)
+                self.llm_queue.put({
+                    "role": "user",
+                    "content": detected_text
+                })
                 self.processing_active_event.set()
 
         self.reset()
