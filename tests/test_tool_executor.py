@@ -121,7 +121,7 @@ def test_process_valid_tool_call(mocker, caplog):
         time.sleep(0.1)
 
     assert "ToolExecutor: Received tool call" in caplog.text
-    mock_tool.assert_called_once_with(llm_queue=llm_queue)
+    mock_tool.assert_called_once_with(llm_queue=llm_queue, tool_config={})
     mock_tool_instance.run.assert_called_once_with(tool_call["id"], json.loads(tool_call["function"]["arguments"]))
     shutdown_event.set()
     thread.join(timeout=timeout)
@@ -170,7 +170,7 @@ def test_json_decode_error(mocker, caplog):
         time.sleep(0.1)
 
     assert "ToolExecutor: Failed to parse non-JSON tool call args: " in caplog.text
-    mock_tool.assert_called_once_with(llm_queue=llm_queue)
+    mock_tool.assert_called_once_with(llm_queue=llm_queue, tool_config={})
     mock_tool_instance.run.assert_called_once_with(tool_call["id"], {})
     shutdown_event.set()
     thread.join(timeout=timeout)
