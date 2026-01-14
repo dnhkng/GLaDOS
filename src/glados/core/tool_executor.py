@@ -3,6 +3,7 @@ import json
 import queue
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from loguru import logger
@@ -22,12 +23,16 @@ class ToolExecutor:
         tool_calls_queue: queue.Queue[dict[str, Any]],
         processing_active_event: threading.Event,  # To check if we should stop streaming
         shutdown_event: threading.Event,
+        tool_config: dict[str, Any] | None = None,
+        tool_timeout: float = 30.0,
         pause_time: float = 0.05,
     ) -> None:
         self.llm_queue = llm_queue
         self.tool_calls_queue = tool_calls_queue
         self.processing_active_event = processing_active_event
         self.shutdown_event = shutdown_event
+        self.tool_config = tool_config or {}
+        self.tool_timeout = tool_timeout
         self.pause_time = pause_time
 
     def run(self) -> None:
@@ -68,9 +73,23 @@ class ToolExecutor:
 
                 if tool in all_tools:
                     tool_instance = tool_classes.get(tool)(
-                        llm_queue=self.llm_queue
+                        llm_queue=self.llm_queue,
+                        tool_config=self.tool_config
                     )
-                    tool_instance.run(tool_call_id, args)
+                    # Run tool with timeout
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(tool_instance.run, tool_call_id, args)
+                        try:
+                            future.result(timeout=self.tool_timeout)
+                        except FuturesTimeoutError:
+                            timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
+                            logger.error(f"ToolExecutor: {timeout_error}")
+                            self.llm_queue.put({
+                                "role": "tool",
+                                "tool_call_id": tool_call_id,
+                                "content": timeout_error,
+                                "type": "function_call_output"
+                            })
                 else:
                     tool_error = f"error: no tool named {tool} is available"
                     logger.error(f"ToolExecutor: {tool_error}")

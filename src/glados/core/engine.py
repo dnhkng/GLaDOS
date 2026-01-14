@@ -80,6 +80,8 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None
     personality_preprompt: list[PersonalityPrompt]
+    slow_clap_audio_path: str = "data/slow-clap.mp3"
+    tool_timeout: float = 30.0
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -151,6 +153,8 @@ class Glados:
         wake_word: str | None = None,
         announcement: str | None = None,
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
+        tool_config: dict[str, Any] | None = None,
+        tool_timeout: float = 30.0,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -171,6 +175,8 @@ class Glados:
             wake_word (str | None): Optional wake word to trigger the assistant.
             announcement (str | None): Optional announcement to play on startup.
             personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
+            tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
+            tool_timeout (float): Timeout in seconds for tool execution.
         """
         self._asr_model = asr_model
         self._tts = tts_model
@@ -180,6 +186,8 @@ class Glados:
         self.interruptible = interruptible
         self.wake_word = wake_word
         self.announcement = announcement
+        self.tool_config = tool_config or {}
+        self.tool_timeout = tool_timeout
         self._messages: list[dict[str, str]] = list(personality_preprompt)
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
@@ -236,6 +244,8 @@ class Glados:
             tool_calls_queue=self.tool_calls_queue,
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
+            tool_config=self.tool_config,
+            tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
         )
 
@@ -335,6 +345,8 @@ class Glados:
             wake_word=config.wake_word,
             announcement=config.announcement,
             personality_preprompt=tuple(config.to_chat_messages()),
+            tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
+            tool_timeout=config.tool_timeout,
         )
 
     @classmethod

@@ -88,7 +88,7 @@ class LanguageModelProcessor:
             )
             return None
 
-    def _process_chunk(self, line: dict[str, Any]) -> str | None:
+    def _process_chunk(self, line: dict[str, Any]) -> str | list[dict[str, Any]] | None:
         # Copy from Glados._process_chunk
         if not line or not isinstance(line, dict):
             return None
