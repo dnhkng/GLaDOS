@@ -9,7 +9,7 @@ Glados:
   voice: "glados"
   announcement: "" # Disabled for now, glados keeps repeating this after each vision observation, not sure why.
   vision:
-    # model_dir: null  # Path to FastVLM ONNX models. Uses default models/Vision/FastVLM if null
+    # model_dir: null  # Path to FastVLM ONNX models. Uses default models/Vision if null
     camera_index: 0
     capture_interval_seconds: 5  # Seconds between captures
     resolution: 384  # Scene-change detection resolution

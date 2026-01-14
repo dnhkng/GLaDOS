@@ -15,9 +15,9 @@
   - `src/glados/vision/fastvlm.py` (decoder requires position_ids + past_key_values)
 
 ## Models and Assets
-- Committed: `models/Vision/FastVLM/` (configs + tokenizer files only), `data/Golden_Gate_Bridge.jpeg`.
+- Committed: `models/Vision/` (configs + tokenizer files only), `data/Golden_Gate_Bridge.jpeg`.
 - ONNX files are intentionally not tracked; install script should fetch them later.
-- Trimmed unused ONNX variants and legacy `models/Vision/*.onnx` leftovers.
+- Selected ONNX variants: `vision_encoder_fp16.onnx`, `embed_tokens_int8.onnx`, `decoder_model_merged_q4f16.onnx`.
 
 ## Dependencies
 - `opencv-python` and `regex` are in `pyproject.toml`.
