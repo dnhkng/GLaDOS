@@ -21,7 +21,7 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
-from ..vision import VisionConfig
+from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
@@ -193,8 +193,10 @@ class Glados:
         self.announcement = announcement
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
-        self._messages: list[dict[str, str]] = list(personality_preprompt)
+        self._messages: list[dict[str, Any]] = list(personality_preprompt)
         self.vision_config = vision_config
+        self.vision_state: VisionState | None = VisionState() if self.vision_config else None
+        self.vision_request_queue: queue.Queue | None = queue.Queue() if self.vision_config else None
 
         if self.vision_config:
             # Add instructions to system prompt to correctly handle [vision] marked messages
@@ -252,6 +254,21 @@ class Glados:
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
+            vision_state=self.vision_state,
+        )
+
+        self.tool_executor = ToolExecutor(
+            llm_queue=self.llm_queue,
+            tool_calls_queue=self.tool_calls_queue,
+            processing_active_event=self.processing_active_event,
+            shutdown_event=self.shutdown_event,
+            tool_config={
+                **self.tool_config,
+                "vision_request_queue": self.vision_request_queue,
+                "vision_tool_timeout": self.tool_timeout,
+            },
+            tool_timeout=self.tool_timeout,
+            pause_time=self.PAUSE_TIME,
         )
 
         self.tool_executor = ToolExecutor(
@@ -288,10 +305,11 @@ class Glados:
         if self.vision_config:
             from ..vision import VisionProcessor
             self.vision_processor = VisionProcessor(
-                llm_queue=self.llm_queue,
+                vision_state=self.vision_state,
                 processing_active_event=self.processing_active_event,
                 shutdown_event=self.shutdown_event,
                 config=self.vision_config,
+                request_queue=self.vision_request_queue,
             )
 
         thread_targets = {
@@ -331,12 +349,12 @@ class Glados:
             self.processing_active_event.set()
 
     @property
-    def messages(self) -> list[dict[str, str]]:
+    def messages(self) -> list[dict[str, Any]]:
         """
         Retrieve the current list of conversation messages.
 
         Returns:
-            list[dict[str, str]]: A list of message dictionaries representing the conversation history.
+            list[dict[str, Any]]: A list of message dictionaries representing the conversation history.
         """
         return self._messages
 
