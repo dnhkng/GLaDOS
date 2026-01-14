@@ -14,13 +14,12 @@ import pytest
 
 
 def _models_present(model_dir: Path) -> bool:
-    onnx_dir = model_dir / "onnx"
     required = [
-        "vision_encoder_q4.onnx",
-        "embed_tokens_fp16.onnx",
-        "decoder_model_merged_q4.onnx",
+        "vision_encoder_fp16.onnx",
+        "embed_tokens_int8.onnx",
+        "decoder_model_merged_q4f16.onnx",
     ]
-    return all((onnx_dir / name).exists() for name in required)
+    return all((model_dir / name).exists() for name in required)
 
 
 def _load_test_image(image_path: Path) -> np.ndarray:
@@ -49,7 +48,7 @@ def test_fastvlm_describe_smoke() -> None:
     from glados.utils.resources import resource_path
     from glados.vision.fastvlm import FastVLM
 
-    model_dir = resource_path("models/Vision/FastVLM")
+    model_dir = resource_path("models/Vision")
     if not _models_present(model_dir):
         pytest.skip("FastVLM model files not available")
 

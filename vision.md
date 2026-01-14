@@ -15,21 +15,41 @@ uv run glados start --config ./configs/glados_vision_config.yaml
 ### 1. Download FastVLM Models
 
 ```bash
-huggingface-cli download onnx-community/FastVLM-0.5B-ONNX --local-dir models/Vision/FastVLM
+huggingface-cli download onnx-community/FastVLM-0.5B-ONNX \
+  --local-dir models/Vision \
+  --include "onnx/vision_encoder_fp16.onnx" \
+  --include "onnx/embed_tokens_int8.onnx" \
+  --include "onnx/decoder_model_merged_q4f16.onnx" \
+  --include "config.json" \
+  --include "preprocessor_config.json" \
+  --include "tokenizer.json" \
+  --include "tokenizer_config.json" \
+  --include "README.md" \
+  --include "LICENSE"
 ```
 
 Or using the newer command:
 ```bash
-hf download onnx-community/FastVLM-0.5B-ONNX --local-dir models/Vision/FastVLM
+hf download onnx-community/FastVLM-0.5B-ONNX \
+  --local-dir models/Vision \
+  --include "onnx/vision_encoder_fp16.onnx" \
+  --include "onnx/embed_tokens_int8.onnx" \
+  --include "onnx/decoder_model_merged_q4f16.onnx" \
+  --include "config.json" \
+  --include "preprocessor_config.json" \
+  --include "tokenizer.json" \
+  --include "tokenizer_config.json" \
+  --include "README.md" \
+  --include "LICENSE"
 ```
 
-This downloads the ONNX models (~2GB) to the default location.
+This downloads the selected ONNX models (~640MB) to the default location.
 
 ### 2. Configure Vision
 
 See [vision_config.py](./src/glados/vision/vision_config.py) for configuration options:
 
-- `model_dir`: Path to FastVLM ONNX models (uses `models/Vision/FastVLM` by default)
+- `model_dir`: Path to FastVLM ONNX models (uses `models/Vision` by default)
 - `camera_index`: Camera device index (usually 0 for default webcam)
 - `capture_interval_seconds`: Time between frame captures (default: 5s)
 - `resolution`: Scene-change detection resolution (default: 384px)
@@ -41,7 +61,7 @@ See [vision_config.py](./src/glados/vision/vision_config.py) for configuration o
 FastVLM provides **85× faster time-to-first-token** compared to Ollama-based VLMs:
 - Direct ONNX inference (no HTTP overhead)
 - Runs on CPU or CUDA
-- Small footprint (~500MB VRAM for 0.5B model)
+- Small footprint (~640MB model files for 0.5B)
 - Frame differencing skips unchanged scenes
 
 ## Architecture
@@ -72,8 +92,8 @@ Requires an LLM backend that supports tool calling.
 - Test with: `ls /dev/video*` (Linux)
 
 **Models not found:**
-- Ensure models downloaded to `models/Vision/FastVLM/`
-- Check for `onnx/` subdirectory with model files
+- Ensure models downloaded to `models/Vision/`
+- Check for `vision_encoder_fp16.onnx`, `embed_tokens_int8.onnx`, `decoder_model_merged_q4f16.onnx`
 
 **Slow inference:**
 - Increase `capture_interval_seconds`
@@ -96,7 +116,7 @@ Remove the entire `vision:` section from your config, or use a config without vi
 
 ## Implementation Details
 
-- **Model**: Apple FastVLM-0.5B (ONNX, q4 quantized)
+- **Model**: Apple FastVLM-0.5B (ONNX, fp16 + q4f16 mix)
 - **Architecture**: Vision encoder + text decoder (autoregressive)
 - **Input**: 1024×1024 RGB images (center-cropped)
 - **Output**: Natural language scene descriptions

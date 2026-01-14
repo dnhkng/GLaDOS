@@ -39,6 +39,15 @@ def _get_pairs(word: tuple[str, ...]) -> set[tuple[str, str]]:
     return set(zip(word, word[1:], strict=False))
 
 
+def _onnx_type_to_dtype(type_str: str) -> np.dtype | None:
+    """Map ONNX type strings to numpy dtypes."""
+    mapping = {
+        "tensor(float16)": np.dtype(np.float16),
+        "tensor(float)": np.dtype(np.float32),
+    }
+    return mapping.get(type_str)
+
+
 class _ByteBPETokenizer:
     """Minimal ByteLevel BPE tokenizer for Qwen2-based FastVLM."""
 
@@ -176,14 +185,29 @@ class _ByteBPETokenizer:
 class FastVLM:
     """ONNX-based vision-language model for scene description."""
 
-    DEFAULT_MODEL_DIR = resource_path("models/Vision/FastVLM")
+    DEFAULT_MODEL_DIR = resource_path("models/Vision")
+    VISION_ENCODER_FILENAME = "vision_encoder_fp16.onnx"
+    EMBED_TOKENS_FILENAME = "embed_tokens_int8.onnx"
+    DECODER_FILENAME = "decoder_model_merged_q4f16.onnx"
+    DEFAULT_VISION_ENCODER_PATH = resource_path(f"models/Vision/{VISION_ENCODER_FILENAME}")
+    DEFAULT_EMBED_TOKENS_PATH = resource_path(f"models/Vision/{EMBED_TOKENS_FILENAME}")
+    DEFAULT_DECODER_PATH = resource_path(f"models/Vision/{DECODER_FILENAME}")
 
-    def __init__(self, model_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        model_dir: Path | None = None,
+        vision_encoder_path: Path | None = None,
+        embed_tokens_path: Path | None = None,
+        decoder_path: Path | None = None,
+    ) -> None:
         """Initialize FastVLM with ONNX models.
 
         Args:
             model_dir: Path to directory containing ONNX models and config files.
                       Uses DEFAULT_MODEL_DIR if None.
+            vision_encoder_path: Optional override for the vision encoder ONNX path.
+            embed_tokens_path: Optional override for the embed tokens ONNX path.
+            decoder_path: Optional override for the decoder ONNX path.
         """
         model_dir = model_dir or self.DEFAULT_MODEL_DIR
         if not isinstance(model_dir, Path):
@@ -206,28 +230,52 @@ class FastVLM:
         session_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session_opts.enable_mem_pattern = True
 
-        onnx_dir = model_dir / "onnx"
+        if vision_encoder_path is None:
+            vision_encoder_path = (
+                self.DEFAULT_VISION_ENCODER_PATH
+                if model_dir == self.DEFAULT_MODEL_DIR
+                else model_dir / self.VISION_ENCODER_FILENAME
+            )
+        if embed_tokens_path is None:
+            embed_tokens_path = (
+                self.DEFAULT_EMBED_TOKENS_PATH
+                if model_dir == self.DEFAULT_MODEL_DIR
+                else model_dir / self.EMBED_TOKENS_FILENAME
+            )
+        if decoder_path is None:
+            decoder_path = (
+                self.DEFAULT_DECODER_PATH
+                if model_dir == self.DEFAULT_MODEL_DIR
+                else model_dir / self.DECODER_FILENAME
+            )
+
+        vision_encoder_path = Path(vision_encoder_path)
+        embed_tokens_path = Path(embed_tokens_path)
+        decoder_path = Path(decoder_path)
 
         logger.debug("Loading vision encoder...")
         self.vision_encoder = ort.InferenceSession(
-            str(onnx_dir / "vision_encoder_q4.onnx"),
+            str(vision_encoder_path),
             sess_options=session_opts,
             providers=self._providers,
         )
 
         logger.debug("Loading embed tokens...")
         self.embed_tokens = ort.InferenceSession(
-            str(onnx_dir / "embed_tokens_fp16.onnx"),
+            str(embed_tokens_path),
             sess_options=session_opts,
             providers=self._providers,
         )
 
         logger.debug("Loading decoder...")
         self.decoder = ort.InferenceSession(
-            str(onnx_dir / "decoder_model_merged_q4.onnx"),
+            str(decoder_path),
             sess_options=session_opts,
             providers=self._providers,
         )
+        decoder_input_types = {inp.name: inp.type for inp in self.decoder.get_inputs()}
+        self._decoder_embed_dtype = _onnx_type_to_dtype(decoder_input_types.get("inputs_embeds", ""))
+        self._decoder_kv_dtype = _onnx_type_to_dtype(decoder_input_types.get("past_key_values.0.key", ""))
 
         self._decoder_layers = self._count_decoder_layers()
         self._past_num_heads, self._past_head_dim = self._get_past_shape()
@@ -343,6 +391,11 @@ class FastVLM:
         input_ids = np.array([generated_ids], dtype=np.int64)
         embeds_outputs = self.embed_tokens.run(None, {"input_ids": input_ids})
         inputs_embeds = embeds_outputs[0]
+        embeds_dtype = self._decoder_embed_dtype or inputs_embeds.dtype
+        if inputs_embeds.dtype != embeds_dtype:
+            inputs_embeds = inputs_embeds.astype(embeds_dtype, copy=False)
+        if vision_features.dtype != embeds_dtype:
+            vision_features = vision_features.astype(embeds_dtype, copy=False)
 
         try:
             image_token_pos = generated_ids.index(self.image_token_id)
@@ -357,10 +410,11 @@ class FastVLM:
             inputs_embeds = np.concatenate([inputs_embeds, vision_features], axis=1)
 
         attention_mask = np.ones((1, inputs_embeds.shape[1]), dtype=np.int64)
+        kv_dtype = self._decoder_kv_dtype or embeds_dtype
         past_key_values = [
             (
-                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=np.float32),
-                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=np.float32),
+                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=kv_dtype),
+                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=kv_dtype),
             )
             for _ in range(self._decoder_layers)
         ]
