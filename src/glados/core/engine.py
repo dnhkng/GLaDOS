@@ -10,6 +10,7 @@ import queue
 import sys
 import threading
 import time
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
@@ -24,6 +25,7 @@ from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
+from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 
 logger.remove(0)
@@ -78,6 +80,8 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None
     personality_preprompt: list[PersonalityPrompt]
+    slow_clap_audio_path: str = "data/slow-clap.mp3"
+    tool_timeout: float = 30.0
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -149,6 +153,8 @@ class Glados:
         wake_word: str | None = None,
         announcement: str | None = None,
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
+        tool_config: dict[str, Any] | None = None,
+        tool_timeout: float = 30.0,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -169,6 +175,8 @@ class Glados:
             wake_word (str | None): Optional wake word to trigger the assistant.
             announcement (str | None): Optional announcement to play on startup.
             personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
+            tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
+            tool_timeout (float): Timeout in seconds for tool execution.
         """
         self._asr_model = asr_model
         self._tts = tts_model
@@ -178,6 +186,8 @@ class Glados:
         self.interruptible = interruptible
         self.wake_word = wake_word
         self.announcement = announcement
+        self.tool_config = tool_config or {}
+        self.tool_timeout = tool_timeout
         self._messages: list[dict[str, str]] = list(personality_preprompt)
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
@@ -192,7 +202,8 @@ class Glados:
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
         # Initialize queues for inter-thread communication
-        self.llm_queue: queue.Queue[str] = queue.Queue()  # Text from SpeechListener to LLMProcessor
+        self.llm_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Data from SpeechListener and ToolExecutor to LLMProcessor
+        self.tool_calls_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Tool calls from LLMProcessor to ToolExecutor
         self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
 
@@ -217,6 +228,7 @@ class Glados:
 
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue,
+            tool_calls_queue=self.tool_calls_queue,
             tts_input_queue=self.tts_queue,
             conversation_history=self._messages,  # Shared, to be refactored
             completion_url=self.completion_url,
@@ -224,6 +236,16 @@ class Glados:
             api_key=self.api_key,
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
+            pause_time=self.PAUSE_TIME,
+        )
+
+        self.tool_executor = ToolExecutor(
+            llm_queue=self.llm_queue,
+            tool_calls_queue=self.tool_calls_queue,
+            processing_active_event=self.processing_active_event,
+            shutdown_event=self.shutdown_event,
+            tool_config=self.tool_config,
+            tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
         )
 
@@ -250,6 +272,7 @@ class Glados:
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
+            "ToolExecutor": self.tool_executor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
@@ -322,6 +345,8 @@ class Glados:
             wake_word=config.wake_word,
             announcement=config.announcement,
             personality_preprompt=tuple(config.to_chat_messages()),
+            tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
+            tool_timeout=config.tool_timeout,
         )
 
     @classmethod

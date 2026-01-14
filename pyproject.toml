@@ -24,6 +24,8 @@ cpu = ["onnxruntime>=1.16.0"]
 dev = [
     "pytest",
     "pytest-anyio",
+    "pytest-loguru",
+    "pytest-mock",
     "ruff",
     "ipykernel",
     "types-requests",
