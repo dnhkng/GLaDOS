@@ -1,6 +1,7 @@
 import queue
 import threading
 import time
+from typing import Any
 
 from loguru import logger
 
@@ -19,7 +20,7 @@ class SpeechPlayer:
         self,
         audio_io: AudioProtocol,
         audio_output_queue: queue.Queue[AudioMessage],
-        conversation_history: list[dict[str, str]],
+        conversation_history: list[dict[str, Any]],
         tts_sample_rate: int,
         shutdown_event: threading.Event,
         currently_speaking_event: threading.Event,

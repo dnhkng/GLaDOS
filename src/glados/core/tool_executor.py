@@ -59,24 +59,21 @@ class ToolExecutor:
                 try:
                     raw_args = tool_call["function"]["arguments"]
                     if isinstance(raw_args, str):
-                        # OpenAI format
                         args = json.loads(raw_args)
                     else:
-                        # Ollama format
                         args = raw_args
                 except json.JSONDecodeError:
                     logger.trace(
-                        f"ToolExecutor: Failed to parse non-JSON tool call args: "
-                        f"{tool_call["function"]["arguments"]}"
+                        "ToolExecutor: Failed to parse non-JSON tool call args: "
+                        f"{tool_call['function']['arguments']}"
                     )
                     args = {}
 
                 if tool in all_tools:
                     tool_instance = tool_classes.get(tool)(
                         llm_queue=self.llm_queue,
-                        tool_config=self.tool_config
+                        tool_config=self.tool_config,
                     )
-                    # Run tool with timeout
                     with ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(tool_instance.run, tool_call_id, args)
                         try:
@@ -84,22 +81,25 @@ class ToolExecutor:
                         except FuturesTimeoutError:
                             timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
                             logger.error(f"ToolExecutor: {timeout_error}")
-                            self.llm_queue.put({
-                                "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": timeout_error,
-                                "type": "function_call_output"
-                            })
+                            self.llm_queue.put(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call_id,
+                                    "content": timeout_error,
+                                    "type": "function_call_output",
+                                }
+                            )
                 else:
                     tool_error = f"error: no tool named {tool} is available"
                     logger.error(f"ToolExecutor: {tool_error}")
-                    # Let the LLM know of the error
-                    self.llm_queue.put({
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": tool_error,
-                        "type": "function_call_output"
-                    })
+                    self.llm_queue.put(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": tool_error,
+                            "type": "function_call_output",
+                        }
+                    )
             except queue.Empty:
                 pass  # Normal
             except Exception as e:

@@ -247,10 +247,7 @@ class SpeechListener:
             if self.wake_word and not self._wakeword_detected(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
-                self.llm_queue.put({
-                    "role": "user",
-                    "content": detected_text
-                })
+                self.llm_queue.put({"role": "user", "content": detected_text})
                 self.processing_active_event.set()
 
         self.reset()

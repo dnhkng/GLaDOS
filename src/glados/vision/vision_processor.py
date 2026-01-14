@@ -1,52 +1,67 @@
+"""Vision processor that periodically captures camera frames and generates scene descriptions using FastVLM."""
+
 from __future__ import annotations
 
-import base64
 import queue
 import threading
 import time
-from typing import Final
 
 import cv2
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
-import requests
 
-from .constants import (
-    VLM_SYSTEM_PROMPT,
-)
+from .constants import VISION_DEFAULT_PROMPT
+from .fastvlm import FastVLM
 from .vision_config import VisionConfig
+from .vision_request import VisionRequest
+from .vision_state import VisionState
+
 
 class VisionProcessor:
-    """Periodically captures camera frames and sends them to a VLM for description, then enqueues result to the llm."""
+    """Periodically captures camera frames and updates a vision snapshot using local ONNX FastVLM."""
 
     def __init__(
         self,
-        llm_queue: queue.Queue[str],
+        vision_state: VisionState,
         processing_active_event: threading.Event,
         shutdown_event: threading.Event,
         config: VisionConfig,
+        request_queue: queue.Queue[VisionRequest] | None = None,
     ) -> None:
-        self.llm_queue = llm_queue
+        """Initialize VisionProcessor.
+
+        Args:
+            vision_state: Store for the latest vision snapshot
+            processing_active_event: Event indicating if processing is active
+            shutdown_event: Event to signal shutdown
+            config: Vision module configuration
+            request_queue: Queue for on-demand tool requests
+        """
+        self.vision_state = vision_state
         self.processing_active_event = processing_active_event
         self.shutdown_event = shutdown_event
         self.config = config
+        self._request_queue = request_queue
 
-        self._session = requests.Session()
-        self._headers = {"Content-Type": "application/json"}
-        if self.config.api_key:
-            self._headers["Authorization"] = f"Bearer {self.config.api_key}"
+        # Load FastVLM model
+        self._model = FastVLM(config.model_dir)
 
-        self._capture = None
+        # Camera capture
+        self._capture: cv2.VideoCapture | None = None
         self._ensure_capture_ready()
 
+        # Frame differencing for scene change detection
+        self._last_frame: NDArray[np.uint8] | None = None
+
     def run(self) -> None:
+        """Main processing loop for the vision processor thread."""
         logger.info("VisionProcessor thread started.")
         try:
             while not self.shutdown_event.is_set():
                 loop_started = time.perf_counter()
 
-                if not self.processing_active_event.is_set():
+                if self._process_tool_request():
                     self._sleep(loop_started)
                     continue
 
@@ -59,35 +74,40 @@ class VisionProcessor:
                     self._sleep(loop_started)
                     continue
 
-                processed_frame = self._preprocess_frame(frame)
-                payload_image = self._encode_frame(processed_frame)
-                if payload_image is None:
+                # Resize frame for scene-change detection
+                processed = self._preprocess_frame(frame)
+
+                # Skip if scene hasn't changed significantly
+                if not self._scene_changed(processed):
+                    logger.debug("VisionProcessor: Scene unchanged, skipping VLM inference.")
                     self._sleep(loop_started)
                     continue
 
-                description = self._post_vision_query(payload_image)
+                # Store frame for next comparison
+                self._last_frame = processed.copy()
 
-                if self.llm_queue.qsize() >= 1: # LLM is busy, avoid flooding the queue with vision updates
-                    logger.info("VisionProcessor: Skipped a vision update.")
-                    self._sleep(loop_started)
-                    continue
+                # Get scene description using local ONNX model
+                description = self._get_description(frame, prompt=VISION_DEFAULT_PROMPT, max_tokens=self.config.max_tokens)
 
                 if description:
-                    formatted_message = f"[vision] {description}"
-                    logger.success(f"Vision update enqueued: {formatted_message}")
-                    self.llm_queue.put(formatted_message)
-                    self.processing_active_event.set()
+                    self.vision_state.update(description)
+                    logger.success("Vision snapshot updated: {}", description)
 
                 self._sleep(loop_started)
+
         except Exception as ex:
-            logger.error("VisionProcessor uncaught exception: {}", ex)
+            logger.exception("VisionProcessor uncaught exception: {}", ex)
         finally:
             if self._capture is not None:
                 self._capture.release()
-            self._session.close()
             logger.info("VisionProcessor thread finished.")
 
     def _ensure_capture_ready(self) -> bool:
+        """Ensure camera capture is ready.
+
+        Returns:
+            True if camera is ready, False otherwise
+        """
         if self._capture is not None and self._capture.isOpened():
             return True
 
@@ -107,6 +127,11 @@ class VisionProcessor:
         return True
 
     def _grab_frame(self) -> NDArray[np.uint8] | None:
+        """Grab a frame from the camera.
+
+        Returns:
+            Frame as uint8 array (BGR, HWC) or None if capture failed
+        """
         assert self._capture is not None
         ret, frame = self._capture.read()
         if not ret or frame is None:
@@ -115,10 +140,18 @@ class VisionProcessor:
         return frame
 
     def _preprocess_frame(self, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
-        """Resize frame to fit within target resolution while maintaining aspect ratio."""
+        """Resize frame to target resolution while maintaining aspect ratio.
+
+        Args:
+            frame: Input frame (BGR, HWC, uint8)
+
+        Returns:
+            Resized frame (BGR, HWC, uint8)
+        """
         target_resolution = self.config.resolution
         height, width = frame.shape[:2]
         max_dim = max(height, width)
+
         if max_dim <= target_resolution:
             return frame
 
@@ -128,55 +161,86 @@ class VisionProcessor:
         resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
         return resized
 
-    def _encode_frame(self, frame: NDArray[np.uint8]) -> bytes | None:
-        # use jpg with compression
-        encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-        success, buffer = cv2.imencode(".jpg", frame, encode_params)
-        if not success or buffer is None:
-            logger.warning("VisionProcessor: Failed to encode frame to JPEG.")
-            return None
-        return buffer.tobytes()
+    def _scene_changed(self, current_frame: NDArray[np.uint8]) -> bool:
+        """Check if scene has changed significantly from last processed frame.
 
-    def _post_vision_query(self, image_bytes: bytes) -> str | None:
-        # encode image to base64
-        image_payload = base64.b64encode(image_bytes).decode("ascii")
-        body = {
-            "model": self.config.vlm_model,
-            "stream": False,
-            # for the VLM we discard previous messages to improve accuracy
-            "messages": [
-                {
-                    "role": "system",
-                    "content": VLM_SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "images": [image_payload],
-                }
-            ],
-        }
+        Args:
+            current_frame: Current frame to compare
 
-        content: str | None = None
+        Returns:
+            True if scene changed above threshold, False otherwise
+        """
+        if self._last_frame is None:
+            return True
+
+        # Ensure frames are same size for comparison
+        if current_frame.shape != self._last_frame.shape:
+            return True
+
+        # Compute normalized absolute difference
+        diff = cv2.absdiff(current_frame, self._last_frame)
+        change_ratio = float(np.mean(diff)) / 255.0
+
+        return change_ratio > self.config.scene_change_threshold
+
+    def _get_description(
+        self,
+        frame: NDArray[np.uint8],
+        prompt: str,
+        max_tokens: int,
+    ) -> str | None:
+        """Get scene description using local ONNX FastVLM model.
+
+        Args:
+            frame: Input frame (BGR, HWC, uint8)
+
+        Returns:
+            Scene description or None if inference failed
+        """
         try:
-            response = self._session.post(
-                str(self.config.completion_url),
-                headers=self._headers,
-                json=body,
-                timeout=self.config.capture_interval_seconds, # timeout before next capture
-            )
-            response.raise_for_status()
-            message = response.json().get("message", {})
-            if isinstance(message, dict):
-                content = message.get("content")
-        except Exception as ex:
-            logger.error("VisionProcessor: Vision request failed: {}", ex)
+            description = self._model.describe(frame, prompt=prompt, max_tokens=max_tokens)
+            return description
+        except Exception as e:
+            logger.error("FastVLM inference failed: {}", e)
             return None
-        if content is None:
-            logger.warning("VisionProcessor: Received empty content from VLM response")
 
-        return content
+    def _process_tool_request(self) -> bool:
+        """Handle one pending tool request, if available."""
+        if self._request_queue is None:
+            return False
+
+        try:
+            request = self._request_queue.get_nowait()
+        except queue.Empty:
+            return False
+
+        if not self._ensure_capture_ready():
+            request.response_queue.put("error: camera not available")
+            return True
+
+        frame = self._grab_frame()
+        if frame is None:
+            request.response_queue.put("error: failed to capture frame")
+            return True
+
+        description = self._get_description(
+            frame,
+            prompt=request.prompt,
+            max_tokens=request.max_tokens,
+        )
+        if not description:
+            request.response_queue.put("error: vision inference failed")
+            return True
+
+        request.response_queue.put(description)
+        return True
 
     def _sleep(self, loop_started: float) -> None:
+        """Sleep until next capture interval.
+
+        Args:
+            loop_started: Time when loop iteration started
+        """
         elapsed = time.perf_counter() - loop_started
         sleep_time = max(0.0, self.config.capture_interval_seconds - elapsed)
         if sleep_time:

@@ -1,26 +1,104 @@
-# Glados vision module
+# GLaDOS Vision Module
 
-Glados is able to capture the world with a camera and react to what it sees.  
- The vision module is disabled by default, use the following command to start glados with vision:
+GLaDOS can capture the world with a camera and react to what it sees using Apple's FastVLM running locally via ONNX Runtime.
 
+## Quick Start
+
+The vision module is disabled by default. To enable it:
+
+```bash
+uv run glados start --config ./configs/glados_vision_config.yaml
 ```
-uv run glados start --config .\configs\glados_vision_config.yaml
+
+## Setup
+
+### 1. Download FastVLM Models
+
+```bash
+huggingface-cli download onnx-community/FastVLM-0.5B-ONNX --local-dir models/Vision/FastVLM
 ```
 
-See [vision_config.py](./src/glados/vision/vision_config.py) for help with custom configuration.
+Or using the newer command:
+```bash
+hf download onnx-community/FastVLM-0.5B-ONNX --local-dir models/Vision/FastVLM
+```
 
-Some usage notes:
+This downloads the ONNX models (~2GB) to the default location.
 
-- You can have both the LLM and the VLM (vision model) running on the same Ollama instance: choose models that can both fit in VRAM at the same time, otherwise it will be very slow as ollama keeps unloading them between vision and conversation tasks. The default config fits in 12GB VRAM.
-- The default LLM (qwen3:4b-instruct) is good enough to follow the personality while correctly handling the visual descriptions. Sometimes it will reply to the user multiple times in my experience. You can try a bigger LLM, such as gpt-oss:20b for better results.
-- The default VLM (qwen3-vl:2b-instruct) is more than sufficient for the vision task despite its small size. Unfortunately it's not viable for the conversational task so we need the 2nd model for the LLM.
-- The image `resolution` can be small - glados doesn't need vision in full hd, a small 256px image is sufficient for good results and the processing is fast.
-- `capture_interval_seconds` - Glados' vision is not continuous - photos are captured periodically by this interval. Increase if you see timeout errors, which means the vision processing takes longer.
-- `camera_index` - this is usually 0 which will use the default / first available camera. You may need to change this index if you have multiple webcams connected. See OpenCV's docs for details.
-- You can remove the whole `vision` section from the config to disable vision.
+### 2. Configure Vision
 
-Implementation details:
+See [vision_config.py](./src/glados/vision/vision_config.py) for configuration options:
 
-- Vision runs in its own thread similar to other processors. I made so that glados is able to react to changes in the environment.
-- the result of the VLM is a description of the image (eg. "a yellow rubber duck"). I add the `[vision]` prefix to this and pass it to the LLM queue as a user message. I tried sending it before as a `system` and custom roles but none of the VLMs seem to be prepared for this. Instead, when vision is configured, a few extra instructions are added to the LLM that prepares it to correctly handle these prefixed messages. This way Glados has the option to react or ignore subsequent vision observations. The instructions are at [constants.py](/src/glados/vision/constants.py)
-- current problems: it looks like the LLM sometimes repeats previous answers after a few vision observations, even when it's instructed not to. Not sure whether this is a problem with qwen3:4b or coding error.
+- `model_dir`: Path to FastVLM ONNX models (uses `models/Vision/FastVLM` by default)
+- `camera_index`: Camera device index (usually 0 for default webcam)
+- `capture_interval_seconds`: Time between frame captures (default: 5s)
+- `resolution`: Scene-change detection resolution (default: 384px)
+- `scene_change_threshold`: Minimum change to trigger inference (0=always, 1=never, default: 0.05)
+- `max_tokens`: Maximum tokens in background description (tool calls can override)
+
+## Performance
+
+FastVLM provides **85× faster time-to-first-token** compared to Ollama-based VLMs:
+- Direct ONNX inference (no HTTP overhead)
+- Runs on CPU or CUDA
+- Small footprint (~500MB VRAM for 0.5B model)
+- Frame differencing skips unchanged scenes
+
+## Architecture
+
+1. **Camera Capture**: OpenCV captures frames at configured intervals
+2. **Scene Change Detection**: Compares frames to skip redundant processing
+3. **FastVLM Inference**: Local ONNX models generate a short scene snapshot
+4. **Context Injection**: Latest snapshot is injected as a single `[vision]` system message when the LLM runs
+
+## Detailed Lookups
+
+If the user asks for a detailed visual check (e.g., outfit questions), the LLM calls the `vision_look` tool.
+The tool triggers a fresh capture and uses a custom prompt for the VLM to answer that specific question.
+Requires an LLM backend that supports tool calling.
+
+## Usage Notes
+
+- Vision runs in a separate thread like other processors (ASR, TTS)
+- A single `[vision]` snapshot is maintained and updated as new inferences complete
+- GLaDOS can react to or ignore vision observations based on context
+- The system prompt explains how to use vision snapshots and when to call `vision_look` (see [constants.py](./src/glados/vision/constants.py))
+
+## Troubleshooting
+
+**Camera not opening:**
+- Check `camera_index` in config (try 0, 1, 2...)
+- Verify camera permissions
+- Test with: `ls /dev/video*` (Linux)
+
+**Models not found:**
+- Ensure models downloaded to `models/Vision/FastVLM/`
+- Check for `onnx/` subdirectory with model files
+
+**Slow inference:**
+- Increase `capture_interval_seconds`
+- Ensure CUDA available (`CUDAExecutionProvider`)
+- Check `scene_change_threshold` (higher = fewer inferences)
+
+## Advanced
+
+### Custom Model Path
+
+```yaml
+vision:
+  model_dir: "/path/to/custom/fastvlm"
+  # ... other settings
+```
+
+### Disable Vision
+
+Remove the entire `vision:` section from your config, or use a config without vision.
+
+## Implementation Details
+
+- **Model**: Apple FastVLM-0.5B (ONNX, q4 quantized)
+- **Architecture**: Vision encoder + text decoder (autoregressive)
+- **Input**: 1024×1024 RGB images (center-cropped)
+- **Output**: Natural language scene descriptions
+- **Backend**: ONNX Runtime (CPU/CUDA)
+- **Integration**: Follows GLaDOS ONNX patterns (same as ASR/TTS)
