@@ -1,17 +1,12 @@
 from functools import lru_cache
-import os
 from pathlib import Path
-
-import glados
 
 
 @lru_cache(maxsize=1)
 def get_package_root() -> Path:
-    """Get the absolute path to the package root directory (cached)."""
-    # Get the directory where the glados module is located
-    package_dir = Path(os.path.dirname(os.path.abspath(glados.__file__)))
-    # Go up to the project root (src/glados -> src -> project_root)
-    return package_dir.parent.parent
+    """Get the absolute path to the project root directory (cached)."""
+    # utils -> glados -> src -> project_root
+    return Path(__file__).resolve().parents[3]
 
 
 def resource_path(relative_path: str) -> Path:
