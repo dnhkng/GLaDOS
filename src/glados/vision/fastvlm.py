@@ -50,7 +50,13 @@ class _ByteBPETokenizer:
         self.id_to_token = {v: k for k, v in self.vocab.items()}
 
         merges = tokenizer_data["model"]["merges"]
-        self.bpe_ranks = {tuple(merge.split()): i for i, merge in enumerate(merges)}
+        self.bpe_ranks = {}
+        for i, merge in enumerate(merges):
+            if isinstance(merge, str):
+                pair = tuple(merge.split())
+            else:
+                pair = tuple(merge)
+            self.bpe_ranks[pair] = i
 
         self.byte_encoder = _bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
@@ -223,6 +229,9 @@ class FastVLM:
             providers=self._providers,
         )
 
+        self._decoder_layers = self._count_decoder_layers()
+        self._past_num_heads, self._past_head_dim = self._get_past_shape()
+
         self._load_configs(model_dir)
 
         logger.success(f"FastVLM loaded using {self._providers[0]}")
@@ -246,6 +255,23 @@ class FastVLM:
         self._rescale_factor = float(preprocessor.get("rescale_factor", 1.0 / 255.0))
         self._do_center_crop = bool(preprocessor.get("do_center_crop", True))
         self._do_resize = bool(preprocessor.get("do_resize", True))
+
+    def _count_decoder_layers(self) -> int:
+        """Count the number of decoder layers based on past_key_values inputs."""
+        past_keys = [
+            inp for inp in self.decoder.get_inputs() if inp.name.startswith("past_key_values.") and inp.name.endswith(".key")
+        ]
+        return max(1, len(past_keys))
+
+    def _get_past_shape(self) -> tuple[int, int]:
+        """Infer the past key/value head and dim sizes from the decoder inputs."""
+        for inp in self.decoder.get_inputs():
+            if inp.name == "past_key_values.0.key":
+                shape = inp.shape
+                num_heads = int(shape[1]) if isinstance(shape[1], int) else 2
+                head_dim = int(shape[3]) if isinstance(shape[3], int) else 64
+                return num_heads, head_dim
+        return 2, 64
 
     def describe(self, image: NDArray[np.uint8], prompt: str, max_tokens: int = 64) -> str:
         """Generate a description of the image.
@@ -331,7 +357,13 @@ class FastVLM:
             inputs_embeds = np.concatenate([inputs_embeds, vision_features], axis=1)
 
         attention_mask = np.ones((1, inputs_embeds.shape[1]), dtype=np.int64)
-        past_key_values = None
+        past_key_values = [
+            (
+                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=np.float32),
+                np.zeros((1, self._past_num_heads, 0, self._past_head_dim), dtype=np.float32),
+            )
+            for _ in range(self._decoder_layers)
+        ]
 
         for _ in range(max_tokens):
             decoder_inputs = {
@@ -339,10 +371,15 @@ class FastVLM:
                 "attention_mask": attention_mask,
             }
 
-            if past_key_values is not None:
-                for i, (key, value) in enumerate(past_key_values):
-                    decoder_inputs[f"past_key_values.{i}.key"] = key
-                    decoder_inputs[f"past_key_values.{i}.value"] = value
+            if inputs_embeds.shape[1] == attention_mask.shape[1]:
+                position_ids = np.arange(attention_mask.shape[1], dtype=np.int64)[None, :]
+            else:
+                position_ids = np.array([[attention_mask.shape[1] - 1]], dtype=np.int64)
+            decoder_inputs["position_ids"] = position_ids
+
+            for i, (key, value) in enumerate(past_key_values):
+                decoder_inputs[f"past_key_values.{i}.key"] = key
+                decoder_inputs[f"past_key_values.{i}.value"] = value
 
             decoder_outputs = self.decoder.run(None, decoder_inputs)
 
