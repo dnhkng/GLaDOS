@@ -59,6 +59,18 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/phomenizer_en.onnx",
         "checksum": "b64dbbeca8b350927a0b6ca5c4642e0230173034abd0b5bb72c07680d700c5a0",
     },
+    "models/Vision/vision_encoder_fp16.onnx": {
+        "url": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/vision_encoder_fp16.onnx",
+        "checksum": "18eeac87e206e3d7f6d6c65dbd47c53ac563b934478b4d78388cadfcd974915c",
+    },
+    "models/Vision/embed_tokens_int8.onnx": {
+        "url": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/embed_tokens_int8.onnx",
+        "checksum": "a51d36f1f40fd9e41b86b50d6411c6e6ab8ba0131060532f906344577a75f542",
+    },
+    "models/Vision/decoder_model_merged_q4f16.onnx": {
+        "url": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/decoder_model_merged_q4f16.onnx",
+        "checksum": "6ea00b526e59a5087e90e8e73b74a09347a7f1127f052476211b03aecca3fb0d",
+    },
 }
 
 
