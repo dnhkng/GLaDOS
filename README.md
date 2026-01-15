@@ -103,6 +103,9 @@ Install the PortAudio library, if you don't yet have it installed:
     If you want something more fancy, try the Text UI (TUI), with:
 
         uv run glados tui
+    If you prefer typing instead of speech input, use text mode:
+
+        uv run glados start --input-mode text
 
 ## Speech Generation
 You can also get her to say something with:
