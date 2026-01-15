@@ -19,6 +19,7 @@ dependencies = [
     "httpx>=0.28.1",
     "rich>=14.0.0",
     "threadpoolctl>=3.0.0",
+    "mcp>=1.25.0",
 ]
 
 [project.optional-dependencies]
