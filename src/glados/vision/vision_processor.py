@@ -54,6 +54,7 @@ class VisionProcessor:
         # Frame differencing for scene change detection
         self._last_frame: NDArray[np.uint8] | None = None
         self._last_features: NDArray[np.float32] | None = None
+        self._prompt_cache: dict[tuple[str, int], str] = {}
 
     def run(self) -> None:
         """Main processing loop for the vision processor thread."""
@@ -86,6 +87,7 @@ class VisionProcessor:
 
                 # Store frame for next comparison
                 self._last_frame = processed.copy()
+                self._prompt_cache.clear()
 
                 # Get scene description using local ONNX model
                 description = self._get_description(frame, prompt=VISION_DEFAULT_PROMPT, max_tokens=self.config.max_tokens)
@@ -198,6 +200,7 @@ class VisionProcessor:
         Returns:
             Scene description or None if inference failed
         """
+        prompt = prompt.strip() if prompt else ""
         try:
             vision_features = self._model.encode_image(frame)
             description = self._model.describe_from_features(
@@ -206,6 +209,8 @@ class VisionProcessor:
                 max_tokens=max_tokens,
             )
             self._last_features = vision_features
+            if description:
+                self._prompt_cache[(prompt, int(max_tokens))] = description
             return description
         except Exception as e:
             logger.error("FastVLM inference failed: {}", e)
@@ -235,13 +240,20 @@ class VisionProcessor:
 
         if reuse_cached:
             logger.debug("VisionProcessor: Reusing cached vision features for tool request.")
-            description = self._model.describe_from_features(
-                self._last_features,
-                prompt=request.prompt,
-                max_tokens=request.max_tokens,
-            )
+            prompt = request.prompt.strip() if request.prompt else ""
+            cache_key = (prompt, int(request.max_tokens))
+            description = self._prompt_cache.get(cache_key)
+            if description is None:
+                description = self._model.describe_from_features(
+                    self._last_features,
+                    prompt=prompt,
+                    max_tokens=request.max_tokens,
+                )
+                if description:
+                    self._prompt_cache[cache_key] = description
         else:
             self._last_frame = processed.copy()
+            self._prompt_cache.clear()
             description = self._get_description(
                 frame,
                 prompt=request.prompt,
