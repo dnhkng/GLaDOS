@@ -21,6 +21,7 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
+from ..mcp import MCPManager, MCPServerConfig
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -85,6 +86,7 @@ class GladosConfig(BaseModel):
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0
     vision: VisionConfig | None = None
+    mcp_servers: list[MCPServerConfig] | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -159,6 +161,7 @@ class Glados:
         tool_config: dict[str, Any] | None = None,
         tool_timeout: float = 30.0,
         vision_config: VisionConfig | None = None,
+        mcp_servers: list[MCPServerConfig] | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -193,6 +196,7 @@ class Glados:
         self.announcement = announcement
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
+        self.mcp_servers = mcp_servers or []
         self._messages: list[dict[str, Any]] = list(personality_preprompt)
         self.vision_config = vision_config
         self.vision_state: VisionState | None = VisionState() if self.vision_config else None
@@ -223,6 +227,11 @@ class Glados:
         self.tool_calls_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Tool calls from LLMProcessor to ToolExecutor
         self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
+
+        self.mcp_manager: MCPManager | None = None
+        if self.mcp_servers:
+            self.mcp_manager = MCPManager(self.mcp_servers, tool_timeout=self.tool_timeout)
+            self.mcp_manager.start()
 
         # Initialize audio input/output system
         self.audio_io: AudioProtocol = audio_io
@@ -255,6 +264,7 @@ class Glados:
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
+            mcp_manager=self.mcp_manager,
         )
 
         self.tool_executor = ToolExecutor(
@@ -269,16 +279,7 @@ class Glados:
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
-        )
-
-        self.tool_executor = ToolExecutor(
-            llm_queue=self.llm_queue,
-            tool_calls_queue=self.tool_calls_queue,
-            processing_active_event=self.processing_active_event,
-            shutdown_event=self.shutdown_event,
-            tool_config=self.tool_config,
-            tool_timeout=self.tool_timeout,
-            pause_time=self.PAUSE_TIME,
+            mcp_manager=self.mcp_manager,
         )
 
         self.tts_synthesizer = TextToSpeechSynthesizer(
@@ -393,6 +394,7 @@ class Glados:
             tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
             tool_timeout=config.tool_timeout,
             vision_config=config.vision,
+            mcp_servers=config.mcp_servers,
         )
 
     @classmethod
@@ -445,6 +447,8 @@ class Glados:
             time.sleep(self.PAUSE_TIME)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
+            if self.mcp_manager:
+                self.mcp_manager.shutdown()
             sys.exit(0)
 
 

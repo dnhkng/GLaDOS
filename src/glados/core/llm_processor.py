@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
+from ..mcp import MCPManager
 from ..tools import tool_definitions
 from ..vision.vision_state import VisionState
 
@@ -35,6 +36,7 @@ class LanguageModelProcessor:
         shutdown_event: threading.Event,
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
+        mcp_manager: MCPManager | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -47,6 +49,7 @@ class LanguageModelProcessor:
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
         self.vision_state = vision_state
+        self.mcp_manager = mcp_manager
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -194,22 +197,40 @@ class LanguageModelProcessor:
     def _build_messages(self) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting vision context if available."""
         messages = list(self.conversation_history)
+        extra_messages: list[dict[str, Any]] = []
+
+        if self.mcp_manager:
+            try:
+                extra_messages.extend(self.mcp_manager.get_context_messages())
+            except Exception as e:
+                logger.warning(f"LLM Processor: Failed to load MCP context messages: {e}")
 
         if self.vision_state:
             vision_message = self.vision_state.as_message()
             if vision_message:
-                insert_index = 0
-                while insert_index < len(messages) and messages[insert_index].get("role") == "system":
-                    insert_index += 1
-                messages.insert(insert_index, vision_message)
+                extra_messages.append(vision_message)
+
+        if extra_messages:
+            insert_index = 0
+            while insert_index < len(messages) and messages[insert_index].get("role") == "system":
+                insert_index += 1
+            for offset, message in enumerate(extra_messages):
+                messages.insert(insert_index + offset, message)
 
         return messages
 
     def _build_tools(self) -> list[dict[str, Any]]:
         """Return the tool list for the LLM request."""
         if self.vision_state is None:
-            return [tool for tool in tool_definitions if tool.get("function", {}).get("name") != "vision_look"]
-        return tool_definitions
+            tools = [tool for tool in tool_definitions if tool.get("function", {}).get("name") != "vision_look"]
+        else:
+            tools = list(tool_definitions)
+        if self.mcp_manager:
+            try:
+                tools.extend(self.mcp_manager.get_tool_definitions())
+            except Exception as e:
+                logger.warning(f"LLM Processor: Failed to load MCP tool definitions: {e}")
+        return tools
 
     def run(self) -> None:
         """

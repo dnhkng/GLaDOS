@@ -8,6 +8,15 @@ Glados:
   wake_word: null
   voice: "glados"
   announcement: "" # Disabled for now, glados keeps repeating this after each vision observation, not sure why.
+  mcp_servers:
+    - name: "slow_clap_demo"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.slow_clap_server"]
+    # - name: "home_assistant"
+    #   transport: "http"
+    #   url: "http://homeassistant.local:8123/mcp"
+    #   token: "YOUR_LONG_LIVED_TOKEN"
   vision:
     # model_dir: null  # Path to FastVLM ONNX models. Uses default models/Vision if null
     camera_index: 0
