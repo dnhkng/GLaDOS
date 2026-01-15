@@ -107,6 +107,10 @@ Install the PortAudio library, if you don't yet have it installed:
 
         uv run glados start --input-mode text
 
+    If you want both audio and text input active:
+
+        uv run glados start --input-mode both
+
 ## Speech Generation
 You can also get her to say something with:
 
