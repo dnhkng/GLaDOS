@@ -12,6 +12,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Footer, Header, Input, Label, RichLog, Static
 from textual.worker import Worker, WorkerState
@@ -408,6 +409,8 @@ class GladosUI(App[None]):
     glados_engine_instance: Glados | None = None
     glados_worker: object | None = None
     instantiation_worker: Worker[None] | None = None
+    _dialog_log: DialogLog | None = None
+    _status_panel: StatusPanel | None = None
 
     def compose(self) -> ComposeResult:
         """
@@ -493,8 +496,7 @@ class GladosUI(App[None]):
         # Display the splash screen for a few moments
         self.push_screen(SplashScreen())
         self.notify("Loading AI engine...", title="GLaDOS", timeout=6)
-        self._dialog_log = self.query_one("#dialog_log", DialogLog)
-        self._status_panel = self.query_one("#status_panel", StatusPanel)
+        self._bind_panels()
         self.set_interval(0.3, self._refresh_panels)
 
     def on_unmount(self) -> None:
@@ -564,13 +566,24 @@ class GladosUI(App[None]):
         event.stop()
 
     def _refresh_panels(self) -> None:
+        if not self._bind_panels():
+            return
         engine = self.glados_engine_instance
-        if not engine:
-            self._status_panel.render_status(self)
+        if not engine or self._dialog_log is None or self._status_panel is None:
             return
         events = engine.observability_bus.snapshot(limit=200)
         self._dialog_log.refresh_from_bus(events)
         self._status_panel.render_status(self)
+
+    def _bind_panels(self) -> bool:
+        if self._dialog_log is not None and self._status_panel is not None:
+            return True
+        try:
+            self._dialog_log = self.query_one("#dialog_log", DialogLog)
+            self._status_panel = self.query_one("#status_panel", StatusPanel)
+            return True
+        except NoMatches:
+            return False
 
     def start_glados(self) -> None:
         """
