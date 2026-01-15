@@ -17,6 +17,7 @@ from numpy.typing import NDArray
 
 from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
+from ..observability import ObservabilityBus, trim_message
 
 
 class SpeechListener:
@@ -46,6 +47,7 @@ class SpeechListener:
         pause_time: float,
         interruptible: bool = True,
         interaction_state: "InteractionState | None" = None,
+        observability_bus: ObservabilityBus | None = None,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -80,6 +82,7 @@ class SpeechListener:
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event
         self._interaction_state = interaction_state
+        self._observability_bus = observability_bus
 
     def run(self) -> None:
         """
@@ -249,6 +252,12 @@ class SpeechListener:
             if self.wake_word and not self._wakeword_detected(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
+                if self._observability_bus:
+                    self._observability_bus.emit(
+                        source="asr",
+                        kind="user_input",
+                        message=trim_message(detected_text),
+                    )
                 self.llm_queue.put({"role": "user", "content": detected_text})
                 if self._interaction_state:
                     self._interaction_state.mark_user()
