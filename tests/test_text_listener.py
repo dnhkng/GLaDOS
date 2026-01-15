@@ -31,3 +31,31 @@ def test_text_listener_enqueues_lines() -> None:
     assert second["content"] == "world"
     assert processing_active_event.is_set()
     assert interaction_state.seconds_since_user() is not None
+
+
+def test_text_listener_handles_commands() -> None:
+    llm_queue: queue.Queue[dict[str, str]] = queue.Queue()
+    processing_active_event = threading.Event()
+    shutdown_event = threading.Event()
+    input_stream = io.StringIO("/help\nhello\n")
+    called: list[str] = []
+
+    def handler(command: str) -> str:
+        called.append(command)
+        return "ok"
+
+    listener = TextListener(
+        llm_queue=llm_queue,
+        processing_active_event=processing_active_event,
+        shutdown_event=shutdown_event,
+        pause_time=0.01,
+        input_stream=input_stream,
+        command_handler=handler,
+    )
+
+    listener.run()
+
+    assert called == ["/help"]
+    assert llm_queue.qsize() == 1
+    message = llm_queue.get_nowait()
+    assert message["content"] == "hello"

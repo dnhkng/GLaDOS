@@ -12,7 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Digits, Footer, Header, Label, Log, RichLog, Static
+from textual.widgets import Digits, Footer, Header, Input, Label, Log, RichLog, Static
 from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
@@ -351,6 +351,7 @@ class GladosUI(App[None]):
             description="Help",
             key_display="?",
         ),
+        Binding(key="slash", action="command", description="Command", key_display="/"),
         Binding(key="o", action="observability", description="Observability"),
     ]
     CSS_PATH = "glados_ui/glados.tcss"
@@ -398,6 +399,8 @@ class GladosUI(App[None]):
                 with Container(id="utility_area"):
                     typewriter = Typewriter(recipe, id="recipe", speed=0.01, repeat=True)
                     yield typewriter
+
+        yield Container(Input(placeholder="/help for commands", id="command_input"), id="command_bar")
 
         yield Footer()
 
@@ -471,6 +474,12 @@ class GladosUI(App[None]):
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
 
+    def action_command(self) -> None:
+        """Focus the command input."""
+        command_input = self.query_one("#command_input", Input)
+        command_input.value = "/"
+        command_input.focus()
+
     def action_observability(self) -> None:
         """Open the observability screen."""
         self.push_screen(ObservabilityScreen(id="observability_screen"))
@@ -488,6 +497,30 @@ class GladosUI(App[None]):
             self.notify("Instantiation failed!", severity="error")
 
         self.instantiation_worker = None  # Clear the worker reference
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "command_input":
+            return
+        command = event.value.strip()
+        event.input.value = ""
+        if not command:
+            return
+        if not command.startswith("/"):
+            command = f"/{command}"
+        if not self.glados_engine_instance:
+            self.notify("Engine not ready.", severity="warning")
+            return
+        response = self.glados_engine_instance.handle_command(command)
+        logger.info("TUI command: %s -> %s", command, response)
+        self.notify(response, title="Command", timeout=4)
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key != "/":
+            return
+        if isinstance(self.focused, Input) and self.focused.id == "command_input":
+            return
+        self.action_command()
+        event.stop()
 
     def start_glados(self) -> None:
         """
