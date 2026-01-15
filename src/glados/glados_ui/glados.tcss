@@ -25,7 +25,7 @@ $surface: $background;
 /* ====================================================== */
 
 Screen {
-    align-horizontal: right;
+    align-horizontal: center;
 }
 
 Header {
@@ -38,41 +38,21 @@ HeaderClock {
 }
 
 #body {
-    align-horizontal: right;
+    align-horizontal: center;
     border: solid $primary;
     layers: bottom top;
     margin-top: 1;
 }
 
-.block {
-    border: solid $primary;
-    color: $primary 80%;
-    height: 11;
-    width: 22;
-}
-
 #log_area {
-    align-horizontal: right;
-    text-align: right;
-    layer: bottom;
-    padding: 1 4;
-    width: 70%;
+    text-align: left;
+    padding: 1 2;
     scrollbar-color: $primary 40%;
     scrollbar-color-hover: $primary 86%;
     scrollbar-size: 1 1;
     color: $foreground;
-}
-
-#utility_area {
-    layer: bottom;
-}
-
-#block_container {
-    layout: horizontal;
-    margin: 1 2 0 0;
-    height: auto;
-    width: auto;
-    layer: top;
+    height: 1fr;
+    border: solid $primary 30%;
 }
 
 #command_bar {
@@ -86,21 +66,49 @@ HeaderClock {
     color: $foreground;
 }
 
-#scrolling_block {
-    padding: 0 1;
+#left_panel {
+    width: 70%;
+    padding: 1 1 1 2;
 }
 
-#text_block {
-    align: center middle;
-    text-align: center;
-    width: 15;
+#right_panel {
+    width: 30%;
+    padding: 1 2 1 1;
+    border-left: solid $primary 40%;
 }
 
-#recipe {
-    scrollbar-size: 0 0;
-    margin-top: 9;
-    color: $foreground 10%;
-    layer: bottom;
+#dialog_title,
+#system_title,
+#status_title,
+#tips_title {
+    color: $primary;
+    text-style: bold;
+    height: 1;
+}
+
+#dialog_log {
+    height: 2fr;
+    border: solid $primary 50%;
+    padding: 1 2;
+    scrollbar-color: $primary 40%;
+    scrollbar-color-hover: $primary 86%;
+    scrollbar-size: 1 1;
+    color: $foreground;
+}
+
+#status_panel,
+#tips_panel {
+    border: solid $primary 40%;
+    padding: 1 2;
+}
+
+#status_panel {
+    height: 7;
+}
+
+#tips_panel {
+    height: 4;
+    color: $foreground 70%;
 }
 
 
