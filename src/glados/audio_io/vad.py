@@ -11,8 +11,8 @@ ort.set_default_logger_severity(4)
 
 
 class VAD:
-    VAD_MODEL: Path = resource_path("models/ASR/silero_vad_v5.onnx")
-    SAMPLE_RATE: int = 16000  # or 8000 only!
+    VAD_MODEL: Path = resource_path("models/ASR/silero_vad_16k_op15.onnx")
+    SAMPLE_RATE: int = 16000  # 16k only
 
     def __init__(self, model_path: Path = VAD_MODEL) -> None:
         """Initialize a Voice Activity Detection (VAD) model with an ONNX runtime inference session.
@@ -37,7 +37,7 @@ class VAD:
             providers=providers,
         )
 
-        self.avaliable_sample_rates = [8000, 16000]
+        self.avaliable_sample_rates = [16000]
 
         self._state: NDArray[np.float32]
         self._context: NDArray[np.float32]
@@ -65,7 +65,9 @@ class VAD:
         Raises:
             ValueError: If the number of samples is not supported.
         """
-        num_samples = 512 if sample_rate == 16000 else 256
+        if sample_rate != 16000:
+            raise ValueError("silero_vad_16k_op15.onnx only supports 16000 Hz audio.")
+        num_samples = 512
 
         if audio_sample.shape[-1] != num_samples:
             raise ValueError(
@@ -88,19 +90,16 @@ class VAD:
 
         audio_sample = np.concatenate([self._context, audio_sample], axis=1)
 
-        if sample_rate in [8000, 16000]:
-            ort_inputs = {
-                "input": audio_sample.astype(np.float32),
-                "state": self._state,
-                "sr": np.array(sample_rate, dtype=np.int64),
-            }
-            ort_outs = self.ort_sess.run(None, ort_inputs)
-            out: NDArray[np.float32]
-            state: NDArray[np.float32]
-            out, state = ort_outs
-            self._state = state
-        else:
-            raise ValueError()
+        ort_inputs = {
+            "input": audio_sample.astype(np.float32),
+            "state": self._state,
+            "sr": np.array(sample_rate, dtype=np.int64),
+        }
+        ort_outs = self.ort_sess.run(None, ort_inputs)
+        out: NDArray[np.float32]
+        state: NDArray[np.float32]
+        out, state = ort_outs
+        self._state = state
 
         self._context = audio_sample[..., -context_size:]
         self._last_sr = sample_rate
@@ -125,7 +124,9 @@ class VAD:
         outs = []
         self.reset_states()
 
-        num_samples = 512 if sample_rate == 16000 else 256
+        if sample_rate != 16000:
+            raise ValueError("silero_vad_16k_op15.onnx only supports 16000 Hz audio.")
+        num_samples = 512
 
         if x.shape[1] % num_samples:
             pad_num = num_samples - (x.shape[1] % num_samples)
