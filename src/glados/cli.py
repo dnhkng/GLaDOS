@@ -27,17 +27,17 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/nemo-parakeet_tdt_ctc_110m.onnx",
         "checksum": "313705ff6f897696ddbe0d92b5ffadad7429a47d2ddeef370e6f59248b1e8fb5",
     },
-    "models/ASR/parakeet-tdt-0.6b-v2_encoder.onnx": {
-        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_encoder.onnx",
-        "checksum": "f133a92186e63c7d4ab5b395a8e45d49f4a7a84a1d80b66f494e8205dfd57b63",
+    "models/ASR/parakeet-tdt-0.6b-v3_encoder.onnx": {
+        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v3_encoder.onnx",
+        "checksum": "e40d5963414174629ce6585192f2bad5dcdac7b0e18dcf05abdc0965a114197c",
     },
-    "models/ASR/parakeet-tdt-0.6b-v2_decoder.onnx": {
-        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_decoder.onnx",
-        "checksum": "415b14f965b2eb9d4b0b8517f0a1bf44a014351dd43a09c3a04d26a41c877951",
+    "models/ASR/parakeet-tdt-0.6b-v3_decoder.onnx": {
+        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v3_decoder.onnx",
+        "checksum": "8523d9c6ee4b6059f904c358177691a674dbc3902ef3d776c6c7cab9ea22c071",
     },
-    "models/ASR/parakeet-tdt-0.6b-v2_joiner.onnx": {
-        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v2_joiner.onnx",
-        "checksum": "846929b668a94462f21be25c7b5a2d83526e0b92a8306f21d8e336fc98177976",
+    "models/ASR/parakeet-tdt-0.6b-v3_joiner.onnx": {
+        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v3_joiner.onnx",
+        "checksum": "e22366c5c222c21d1a88083d04536fd314fca441b5fbbfe8a7c600f218736557",
     },
     "models/ASR/silero_vad_v5.onnx": {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/silero_vad_v5.onnx",
