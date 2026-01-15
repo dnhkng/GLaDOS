@@ -22,9 +22,9 @@ class _OnnxTDTModel:
     for the TDT ASR model and related metadata.
     """
 
-    DEFAULT_ENCODER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v2_encoder.onnx")
-    DEFAULT_DECODER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v2_decoder.onnx")
-    DEFAULT_JOINER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v2_joiner.onnx")
+    DEFAULT_ENCODER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v3_encoder.onnx")
+    DEFAULT_DECODER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v3_decoder.onnx")
+    DEFAULT_JOINER_MODEL_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v3_joiner.onnx")
 
     def __init__(
         self,
@@ -258,7 +258,7 @@ class AudioTranscriber:
     post-processing the results into text.
     """
 
-    DEFAULT_CONFIG_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v2_model_config.yaml")
+    DEFAULT_CONFIG_PATH = resource_path("models/ASR/parakeet-tdt-0.6b-v3_model_config.yaml")
 
     def __init__(
         self,
