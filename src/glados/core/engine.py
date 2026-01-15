@@ -23,6 +23,7 @@ from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
 from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, TaskManager, TaskSlotStore
 from ..autonomy.events import TimeTickEvent
+from ..autonomy.jobs import BackgroundJobScheduler, build_jobs
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus
 from ..vision import VisionConfig, VisionState
@@ -213,6 +214,7 @@ class Glados:
         self.autonomy_loop: AutonomyLoop | None = None
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
+        self.autonomy_job_runner: BackgroundJobScheduler | None = None
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
@@ -220,6 +222,16 @@ class Glados:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
             self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
+            if self.autonomy_config.jobs.enabled:
+                jobs = build_jobs(self.autonomy_config.jobs, observability_bus=self.observability_bus)
+                if jobs:
+                    self.autonomy_job_runner = BackgroundJobScheduler(
+                        jobs=jobs,
+                        task_manager=self.autonomy_tasks,
+                        shutdown_event=self.shutdown_event,
+                        observability_bus=self.observability_bus,
+                        poll_interval_s=self.autonomy_config.jobs.poll_interval_s,
+                    )
 
         if self.vision_config:
             # Add instructions to system prompt to correctly handle [vision] marked messages
@@ -384,6 +396,8 @@ class Glados:
             thread_targets["AutonomyLoop"] = self.autonomy_loop.run
         if self.vision_processor:
             thread_targets["VisionProcessor"] = self.vision_processor.run
+        if self.autonomy_job_runner:
+            thread_targets["BackgroundJobs"] = self.autonomy_job_runner.run
         if self.autonomy_ticker_thread:
             self.component_threads.append(self.autonomy_ticker_thread)
             self.autonomy_ticker_thread.start()

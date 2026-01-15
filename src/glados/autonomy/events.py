@@ -22,3 +22,6 @@ class TaskUpdateEvent:
     summary: str
     notify_user: bool
     updated_at: float
+    importance: float | None = None
+    confidence: float | None = None
+    next_run: float | None = None
