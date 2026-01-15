@@ -55,9 +55,10 @@ class SpeechPlayer:
 
                 if audio_msg.is_eos:
                     logger.debug("AudioPlayer: Processing end of stream token.")
-                    self.conversation_history.append(
-                        {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
-                    )
+                    if assistant_text_accumulator:
+                        self.conversation_history.append(
+                            {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
+                        )
                     assistant_text_accumulator = []
                     self.currently_speaking_event.clear()
                     continue
