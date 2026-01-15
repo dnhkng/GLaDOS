@@ -79,34 +79,37 @@ class ToolExecutor:
                     if not self.mcp_manager:
                         tool_error = "error: MCP tools are unavailable"
                         logger.error(f"ToolExecutor: {tool_error}")
-                        self.llm_queue.put(
+                        llm_queue.put(
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": tool_error,
                                 "type": "function_call_output",
+                                **autonomy_flag,
                             }
                         )
                         continue
                     try:
                         result = self.mcp_manager.call_tool(tool, args, timeout=self.tool_timeout)
-                        self.llm_queue.put(
+                        llm_queue.put(
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": str(result),
                                 "type": "function_call_output",
+                                **autonomy_flag,
                             }
                         )
                     except Exception as e:
                         tool_error = f"error: MCP tool '{tool}' failed - {e}"
                         logger.error(f"ToolExecutor: {tool_error}")
-                        self.llm_queue.put(
+                        llm_queue.put(
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": tool_error,
                                 "type": "function_call_output",
+                                **autonomy_flag,
                             }
                         )
                     continue
