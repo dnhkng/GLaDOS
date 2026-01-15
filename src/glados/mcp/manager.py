@@ -3,6 +3,7 @@ import fnmatch
 import threading
 import time
 from collections.abc import Iterable
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from typing import Any
 
@@ -118,9 +119,13 @@ class MCPManager:
         )
         try:
             return future.result(timeout=timeout or self._tool_timeout)
+        except FuturesTimeoutError as exc:
+            future.cancel()
+            raise MCPError(f"MCP tool '{tool_name}' timed out.") from exc
         except MCPError:
             raise
         except Exception as exc:
+            future.cancel()
             raise MCPError(str(exc)) from exc
 
     def _run_loop(self) -> None:
@@ -250,7 +255,12 @@ class MCPManager:
         future = asyncio.run_coroutine_threadsafe(self._fetch_resource_async(server_name, uri), self._loop)
         try:
             return future.result(timeout=timeout)
+        except FuturesTimeoutError as exc:
+            future.cancel()
+            logger.warning(f"MCP: resource '{uri}' from {server_name} timed out.")
+            return None
         except Exception as exc:
+            future.cancel()
             logger.warning(f"MCP: failed to fetch resource '{uri}' from {server_name}: {exc}")
             return None
 
