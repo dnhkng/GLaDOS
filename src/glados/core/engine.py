@@ -10,7 +10,7 @@ import queue
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Literal
 
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
@@ -32,6 +32,7 @@ from .audio_data import AudioMessage
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
+from .text_listener import TextListener
 from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 
@@ -82,6 +83,7 @@ class GladosConfig(BaseModel):
     api_key: str | None
     interruptible: bool
     audio_io: str
+    input_mode: Literal["audio", "text"] = "audio"
     asr_engine: str
     wake_word: str | None
     voice: str
@@ -168,6 +170,7 @@ class Glados:
         vision_config: VisionConfig | None = None,
         autonomy_config: AutonomyConfig | None = None,
         mcp_servers: list[MCPServerConfig] | None = None,
+        input_mode: Literal["audio", "text"] = "audio",
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -196,6 +199,7 @@ class Glados:
         """
         self._asr_model = asr_model
         self._tts = tts_model
+        self.input_mode = input_mode
         self.completion_url = completion_url
         self.llm_model = llm_model
         self.api_key = api_key
@@ -276,19 +280,32 @@ class Glados:
         # Initialize threads for each component
         self.component_threads: list[threading.Thread] = []
 
-        self.speech_listener = SpeechListener(
-            audio_io=self.audio_io,
-            llm_queue=self.llm_queue,
-            asr_model=self._asr_model,
-            wake_word=self.wake_word,
-            interruptible=self.interruptible,
-            shutdown_event=self.shutdown_event,
-            currently_speaking_event=self.currently_speaking_event,
-            processing_active_event=self.processing_active_event,
-            pause_time=self.PAUSE_TIME,
-            interaction_state=self.interaction_state,
-            observability_bus=self.observability_bus,
-        )
+        self.speech_listener: SpeechListener | None = None
+        self.text_listener: TextListener | None = None
+        if self.input_mode == "audio":
+            self.speech_listener = SpeechListener(
+                audio_io=self.audio_io,
+                llm_queue=self.llm_queue,
+                asr_model=self._asr_model,
+                wake_word=self.wake_word,
+                interruptible=self.interruptible,
+                shutdown_event=self.shutdown_event,
+                currently_speaking_event=self.currently_speaking_event,
+                processing_active_event=self.processing_active_event,
+                pause_time=self.PAUSE_TIME,
+                interaction_state=self.interaction_state,
+                observability_bus=self.observability_bus,
+            )
+        else:
+            logger.info("Text input mode enabled. ASR is disabled.")
+            self.text_listener = TextListener(
+                llm_queue=self.llm_queue,
+                processing_active_event=self.processing_active_event,
+                shutdown_event=self.shutdown_event,
+                pause_time=self.PAUSE_TIME,
+                interaction_state=self.interaction_state,
+                observability_bus=self.observability_bus,
+            )
 
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue,
@@ -386,12 +403,15 @@ class Glados:
                 )
 
         thread_targets = {
-            "SpeechListener": self.speech_listener.run,
             "LLMProcessor": self.llm_processor.run,
             "ToolExecutor": self.tool_executor.run,
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
+        if self.speech_listener:
+            thread_targets["SpeechListener"] = self.speech_listener.run
+        if self.text_listener:
+            thread_targets["TextListener"] = self.text_listener.run
         if self.autonomy_loop:
             thread_targets["AutonomyLoop"] = self.autonomy_loop.run
         if self.vision_processor:
@@ -486,6 +506,7 @@ class Glados:
             vision_config=config.vision,
             autonomy_config=config.autonomy,
             mcp_servers=config.mcp_servers,
+            input_mode=config.input_mode,
         )
 
     @classmethod
@@ -513,7 +534,10 @@ class Glados:
 
         This method is the main entry point for running the Glados voice assistant.
         """
-        self.audio_io.start_listening()
+        if self.input_mode == "audio":
+            self.audio_io.start_listening()
+        else:
+            logger.info("Text input mode active. Audio input is disabled.")
 
         logger.success("Audio Modules Operational")
         logger.success("Listening...")

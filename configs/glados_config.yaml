@@ -4,6 +4,7 @@ Glados:
   api_key: null  # Add your API key here if needed!
   interruptible: true
   audio_io: "sounddevice"
+  input_mode: "audio"
   asr_engine: "tdt"
   wake_word: null
   voice: "glados"
