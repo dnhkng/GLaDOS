@@ -55,6 +55,9 @@ class ToolExecutor:
                 logger.info(f"ToolExecutor: Received tool call: '{tool_call}'")
                 tool = tool_call["function"]["name"]
                 tool_call_id = tool_call["id"]
+                autonomy_mode = bool(tool_call.get("autonomy", False))
+                autonomy_flag = {"autonomy": True} if autonomy_mode else {}
+                llm_queue = self._wrap_llm_queue(self.llm_queue) if autonomy_mode else self.llm_queue
 
                 try:
                     raw_args = tool_call["function"]["arguments"]
@@ -71,7 +74,7 @@ class ToolExecutor:
 
                 if tool in all_tools:
                     tool_instance = tool_classes.get(tool)(
-                        llm_queue=self.llm_queue,
+                        llm_queue=llm_queue,
                         tool_config=self.tool_config,
                     )
                     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -87,6 +90,7 @@ class ToolExecutor:
                                     "tool_call_id": tool_call_id,
                                     "content": timeout_error,
                                     "type": "function_call_output",
+                                    **autonomy_flag,
                                 }
                             )
                 else:
@@ -98,6 +102,7 @@ class ToolExecutor:
                             "tool_call_id": tool_call_id,
                             "content": tool_error,
                             "type": "function_call_output",
+                            **autonomy_flag,
                         }
                     )
             except queue.Empty:
@@ -106,3 +111,19 @@ class ToolExecutor:
                 logger.exception(f"ToolExecutor: Unexpected error in main run loop: {e}")
                 time.sleep(0.1)
         logger.info("ToolExecutor thread finished.")
+
+    @staticmethod
+    def _wrap_llm_queue(llm_queue: queue.Queue[dict[str, Any]]) -> "queue.Queue[dict[str, Any]]":
+        class AutonomyQueue:
+            def __init__(self, base_queue: queue.Queue[dict[str, Any]]) -> None:
+                self._base_queue = base_queue
+
+            def put(self, item: dict[str, Any]) -> None:
+                if "autonomy" not in item:
+                    item = {**item, "autonomy": True}
+                self._base_queue.put(item)
+
+            def put_nowait(self, item: dict[str, Any]) -> None:
+                self.put(item)
+
+        return AutonomyQueue(llm_queue)

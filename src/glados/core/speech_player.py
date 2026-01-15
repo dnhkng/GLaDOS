@@ -26,6 +26,7 @@ class SpeechPlayer:
         currently_speaking_event: threading.Event,
         processing_active_event: threading.Event,
         pause_time: float,
+        interaction_state: "InteractionState | None" = None,
     ) -> None:
         self.audio_io = audio_io
         self.audio_output_queue = audio_output_queue
@@ -35,6 +36,7 @@ class SpeechPlayer:
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event
         self.pause_time = pause_time
+        self._interaction_state = interaction_state
 
     def run(self) -> None:
         """
@@ -62,6 +64,8 @@ class SpeechPlayer:
 
                 if audio_len and audio_msg.text:  # Ensure there's audio and text
                     self.currently_speaking_event.set()  # We are about to speak
+                    if self._interaction_state:
+                        self._interaction_state.mark_assistant()
 
                     self.audio_io.start_speaking(audio_msg.audio, self.tts_sample_rate)
                     logger.success(f"TTS text: {audio_msg.text}")

@@ -21,6 +21,8 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
+from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, TaskManager, TaskSlotStore
+from ..autonomy.events import TimeTickEvent
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -85,6 +87,7 @@ class GladosConfig(BaseModel):
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0
     vision: VisionConfig | None = None
+    autonomy: AutonomyConfig | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -159,6 +162,7 @@ class Glados:
         tool_config: dict[str, Any] | None = None,
         tool_timeout: float = 30.0,
         vision_config: VisionConfig | None = None,
+        autonomy_config: AutonomyConfig | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -195,8 +199,18 @@ class Glados:
         self.tool_timeout = tool_timeout
         self._messages: list[dict[str, Any]] = list(personality_preprompt)
         self.vision_config = vision_config
+        self.autonomy_config = autonomy_config or AutonomyConfig()
         self.vision_state: VisionState | None = VisionState() if self.vision_config else None
         self.vision_request_queue: queue.Queue | None = queue.Queue() if self.vision_config else None
+        self.autonomy_event_bus: EventBus | None = None
+        self.autonomy_loop: AutonomyLoop | None = None
+        self.autonomy_slots: TaskSlotStore | None = None
+        self.autonomy_tasks: TaskManager | None = None
+        self.interaction_state = InteractionState()
+        if self.autonomy_config.enabled:
+            self.autonomy_event_bus = EventBus()
+            self.autonomy_slots = TaskSlotStore()
+            self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
 
         if self.vision_config:
             # Add instructions to system prompt to correctly handle [vision] marked messages
@@ -206,6 +220,14 @@ class Glados:
                     break
             else:
                 self._messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING})
+
+        if self.autonomy_config.enabled:
+            for message in self._messages:
+                if message.get("role") == "system" and isinstance(message.get("content"), str):
+                    message["content"] = f"{message['content']} {self.autonomy_config.system_prompt}"
+                    break
+            else:
+                self._messages.insert(0, {"role": "system", "content": self.autonomy_config.system_prompt})
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
@@ -241,6 +263,7 @@ class Glados:
             currently_speaking_event=self.currently_speaking_event,
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
+            interaction_state=self.interaction_state,
         )
 
         self.llm_processor = LanguageModelProcessor(
@@ -255,6 +278,7 @@ class Glados:
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
+            slot_store=self.autonomy_slots,
         )
 
         self.tool_executor = ToolExecutor(
@@ -266,6 +290,7 @@ class Glados:
                 **self.tool_config,
                 "vision_request_queue": self.vision_request_queue,
                 "vision_tool_timeout": self.tool_timeout,
+                "tts_queue": self.tts_queue,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
@@ -299,6 +324,7 @@ class Glados:
             currently_speaking_event=self.currently_speaking_event,
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
+            interaction_state=self.interaction_state,
         )
 
         self.vision_processor = None
@@ -310,7 +336,31 @@ class Glados:
                 shutdown_event=self.shutdown_event,
                 config=self.vision_config,
                 request_queue=self.vision_request_queue,
+                event_bus=self.autonomy_event_bus,
             )
+
+        self.autonomy_ticker_thread: threading.Thread | None = None
+        if self.autonomy_config.enabled:
+            assert self.autonomy_event_bus is not None
+            assert self.autonomy_slots is not None
+            self.autonomy_loop = AutonomyLoop(
+                config=self.autonomy_config,
+                event_bus=self.autonomy_event_bus,
+                interaction_state=self.interaction_state,
+                vision_state=self.vision_state,
+                slot_store=self.autonomy_slots,
+                llm_queue=self.llm_queue,
+                processing_active_event=self.processing_active_event,
+                currently_speaking_event=self.currently_speaking_event,
+                shutdown_event=self.shutdown_event,
+                pause_time=self.PAUSE_TIME,
+            )
+            if not self.vision_config:
+                self.autonomy_ticker_thread = threading.Thread(
+                    target=self._run_autonomy_ticker,
+                    name="AutonomyTicker",
+                    daemon=True,
+                )
 
         thread_targets = {
             "SpeechListener": self.speech_listener.run,
@@ -319,8 +369,14 @@ class Glados:
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
+        if self.autonomy_loop:
+            thread_targets["AutonomyLoop"] = self.autonomy_loop.run
         if self.vision_processor:
             thread_targets["VisionProcessor"] = self.vision_processor.run
+        if self.autonomy_ticker_thread:
+            self.component_threads.append(self.autonomy_ticker_thread)
+            self.autonomy_ticker_thread.start()
+            logger.info("Orchestrator: AutonomyTicker thread started.")
 
         for name, target_func in thread_targets.items():
             thread = threading.Thread(target=target_func, name=name, daemon=True)
@@ -393,6 +449,7 @@ class Glados:
             tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
             tool_timeout=config.tool_timeout,
             vision_config=config.vision,
+            autonomy_config=config.autonomy,
         )
 
     @classmethod
@@ -445,7 +502,17 @@ class Glados:
             time.sleep(self.PAUSE_TIME)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
+            if self.autonomy_tasks:
+                self.autonomy_tasks.shutdown()
             sys.exit(0)
+
+    def _run_autonomy_ticker(self) -> None:
+        assert self.autonomy_event_bus is not None
+        logger.info("AutonomyTicker thread started.")
+        while not self.shutdown_event.is_set():
+            self.autonomy_event_bus.publish(TimeTickEvent(ticked_at=time.time()))
+            self.shutdown_event.wait(timeout=self.autonomy_config.tick_interval_s)
+        logger.info("AutonomyTicker thread finished.")
 
 
 if __name__ == "__main__":
