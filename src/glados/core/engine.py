@@ -221,13 +221,6 @@ class Glados:
             else:
                 self._messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING})
 
-        if self.autonomy_config.enabled:
-            for message in self._messages:
-                if message.get("role") == "system" and isinstance(message.get("content"), str):
-                    message["content"] = f"{message['content']} {self.autonomy_config.system_prompt}"
-                    break
-            else:
-                self._messages.insert(0, {"role": "system", "content": self.autonomy_config.system_prompt})
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
@@ -279,6 +272,7 @@ class Glados:
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
             slot_store=self.autonomy_slots,
+            autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
         )
 
         self.tool_executor = ToolExecutor(

@@ -37,6 +37,7 @@ class LanguageModelProcessor:
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
         slot_store: TaskSlotStore | None = None,
+        autonomy_system_prompt: str | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -50,6 +51,7 @@ class LanguageModelProcessor:
         self.pause_time = pause_time
         self.vision_state = vision_state
         self.slot_store = slot_store
+        self.autonomy_system_prompt = autonomy_system_prompt
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -196,10 +198,13 @@ class LanguageModelProcessor:
             logger.info(f"LLM Processor: Sending to TTS queue: '{sentence}'")
             self.tts_input_queue.put(sentence)
 
-    def _build_messages(self) -> list[dict[str, Any]]:
+    def _build_messages(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting vision context if available."""
         messages = list(self.conversation_history)
         extra_messages: list[dict[str, Any]] = []
+
+        if autonomy_mode and self.autonomy_system_prompt:
+            extra_messages.append({"role": "system", "content": self.autonomy_system_prompt})
 
         if self.slot_store:
             slot_message = self.slot_store.as_message()
@@ -260,7 +265,7 @@ class LanguageModelProcessor:
                 data = {
                     "model": self.model_name,
                     "stream": True,
-                    "messages": self._build_messages(),
+                    "messages": self._build_messages(autonomy_mode),
                     "tools": self._build_tools(autonomy_mode),
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
