@@ -283,9 +283,9 @@ def main() -> int:
     )
     start_parser.add_argument(
         "--input-mode",
-        choices=["audio", "text"],
+        choices=["audio", "text", "both"],
         default=None,
-        help="Override input mode (audio or text)",
+        help="Override input mode (audio, text, or both)",
     )
 
     # TUI command
