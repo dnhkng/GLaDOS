@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 import random
 import sys
@@ -16,6 +17,7 @@ from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
+from glados.observability import ObservabilityEvent
 
 # Custom Widgets
 
@@ -254,6 +256,89 @@ class HelpScreen(ModalScreen[None]):
         dialog.border_subtitle = "[blink]Press Esc key to continue[/blink]"
 
 
+class ObservabilityScreen(ModalScreen[None]):
+    """Live observability log for system events."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    TITLE = "Observability"
+
+    def compose(self) -> ComposeResult:
+        with Container(id="observability_dialog"):
+            yield Label(self.TITLE, id="observability_title")
+            yield RichLog(id="observability_log")
+            yield Static("", id="observability_status")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#observability_dialog")
+        dialog.border_title = self.TITLE
+        dialog.border_title_align = "center"
+        self._log = self.query_one("#observability_log", RichLog)
+        self._log.markup = True
+        self._status = self.query_one("#observability_status", Static)
+        self._load_snapshot()
+        self.set_interval(0.25, self._drain_events)
+
+    def _load_snapshot(self) -> None:
+        bus = self._get_bus()
+        if not bus:
+            self._log.write("[red]Observability bus unavailable.[/]")
+            return
+        for event in bus.snapshot(limit=200):
+            self._write_event(event)
+        self._update_status()
+
+    def _drain_events(self) -> None:
+        bus = self._get_bus()
+        if not bus:
+            return
+        for event in bus.drain(max_items=100):
+            self._write_event(event)
+        self._update_status()
+
+    def _get_bus(self):
+        app = cast(GladosUI, self.app)
+        if not app.glados_engine_instance:
+            return None
+        return app.glados_engine_instance.observability_bus
+
+    def _update_status(self) -> None:
+        app = cast(GladosUI, self.app)
+        engine = app.glados_engine_instance
+        if not engine:
+            self._status.update("Engine not ready.")
+            return
+        slots = engine.autonomy_slots.list_slots() if engine.autonomy_slots else []
+        minds = engine.mind_registry.snapshot() if engine.mind_registry else []
+        self._status.update(f"slots: {len(slots)} | minds: {len(minds)}")
+
+    def _write_event(self, event: ObservabilityEvent) -> None:
+        timestamp = datetime.fromtimestamp(event.timestamp).strftime("%H:%M:%S")
+        level = event.level.lower()
+        color = {
+            "debug": "grey50",
+            "info": "cyan",
+            "warning": "yellow",
+            "error": "red",
+        }.get(level, "white")
+        meta = self._format_meta(event.meta)
+        meta_text = f" [{meta}]" if meta else ""
+        message = event.message.replace("\n", " ")
+        line = f"[{color}]{level.upper():<5}[/] {timestamp} {event.source}.{event.kind} {message}{meta_text}"
+        self._log.write(line)
+
+    @staticmethod
+    def _format_meta(meta: dict[str, object]) -> str:
+        parts = []
+        for key, value in meta.items():
+            if value is None:
+                continue
+            parts.append(f"{key}={value}")
+        return " ".join(parts)
+
+
 # The App
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
@@ -266,6 +351,7 @@ class GladosUI(App[None]):
             description="Help",
             key_display="?",
         ),
+        Binding(key="o", action="observability", description="Observability"),
     ]
     CSS_PATH = "glados_ui/glados.tcss"
 
@@ -384,6 +470,10 @@ class GladosUI(App[None]):
     def action_help(self) -> None:
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
+
+    def action_observability(self) -> None:
+        """Open the observability screen."""
+        self.push_screen(ObservabilityScreen(id="observability_screen"))
 
     # def on_key(self, event: events.Key) -> None:
     #     """Useful for debugging via key presses."""
