@@ -10,6 +10,7 @@ from typing import Any
 from loguru import logger
 
 from .config import MCPServerConfig
+from ..observability import ObservabilityBus, trim_message
 
 try:
     from mcp import ClientSession
@@ -47,7 +48,12 @@ class _ResourceCacheEntry:
 
 
 class MCPManager:
-    def __init__(self, servers: Iterable[MCPServerConfig], tool_timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        servers: Iterable[MCPServerConfig],
+        tool_timeout: float = 30.0,
+        observability_bus: ObservabilityBus | None = None,
+    ) -> None:
         self._servers = {server.name: server for server in servers}
         self._tool_timeout = tool_timeout
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -55,6 +61,7 @@ class MCPManager:
         self._ready = threading.Event()
         self._shutdown_event = threading.Event()
         self._shutdown_async: asyncio.Event | None = None
+        self._observability_bus = observability_bus
 
         self._tool_lock = threading.Lock()
         self._tool_registry: dict[str, MCPToolEntry] = {}
@@ -156,6 +163,13 @@ class MCPManager:
                     async with ClientSession(read_stream, write_stream) as session:
                         await session.initialize()
                         self._sessions[config.name] = session
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="mcp",
+                                kind="connect",
+                                message=f"{config.name} connected",
+                                meta={"transport": config.transport},
+                            )
                         await self._refresh_tools(config, session)
                         await self._refresh_resources(config, session)
                         await self._shutdown_async.wait()
@@ -163,11 +177,24 @@ class MCPManager:
                 break
             except Exception as exc:
                 logger.warning(f"MCP: server '{config.name}' connection failed: {exc}")
+                if self._observability_bus:
+                    self._observability_bus.emit(
+                        source="mcp",
+                        kind="error",
+                        message=trim_message(f"{config.name} failed: {exc}"),
+                        level="warning",
+                    )
                 await asyncio.sleep(retry_delay)
             finally:
                 self._sessions.pop(config.name, None)
                 self._remove_tools_for_server(config.name)
                 self._clear_resource_cache(config.name)
+                if self._observability_bus:
+                    self._observability_bus.emit(
+                        source="mcp",
+                        kind="disconnect",
+                        message=f"{config.name} disconnected",
+                    )
 
     def _open_transport(self, config: MCPServerConfig):
         if config.transport == "stdio":
@@ -218,6 +245,13 @@ class MCPManager:
                 if entry.server != config.name
             }
             self._tool_registry.update(entries)
+        if self._observability_bus:
+            self._observability_bus.emit(
+                source="mcp",
+                kind="tools",
+                message=f"{config.name} tools refreshed",
+                meta={"count": len(entries)},
+            )
 
     async def _refresh_resources(self, config: MCPServerConfig, session: ClientSession) -> None:
         if not config.context_resources:

@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 
 from ..autonomy import EventBus
 from ..autonomy.events import VisionUpdateEvent
+from ..observability import ObservabilityBus, trim_message
 from .constants import VISION_DEFAULT_PROMPT
 from .fastvlm import FastVLM
 from .vision_config import VisionConfig
@@ -31,6 +32,7 @@ class VisionProcessor:
         config: VisionConfig,
         request_queue: queue.Queue[VisionRequest] | None = None,
         event_bus: EventBus | None = None,
+        observability_bus: ObservabilityBus | None = None,
     ) -> None:
         """Initialize VisionProcessor.
 
@@ -47,6 +49,7 @@ class VisionProcessor:
         self.config = config
         self._request_queue = request_queue
         self._event_bus = event_bus
+        self._observability_bus = observability_bus
 
         # Load FastVLM model
         self._model = FastVLM(config.model_dir)
@@ -288,13 +291,19 @@ class VisionProcessor:
             self.shutdown_event.wait(timeout=sleep_time)
 
     def _publish_update(self, description: str, change_score: float) -> None:
-        if not self._event_bus:
-            return
-        self._event_bus.publish(
-            VisionUpdateEvent(
-                description=description,
-                prev_description=self._last_description,
-                change_score=change_score,
-                captured_at=time.time(),
+        if self._event_bus:
+            self._event_bus.publish(
+                VisionUpdateEvent(
+                    description=description,
+                    prev_description=self._last_description,
+                    change_score=change_score,
+                    captured_at=time.time(),
+                )
             )
-        )
+        if self._observability_bus:
+            self._observability_bus.emit(
+                source="vision",
+                kind="update",
+                message=trim_message(description),
+                meta={"change_score": round(change_score, 4)},
+            )

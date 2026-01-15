@@ -6,6 +6,7 @@ from loguru import logger
 import numpy as np
 
 from ..TTS import SpeechSynthesizerProtocol
+from ..observability import ObservabilityBus, trim_message
 from ..utils import spoken_text_converter as stc
 from .audio_data import AudioMessage
 
@@ -26,6 +27,7 @@ class TextToSpeechSynthesizer:
         stc_instance: stc.SpokenTextConverter,
         shutdown_event: threading.Event,
         pause_time: float,
+        observability_bus: ObservabilityBus | None = None,
     ) -> None:
         self.tts_input_queue = tts_input_queue
         self.audio_output_queue = audio_output_queue
@@ -33,6 +35,7 @@ class TextToSpeechSynthesizer:
         self.stc = stc_instance
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
+        self._observability_bus = observability_bus
 
     def run(self) -> None:
         """
@@ -60,6 +63,12 @@ class TextToSpeechSynthesizer:
                     logger.warning(f"TTS Synthesizer: Received empty or whitespace string: '{text_to_speak}'")
                 else:
                     logger.info(f"LLM text: {text_to_speak}")
+                    if self._observability_bus:
+                        self._observability_bus.emit(
+                            source="tts",
+                            kind="synthesize",
+                            message=trim_message(text_to_speak),
+                        )
 
                     start_time = time.time()
                     spoken_text_variant = self.stc.text_to_spoken(text_to_speak)
@@ -71,6 +80,16 @@ class TextToSpeechSynthesizer:
                         f"TTS Synthesizer: TTS Complete. Inference: {processing_time:.2f}s, "
                         f"Audio length: {audio_duration:.2f}s for text: '{spoken_text_variant}'"
                     )
+                    if self._observability_bus:
+                        self._observability_bus.emit(
+                            source="tts",
+                            kind="ready",
+                            message=trim_message(spoken_text_variant),
+                            meta={
+                                "inference_s": round(processing_time, 3),
+                                "audio_s": round(audio_duration, 3),
+                            },
+                        )
 
                     # Even if audio_data is empty, send the message so AudioPlayer can log/handle it
                     self.audio_output_queue.put(AudioMessage(audio=audio_data, text=spoken_text_variant, is_eos=False))

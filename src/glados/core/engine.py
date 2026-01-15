@@ -24,6 +24,7 @@ from ..utils.resources import resource_path
 from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, TaskManager, TaskSlotStore
 from ..autonomy.events import TimeTickEvent
 from ..mcp import MCPManager, MCPServerConfig
+from ..observability import MindRegistry, ObservabilityBus
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -212,10 +213,12 @@ class Glados:
         self.autonomy_loop: AutonomyLoop | None = None
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
+        self.observability_bus = ObservabilityBus()
+        self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
         if self.autonomy_config.enabled:
             self.autonomy_event_bus = EventBus()
-            self.autonomy_slots = TaskSlotStore()
+            self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
             self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
 
         if self.vision_config:
@@ -247,7 +250,11 @@ class Glados:
 
         self.mcp_manager: MCPManager | None = None
         if self.mcp_servers:
-            self.mcp_manager = MCPManager(self.mcp_servers, tool_timeout=self.tool_timeout)
+            self.mcp_manager = MCPManager(
+                self.mcp_servers,
+                tool_timeout=self.tool_timeout,
+                observability_bus=self.observability_bus,
+            )
             self.mcp_manager.start()
 
         # Initialize audio input/output system
@@ -268,6 +275,7 @@ class Glados:
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
             interaction_state=self.interaction_state,
+            observability_bus=self.observability_bus,
         )
 
         self.llm_processor = LanguageModelProcessor(
@@ -285,6 +293,7 @@ class Glados:
             slot_store=self.autonomy_slots,
             autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
             mcp_manager=self.mcp_manager,
+            observability_bus=self.observability_bus,
         )
 
         self.tool_executor = ToolExecutor(
@@ -301,6 +310,7 @@ class Glados:
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
             mcp_manager=self.mcp_manager,
+            observability_bus=self.observability_bus,
         )
 
         self.tts_synthesizer = TextToSpeechSynthesizer(
@@ -310,6 +320,7 @@ class Glados:
             stc_instance=self._stc,
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
+            observability_bus=self.observability_bus,
         )
 
         self.speech_player = SpeechPlayer(
@@ -322,6 +333,7 @@ class Glados:
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
             interaction_state=self.interaction_state,
+            observability_bus=self.observability_bus,
         )
 
         self.vision_processor = None
@@ -334,6 +346,7 @@ class Glados:
                 config=self.vision_config,
                 request_queue=self.vision_request_queue,
                 event_bus=self.autonomy_event_bus,
+                observability_bus=self.observability_bus,
             )
 
         self.autonomy_ticker_thread: threading.Thread | None = None
@@ -350,6 +363,7 @@ class Glados:
                 processing_active_event=self.processing_active_event,
                 currently_speaking_event=self.currently_speaking_event,
                 shutdown_event=self.shutdown_event,
+                observability_bus=self.observability_bus,
                 pause_time=self.PAUSE_TIME,
             )
             if not self.vision_config:
@@ -374,12 +388,22 @@ class Glados:
             self.component_threads.append(self.autonomy_ticker_thread)
             self.autonomy_ticker_thread.start()
             logger.info("Orchestrator: AutonomyTicker thread started.")
+            self.mind_registry.register(
+                "AutonomyTicker",
+                title="Autonomy Ticker",
+                status="running",
+                summary="Periodic autonomy ticks",
+            )
+
+        for name in thread_targets:
+            self.mind_registry.register(name, title=name, status="starting", summary="Initializing")
 
         for name, target_func in thread_targets.items():
             thread = threading.Thread(target=target_func, name=name, daemon=True)
             self.component_threads.append(thread)
             thread.start()
             logger.info(f"Orchestrator: {name} thread started.")
+            self.mind_registry.update(name, "running", summary="Thread active")
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -500,6 +524,10 @@ class Glados:
             time.sleep(self.PAUSE_TIME)
         finally:
             logger.info("Listen event loop is stopping/exiting.")
+            for component in self.component_threads:
+                self.mind_registry.update(component.name, "stopped", summary="Shutdown")
+            if self.autonomy_ticker_thread:
+                self.mind_registry.update("AutonomyTicker", "stopped", summary="Shutdown")
             if self.autonomy_tasks:
                 self.autonomy_tasks.shutdown()
             if self.mcp_manager:
