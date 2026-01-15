@@ -83,7 +83,7 @@ class GladosConfig(BaseModel):
     api_key: str | None
     interruptible: bool
     audio_io: str
-    input_mode: Literal["audio", "text"] = "audio"
+    input_mode: Literal["audio", "text", "both"] = "audio"
     asr_engine: str
     wake_word: str | None
     voice: str
@@ -170,7 +170,7 @@ class Glados:
         vision_config: VisionConfig | None = None,
         autonomy_config: AutonomyConfig | None = None,
         mcp_servers: list[MCPServerConfig] | None = None,
-        input_mode: Literal["audio", "text"] = "audio",
+        input_mode: Literal["audio", "text", "both"] = "audio",
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -282,7 +282,7 @@ class Glados:
 
         self.speech_listener: SpeechListener | None = None
         self.text_listener: TextListener | None = None
-        if self.input_mode == "audio":
+        if self.input_mode in {"audio", "both"}:
             self.speech_listener = SpeechListener(
                 audio_io=self.audio_io,
                 llm_queue=self.llm_queue,
@@ -296,8 +296,9 @@ class Glados:
                 interaction_state=self.interaction_state,
                 observability_bus=self.observability_bus,
             )
-        else:
-            logger.info("Text input mode enabled. ASR is disabled.")
+        if self.input_mode in {"text", "both"}:
+            if self.input_mode == "text":
+                logger.info("Text input mode enabled. ASR is disabled.")
             self.text_listener = TextListener(
                 llm_queue=self.llm_queue,
                 processing_active_event=self.processing_active_event,
@@ -534,7 +535,7 @@ class Glados:
 
         This method is the main entry point for running the Glados voice assistant.
         """
-        if self.input_mode == "audio":
+        if self.input_mode in {"audio", "both"}:
             self.audio_io.start_listening()
         else:
             logger.info("Text input mode active. Audio input is disabled.")
