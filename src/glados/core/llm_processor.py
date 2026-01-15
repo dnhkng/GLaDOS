@@ -11,6 +11,7 @@ from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
 from ..autonomy import TaskSlotStore
 from ..mcp import MCPManager
+from ..observability import ObservabilityBus, trim_message
 from ..tools import tool_definitions
 from ..vision.vision_state import VisionState
 
@@ -40,6 +41,7 @@ class LanguageModelProcessor:
         slot_store: TaskSlotStore | None = None,
         autonomy_system_prompt: str | None = None,
         mcp_manager: MCPManager | None = None,
+        observability_bus: ObservabilityBus | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -55,6 +57,7 @@ class LanguageModelProcessor:
         self.slot_store = slot_store
         self.autonomy_system_prompt = autonomy_system_prompt
         self.mcp_manager = mcp_manager
+        self._observability_bus = observability_bus
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -185,6 +188,14 @@ class LanguageModelProcessor:
                 tool_call["autonomy"] = True
             logger.info(f"LLM Processor: Sending to tool calls queue: '{tool_call}'")
             self.tool_calls_queue.put(tool_call)
+        if self._observability_bus:
+            tool_names = [call.get("function", {}).get("name", "unknown") for call in tool_calls]
+            self._observability_bus.emit(
+                source="llm",
+                kind="tool_calls",
+                message=",".join(tool_names),
+                meta={"count": len(tool_names), "autonomy": autonomy_mode},
+            )
 
     def _process_sentence_for_tts(self, current_sentence_parts: list[str]) -> None:
         """
@@ -280,6 +291,14 @@ class LanguageModelProcessor:
                 autonomy_mode = bool(llm_input.get("autonomy", False))
                 llm_message = {key: value for key, value in llm_input.items() if key != "autonomy"}
                 logger.info(f"LLM Processor: Received input for LLM: '{llm_message}'")
+                if self._observability_bus:
+                    message_text = llm_message.get("content", "")
+                    self._observability_bus.emit(
+                        source="llm",
+                        kind="request",
+                        message=trim_message(str(message_text)),
+                        meta={"autonomy": autonomy_mode},
+                    )
                 self.conversation_history.append(llm_message)
 
                 data = {

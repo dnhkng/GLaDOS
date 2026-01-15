@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 from ..mcp import MCPManager
+from ..observability import ObservabilityBus, trim_message
 from ..tools import all_tools, tool_classes
 
 
@@ -28,6 +29,7 @@ class ToolExecutor:
         tool_timeout: float = 30.0,
         pause_time: float = 0.05,
         mcp_manager: MCPManager | None = None,
+        observability_bus: ObservabilityBus | None = None,
     ) -> None:
         self.llm_queue = llm_queue
         self.tool_calls_queue = tool_calls_queue
@@ -37,6 +39,7 @@ class ToolExecutor:
         self.tool_timeout = tool_timeout
         self.pause_time = pause_time
         self.mcp_manager = mcp_manager
+        self._observability_bus = observability_bus
 
     def run(self) -> None:
         """
@@ -58,9 +61,17 @@ class ToolExecutor:
                 logger.info(f"ToolExecutor: Received tool call: '{tool_call}'")
                 tool = tool_call["function"]["name"]
                 tool_call_id = tool_call["id"]
+                started_at = time.perf_counter()
                 autonomy_mode = bool(tool_call.get("autonomy", False))
                 autonomy_flag = {"autonomy": True} if autonomy_mode else {}
                 llm_queue = self._wrap_llm_queue(self.llm_queue) if autonomy_mode else self.llm_queue
+                if self._observability_bus:
+                    self._observability_bus.emit(
+                        source="tool",
+                        kind="start",
+                        message=tool,
+                        meta={"tool_call_id": tool_call_id, "autonomy": autonomy_mode},
+                    )
 
                 try:
                     raw_args = tool_call["function"]["arguments"]
@@ -79,6 +90,14 @@ class ToolExecutor:
                     if not self.mcp_manager:
                         tool_error = "error: MCP tools are unavailable"
                         logger.error(f"ToolExecutor: {tool_error}")
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="tool",
+                                kind="error",
+                                message=tool_error,
+                                level="error",
+                                meta={"tool": tool, "tool_call_id": tool_call_id},
+                            )
                         llm_queue.put(
                             {
                                 "role": "tool",
@@ -91,6 +110,14 @@ class ToolExecutor:
                         continue
                     try:
                         result = self.mcp_manager.call_tool(tool, args, timeout=self.tool_timeout)
+                        if self._observability_bus:
+                            elapsed = time.perf_counter() - started_at
+                            self._observability_bus.emit(
+                                source="tool",
+                                kind="finish",
+                                message=tool,
+                                meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
+                            )
                         llm_queue.put(
                             {
                                 "role": "tool",
@@ -103,6 +130,14 @@ class ToolExecutor:
                     except Exception as e:
                         tool_error = f"error: MCP tool '{tool}' failed - {e}"
                         logger.error(f"ToolExecutor: {tool_error}")
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="tool",
+                                kind="error",
+                                message=trim_message(tool_error),
+                                level="error",
+                                meta={"tool": tool, "tool_call_id": tool_call_id},
+                            )
                         llm_queue.put(
                             {
                                 "role": "tool",
@@ -123,9 +158,25 @@ class ToolExecutor:
                         future = executor.submit(tool_instance.run, tool_call_id, args)
                         try:
                             future.result(timeout=self.tool_timeout)
+                            if self._observability_bus:
+                                elapsed = time.perf_counter() - started_at
+                                self._observability_bus.emit(
+                                    source="tool",
+                                    kind="finish",
+                                    message=tool,
+                                    meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
+                                )
                         except FuturesTimeoutError:
                             timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
                             logger.error(f"ToolExecutor: {timeout_error}")
+                            if self._observability_bus:
+                                self._observability_bus.emit(
+                                    source="tool",
+                                    kind="timeout",
+                                    message=timeout_error,
+                                    level="warning",
+                                    meta={"tool": tool, "tool_call_id": tool_call_id},
+                                )
                             self.llm_queue.put(
                                 {
                                     "role": "tool",
@@ -138,6 +189,14 @@ class ToolExecutor:
                 else:
                     tool_error = f"error: no tool named {tool} is available"
                     logger.error(f"ToolExecutor: {tool_error}")
+                    if self._observability_bus:
+                        self._observability_bus.emit(
+                            source="tool",
+                            kind="error",
+                            message=trim_message(tool_error),
+                            level="error",
+                            meta={"tool": tool, "tool_call_id": tool_call_id},
+                        )
                     self.llm_queue.put(
                         {
                             "role": "tool",

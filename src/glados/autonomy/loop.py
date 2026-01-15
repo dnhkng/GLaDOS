@@ -11,6 +11,7 @@ from .event_bus import EventBus
 from .events import TaskUpdateEvent, TimeTickEvent, VisionUpdateEvent
 from .interaction_state import InteractionState
 from .slots import TaskSlotStore
+from ..observability import ObservabilityBus, trim_message
 from ..vision.vision_state import VisionState
 
 
@@ -26,6 +27,7 @@ class AutonomyLoop:
         processing_active_event: threading.Event,
         currently_speaking_event: threading.Event,
         shutdown_event: threading.Event,
+        observability_bus: ObservabilityBus | None = None,
         pause_time: float = 0.1,
     ) -> None:
         self._config = config
@@ -37,6 +39,7 @@ class AutonomyLoop:
         self._processing_active_event = processing_active_event
         self._currently_speaking_event = currently_speaking_event
         self._shutdown_event = shutdown_event
+        self._observability_bus = observability_bus
         self._pause_time = pause_time
         self._last_prompt_ts = 0.0
         self._last_scene: str | None = None
@@ -69,6 +72,12 @@ class AutonomyLoop:
         prompt = prompt.strip()
         if not prompt:
             return
+        if self._observability_bus:
+            self._observability_bus.emit(
+                source="autonomy",
+                kind="dispatch",
+                message=trim_message(prompt),
+            )
         self._llm_queue.put({"role": "user", "content": prompt, "autonomy": True})
         self._processing_active_event.set()
         self._last_prompt_ts = time.time()
@@ -123,7 +132,15 @@ class AutonomyLoop:
         for slot in slots:
             summary = slot.summary.strip()
             summary_text = f" - {summary}" if summary else ""
-            lines.append(f"{slot.title}: {slot.status}{summary_text}")
+            meta_parts = []
+            if slot.importance is not None:
+                meta_parts.append(f"importance={slot.importance:.2f}")
+            if slot.confidence is not None:
+                meta_parts.append(f"confidence={slot.confidence:.2f}")
+            if slot.next_run is not None:
+                meta_parts.append(f"next_run={slot.next_run:.0f}")
+            meta_text = f" ({', '.join(meta_parts)})" if meta_parts else ""
+            lines.append(f"{slot.title}: {slot.status}{summary_text}{meta_text}")
         return "\n".join(lines)
 
     def update_slot(
