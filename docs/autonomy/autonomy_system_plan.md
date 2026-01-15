@@ -175,6 +175,9 @@ allowed_tools:
 - Metrics: LLM latency, tool failure rates, interruptions accepted/ignored
 - Logs: slot updates, prompt changes, rollbacks, feedback events
 
+## Low-Latency Strategy
+- Context should be prebuilt and cached before the user speaks.
+- Response mind never blocks on slow context; it uses the latest cached state.\n+- Late updates trigger optional follow-up replies rather than delaying the first response.\n+- ASR partials can start the response stream, then finalize on full text.\n+\n+### Latency Masking + Deferral Policy\n+- Fast (<300ms): reply immediately with no filler.\n+- Likely fast (<1s, memory/slot lookup): allow a single short filler (\"uhh...\", \"one sec...\") and continue if data arrives.\n+- Slow (>1s, research mind): say \"Let me check and get back to you,\" spawn a background job, and reply when the slot updates.\n+- Guardrails: one filler per turn max; never during user speech; observer can dial this down via feedback.\n+
 ## MVP Sequence
 1) Slot schema + storage
 2) Job runner with 2 jobs (weather + HN)
