@@ -12,6 +12,22 @@ Glados:
     enabled: false
     tick_interval_s: 10
     cooldown_s: 20
+    jobs:
+      enabled: false
+      poll_interval_s: 1
+      hacker_news:
+        enabled: false
+        interval_s: 1800
+        top_n: 5
+        min_score: 200
+      weather:
+        enabled: false
+        interval_s: 3600
+        latitude: null
+        longitude: null
+        timezone: "auto"
+        temp_change_c: 4
+        wind_alert_kmh: 40
   mcp_servers:
     - name: "slow_clap_demo"
       transport: "stdio"

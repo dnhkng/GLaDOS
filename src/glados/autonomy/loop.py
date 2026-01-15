@@ -52,6 +52,9 @@ class AutonomyLoop:
             except queue.Empty:
                 continue
 
+            if isinstance(event, TaskUpdateEvent) and not event.notify_user:
+                continue
+
             if self._should_skip():
                 continue
 
