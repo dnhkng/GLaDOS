@@ -143,3 +143,33 @@ SplashScreen {
     height: auto;
     padding-bottom: 2;
 }
+
+
+/* ====================================================== */
+/* ================= Observability screen =============== */
+/* ====================================================== */
+
+#observability_screen {
+    align: center middle;
+}
+
+#observability_dialog {
+    border-title-align: center;
+    border: $primary 70% panel;
+    color: $primary;
+    padding: 1 2;
+    height: 80%;
+    width: 90%;
+}
+
+#observability_log {
+    scrollbar-color: $primary 40%;
+    scrollbar-color-hover: $primary 86%;
+    scrollbar-size: 1 1;
+    height: 1fr;
+}
+
+#observability_status {
+    color: $primary 70%;
+    height: 1;
+}
