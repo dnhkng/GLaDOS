@@ -8,6 +8,10 @@ Glados:
   wake_word: null
   voice: "glados"
   announcement: "" # Disabled for now, glados keeps repeating this after each vision observation, not sure why.
+  autonomy:
+    enabled: false
+    tick_interval_s: 10
+    cooldown_s: 20
   vision:
     # model_dir: null  # Path to FastVLM ONNX models. Uses default models/Vision if null
     camera_index: 0

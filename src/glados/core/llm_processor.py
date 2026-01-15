@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
+from ..autonomy import TaskSlotStore
 from ..tools import tool_definitions
 from ..vision.vision_state import VisionState
 
@@ -35,6 +36,7 @@ class LanguageModelProcessor:
         shutdown_event: threading.Event,
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
+        slot_store: TaskSlotStore | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -47,6 +49,7 @@ class LanguageModelProcessor:
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
         self.vision_state = vision_state
+        self.slot_store = slot_store
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -162,7 +165,7 @@ class LanguageModelProcessor:
                     # Ollama format
                     tool_call["function"]["arguments"] = arguments
 
-    def _process_tool_call(self, tool_calls: list[dict[str, Any]]) -> None:
+    def _process_tool_call(self, tool_calls: list[dict[str, Any]], autonomy_mode: bool) -> None:
         """
         Add tool calls to conversation history and send each to the tool calls queue.
 
@@ -173,6 +176,8 @@ class LanguageModelProcessor:
             {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
         )
         for tool_call in tool_calls:
+            if autonomy_mode:
+                tool_call["autonomy"] = True
             logger.info(f"LLM Processor: Sending to tool calls queue: '{tool_call}'")
             self.tool_calls_queue.put(tool_call)
 
@@ -194,22 +199,39 @@ class LanguageModelProcessor:
     def _build_messages(self) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting vision context if available."""
         messages = list(self.conversation_history)
+        extra_messages: list[dict[str, Any]] = []
+
+        if self.slot_store:
+            slot_message = self.slot_store.as_message()
+            if slot_message:
+                extra_messages.append(slot_message)
 
         if self.vision_state:
             vision_message = self.vision_state.as_message()
             if vision_message:
-                insert_index = 0
-                while insert_index < len(messages) and messages[insert_index].get("role") == "system":
-                    insert_index += 1
-                messages.insert(insert_index, vision_message)
+                extra_messages.append(vision_message)
+
+        if extra_messages:
+            insert_index = 0
+            while insert_index < len(messages) and messages[insert_index].get("role") == "system":
+                insert_index += 1
+            for offset, message in enumerate(extra_messages):
+                messages.insert(insert_index + offset, message)
 
         return messages
 
-    def _build_tools(self) -> list[dict[str, Any]]:
+    def _build_tools(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Return the tool list for the LLM request."""
+        tools = list(tool_definitions)
         if self.vision_state is None:
-            return [tool for tool in tool_definitions if tool.get("function", {}).get("name") != "vision_look"]
-        return tool_definitions
+            tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
+        if not autonomy_mode:
+            tools = [
+                tool
+                for tool in tools
+                if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
+            ]
+        return tools
 
     def run(self) -> None:
         """
@@ -230,14 +252,16 @@ class LanguageModelProcessor:
                     # This logic might need refinement based on state. For now, assume no prior stream.
                     continue
 
-                logger.info(f"LLM Processor: Received input for LLM: '{llm_input}'")
-                self.conversation_history.append(llm_input)
+                autonomy_mode = bool(llm_input.get("autonomy", False))
+                llm_message = {key: value for key, value in llm_input.items() if key != "autonomy"}
+                logger.info(f"LLM Processor: Received input for LLM: '{llm_message}'")
+                self.conversation_history.append(llm_message)
 
                 data = {
                     "model": self.model_name,
                     "stream": True,
                     "messages": self._build_messages(),
-                    "tools": self._build_tools(),
+                    "tools": self._build_tools(autonomy_mode),
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
 
@@ -265,7 +289,7 @@ class LanguageModelProcessor:
                                     if chunk:
                                         if isinstance(chunk, list):
                                             self._process_tool_chunks(tool_calls_buffer, chunk)
-                                        else:
+                                        elif not autonomy_mode:
                                             sentence_buffer.append(chunk)
                                             if chunk.strip() in self.PUNCTUATION_SET and (
                                                 len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()
@@ -278,7 +302,7 @@ class LanguageModelProcessor:
                                         break
 
                         if self.processing_active_event.is_set() and tool_calls_buffer:
-                            self._process_tool_call(tool_calls_buffer)
+                            self._process_tool_call(tool_calls_buffer, autonomy_mode)
                         elif self.processing_active_event.is_set() and sentence_buffer:
                             self._process_sentence_for_tts(sentence_buffer)
 

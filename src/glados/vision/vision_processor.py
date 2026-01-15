@@ -11,6 +11,8 @@ from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 
+from ..autonomy import EventBus
+from ..autonomy.events import VisionUpdateEvent
 from .constants import VISION_DEFAULT_PROMPT
 from .fastvlm import FastVLM
 from .vision_config import VisionConfig
@@ -28,6 +30,7 @@ class VisionProcessor:
         shutdown_event: threading.Event,
         config: VisionConfig,
         request_queue: queue.Queue[VisionRequest] | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         """Initialize VisionProcessor.
 
@@ -43,6 +46,7 @@ class VisionProcessor:
         self.shutdown_event = shutdown_event
         self.config = config
         self._request_queue = request_queue
+        self._event_bus = event_bus
 
         # Load FastVLM model
         self._model = FastVLM(config.model_dir)
@@ -55,6 +59,7 @@ class VisionProcessor:
         self._last_frame: NDArray[np.uint8] | None = None
         self._last_features: NDArray[np.float32] | None = None
         self._prompt_cache: dict[tuple[str, int], str] = {}
+        self._last_description: str | None = None
 
     def run(self) -> None:
         """Main processing loop for the vision processor thread."""
@@ -79,8 +84,10 @@ class VisionProcessor:
                 # Resize frame for scene-change detection
                 processed = self._preprocess_frame(frame)
 
+                change_score = self._scene_change_score(processed)
+
                 # Skip if scene hasn't changed significantly
-                if not self._scene_changed(processed):
+                if self._last_frame is not None and change_score <= self.config.scene_change_threshold:
                     logger.debug("VisionProcessor: Scene unchanged, skipping VLM inference.")
                     self._sleep(loop_started)
                     continue
@@ -95,6 +102,8 @@ class VisionProcessor:
                 if description:
                     self.vision_state.update(description)
                     logger.success("Vision snapshot updated: {}", description)
+                    self._publish_update(description, change_score)
+                    self._last_description = description
 
                 self._sleep(loop_started)
 
@@ -164,27 +173,27 @@ class VisionProcessor:
         resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
         return resized
 
-    def _scene_changed(self, current_frame: NDArray[np.uint8]) -> bool:
-        """Check if scene has changed significantly from last processed frame.
+    def _scene_change_score(self, current_frame: NDArray[np.uint8]) -> float:
+        """Compute the scene change score compared to the last processed frame.
 
         Args:
             current_frame: Current frame to compare
 
         Returns:
-            True if scene changed above threshold, False otherwise
+            Normalized change score between 0 and 1
         """
         if self._last_frame is None:
-            return True
+            return 1.0
 
         # Ensure frames are same size for comparison
         if current_frame.shape != self._last_frame.shape:
-            return True
+            return 1.0
 
         # Compute normalized absolute difference
         diff = cv2.absdiff(current_frame, self._last_frame)
         change_ratio = float(np.mean(diff)) / 255.0
 
-        return change_ratio > self.config.scene_change_threshold
+        return change_ratio
 
     def _get_description(
         self,
@@ -236,7 +245,8 @@ class VisionProcessor:
             return True
 
         processed = self._preprocess_frame(frame)
-        reuse_cached = self._last_features is not None and not self._scene_changed(processed)
+        change_score = self._scene_change_score(processed)
+        reuse_cached = self._last_features is not None and change_score <= self.config.scene_change_threshold
 
         if reuse_cached:
             logger.debug("VisionProcessor: Reusing cached vision features for tool request.")
@@ -276,3 +286,15 @@ class VisionProcessor:
         sleep_time = max(0.0, self.config.capture_interval_seconds - elapsed)
         if sleep_time:
             self.shutdown_event.wait(timeout=sleep_time)
+
+    def _publish_update(self, description: str, change_score: float) -> None:
+        if not self._event_bus:
+            return
+        self._event_bus.publish(
+            VisionUpdateEvent(
+                description=description,
+                prev_description=self._last_description,
+                change_score=change_score,
+                captured_at=time.time(),
+            )
+        )

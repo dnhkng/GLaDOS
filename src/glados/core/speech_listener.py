@@ -45,6 +45,7 @@ class SpeechListener:
         wake_word: str | None,
         pause_time: float,
         interruptible: bool = True,
+        interaction_state: "InteractionState | None" = None,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -78,6 +79,7 @@ class SpeechListener:
         self.shutdown_event = shutdown_event
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event
+        self._interaction_state = interaction_state
 
     def run(self) -> None:
         """
@@ -248,6 +250,8 @@ class SpeechListener:
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
                 self.llm_queue.put({"role": "user", "content": detected_text})
+                if self._interaction_state:
+                    self._interaction_state.mark_user()
                 self.processing_active_event.set()
 
         self.reset()

@@ -11,6 +11,9 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 See [vision.md](/vision.md) for details. [**Demo video**](https://www.youtube.com/watch?v=JDd9Rc4toEo).
 
+## Autonomy Loop (Experimental)
+See [autonomy.md](/autonomy.md) for the vision/time-driven autonomy loop.
+
 ## Update 3-1-2025 *Got GLaDOS running on an 8Gb SBC!*
 
 https://github.com/user-attachments/assets/99e599bb-4701-438a-a311-8e6cd595796c
