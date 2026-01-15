@@ -10,6 +10,7 @@ from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
 from ..autonomy import TaskSlotStore
+from ..mcp import MCPManager
 from ..tools import tool_definitions
 from ..vision.vision_state import VisionState
 
@@ -38,6 +39,7 @@ class LanguageModelProcessor:
         vision_state: VisionState | None = None,
         slot_store: TaskSlotStore | None = None,
         autonomy_system_prompt: str | None = None,
+        mcp_manager: MCPManager | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -52,6 +54,7 @@ class LanguageModelProcessor:
         self.vision_state = vision_state
         self.slot_store = slot_store
         self.autonomy_system_prompt = autonomy_system_prompt
+        self.mcp_manager = mcp_manager
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -210,6 +213,11 @@ class LanguageModelProcessor:
             slot_message = self.slot_store.as_message()
             if slot_message:
                 extra_messages.append(slot_message)
+        if self.mcp_manager:
+            try:
+                extra_messages.extend(self.mcp_manager.get_context_messages())
+            except Exception as e:
+                logger.warning(f"LLM Processor: Failed to load MCP context messages: {e}")
 
         if self.vision_state:
             vision_message = self.vision_state.as_message()
@@ -236,6 +244,18 @@ class LanguageModelProcessor:
                 for tool in tools
                 if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
             ]
+            tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
+        if not autonomy_mode:
+            tools = [
+                tool
+                for tool in tools
+                if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
+            ]
+        if self.mcp_manager:
+            try:
+                tools.extend(self.mcp_manager.get_tool_definitions())
+            except Exception as e:
+                logger.warning(f"LLM Processor: Failed to load MCP tool definitions: {e}")
         return tools
 
     def run(self) -> None:

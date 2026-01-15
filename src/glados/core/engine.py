@@ -23,6 +23,7 @@ from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
 from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, TaskManager, TaskSlotStore
 from ..autonomy.events import TimeTickEvent
+from ..mcp import MCPManager, MCPServerConfig
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -88,6 +89,7 @@ class GladosConfig(BaseModel):
     tool_timeout: float = 30.0
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
+    mcp_servers: list[MCPServerConfig] | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -163,6 +165,7 @@ class Glados:
         tool_timeout: float = 30.0,
         vision_config: VisionConfig | None = None,
         autonomy_config: AutonomyConfig | None = None,
+        mcp_servers: list[MCPServerConfig] | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -186,6 +189,8 @@ class Glados:
             tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
             tool_timeout (float): Timeout in seconds for tool execution.
             vision_config (VisionConfig | None): Optional vision configuration.
+            autonomy_config (AutonomyConfig | None): Optional autonomy configuration.
+            mcp_servers (list[MCPServerConfig] | None): Optional MCP server configurations.
         """
         self._asr_model = asr_model
         self._tts = tts_model
@@ -197,6 +202,7 @@ class Glados:
         self.announcement = announcement
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
+        self.mcp_servers = mcp_servers or []
         self._messages: list[dict[str, Any]] = list(personality_preprompt)
         self.vision_config = vision_config
         self.autonomy_config = autonomy_config or AutonomyConfig()
@@ -239,6 +245,11 @@ class Glados:
         self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
 
+        self.mcp_manager: MCPManager | None = None
+        if self.mcp_servers:
+            self.mcp_manager = MCPManager(self.mcp_servers, tool_timeout=self.tool_timeout)
+            self.mcp_manager.start()
+
         # Initialize audio input/output system
         self.audio_io: AudioProtocol = audio_io
         logger.info("Audio input started successfully.")
@@ -273,6 +284,7 @@ class Glados:
             vision_state=self.vision_state,
             slot_store=self.autonomy_slots,
             autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
+            mcp_manager=self.mcp_manager,
         )
 
         self.tool_executor = ToolExecutor(
@@ -288,6 +300,7 @@ class Glados:
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
+            mcp_manager=self.mcp_manager,
         )
 
         self.tts_synthesizer = TextToSpeechSynthesizer(
@@ -434,6 +447,7 @@ class Glados:
             tool_timeout=config.tool_timeout,
             vision_config=config.vision,
             autonomy_config=config.autonomy,
+            mcp_servers=config.mcp_servers,
         )
 
     @classmethod
@@ -488,6 +502,8 @@ class Glados:
             logger.info("Listen event loop is stopping/exiting.")
             if self.autonomy_tasks:
                 self.autonomy_tasks.shutdown()
+            if self.mcp_manager:
+                self.mcp_manager.shutdown()
             sys.exit(0)
 
     def _run_autonomy_ticker(self) -> None:
