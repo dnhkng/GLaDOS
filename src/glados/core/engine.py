@@ -222,6 +222,7 @@ class Glados:
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
+        self.asr_muted_event = threading.Event()
         if self.autonomy_config.enabled:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
@@ -295,6 +296,7 @@ class Glados:
                 pause_time=self.PAUSE_TIME,
                 interaction_state=self.interaction_state,
                 observability_bus=self.observability_bus,
+                asr_muted_event=self.asr_muted_event,
             )
         if self.input_mode in {"text", "both"}:
             if self.input_mode == "text":
@@ -306,6 +308,7 @@ class Glados:
                 pause_time=self.PAUSE_TIME,
                 interaction_state=self.interaction_state,
                 observability_bus=self.observability_bus,
+                command_handler=self.handle_command,
             )
 
         self.llm_processor = LanguageModelProcessor(
@@ -572,6 +575,74 @@ class Glados:
             if self.mcp_manager:
                 self.mcp_manager.shutdown()
             sys.exit(0)
+
+    def set_asr_muted(self, muted: bool) -> None:
+        if muted:
+            self.asr_muted_event.set()
+        else:
+            self.asr_muted_event.clear()
+        if self.speech_listener:
+            self.speech_listener.reset()
+        if self.observability_bus:
+            state = "muted" if muted else "unmuted"
+            self.observability_bus.emit(
+                source="asr",
+                kind="mute",
+                message=f"ASR {state}",
+                meta={"muted": muted},
+            )
+
+    def toggle_asr_muted(self) -> bool:
+        muted = not self.asr_muted_event.is_set()
+        self.set_asr_muted(muted)
+        return muted
+
+    def handle_command(self, command: str) -> str:
+        text = command.strip()
+        if not text:
+            return "No command entered."
+        if text.startswith("/"):
+            text = text[1:]
+        parts = text.split()
+        if not parts:
+            return "No command entered."
+        cmd = parts[0].lower()
+        args = [part.lower() for part in parts[1:]]
+
+        if cmd in {"help", "?"}:
+            return "Commands: /help, /status, /asr on|off|toggle, /mute-asr, /unmute-asr"
+
+        if cmd in {"mute-asr", "asr-mute"}:
+            self.set_asr_muted(True)
+            return "ASR muted."
+
+        if cmd in {"unmute-asr", "asr-unmute"}:
+            self.set_asr_muted(False)
+            return "ASR unmuted."
+
+        if cmd == "asr":
+            if not args:
+                return f"ASR is {'muted' if self.asr_muted_event.is_set() else 'active'}."
+            if args[0] in {"on", "unmute", "active"}:
+                self.set_asr_muted(False)
+                return "ASR unmuted."
+            if args[0] in {"off", "mute"}:
+                self.set_asr_muted(True)
+                return "ASR muted."
+            if args[0] in {"toggle", "swap"}:
+                muted = self.toggle_asr_muted()
+                return f"ASR {'muted' if muted else 'unmuted'}."
+            return "Usage: /asr on|off|toggle"
+
+        if cmd == "status":
+            autonomy_enabled = self.autonomy_config.enabled
+            return (
+                f"input_mode={self.input_mode}, "
+                f"asr_muted={self.asr_muted_event.is_set()}, "
+                f"autonomy_enabled={autonomy_enabled}"
+            )
+
+        return f"Unknown command: /{cmd}. Try /help."
 
     def _run_autonomy_ticker(self) -> None:
         assert self.autonomy_event_bus is not None

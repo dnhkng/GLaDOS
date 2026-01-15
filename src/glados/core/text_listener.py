@@ -11,7 +11,7 @@ import queue
 import selectors
 import sys
 import threading
-from typing import Any, TextIO
+from typing import Any, Callable, TextIO
 
 from loguru import logger
 
@@ -35,6 +35,7 @@ class TextListener:
         interaction_state: InteractionState | None = None,
         observability_bus: ObservabilityBus | None = None,
         input_stream: TextIO | None = None,
+        command_handler: Callable[[str], str] | None = None,
     ) -> None:
         self.llm_queue = llm_queue
         self.processing_active_event = processing_active_event
@@ -43,6 +44,7 @@ class TextListener:
         self._interaction_state = interaction_state
         self._observability_bus = observability_bus
         self._input_stream = input_stream or sys.stdin
+        self._command_handler = command_handler
         self._selector: selectors.BaseSelector | None = None
 
         try:
@@ -64,6 +66,10 @@ class TextListener:
                     break
                 text = line.strip()
                 if not text:
+                    continue
+                if text.startswith("/") and self._command_handler:
+                    response = self._command_handler(text)
+                    logger.info("Command: %s -> %s", text, response)
                     continue
                 if self._observability_bus:
                     self._observability_bus.emit(
