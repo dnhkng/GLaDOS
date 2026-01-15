@@ -507,6 +507,9 @@ class GladosUI(App[None]):
             return
         if not command.startswith("/"):
             command = f"/{command}"
+        if command in {"/observe", "/observability"}:
+            self.action_observability()
+            return
         if not self.glados_engine_instance:
             self.notify("Engine not ready.", severity="warning")
             return
