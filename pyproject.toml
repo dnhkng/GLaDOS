@@ -33,6 +33,11 @@ dev = [
     "types-requests",
     "types-PyYAML",
 ]
+export = [
+    "nemo_toolkit[asr]>=2.6.1",
+    "onnx>=1.20.1",
+    "onnxconverter-common>=1.16.0",
+]
 api = ["litestar[standard,structlog]>=2.15.1"]
 
 [project.scripts]
