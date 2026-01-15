@@ -5,12 +5,13 @@ This module provides the main orchestration classes including the Glados assista
 configuration management, and component coordination.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 import queue
 import sys
 import threading
 import time
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
@@ -29,6 +30,7 @@ from ..observability import MindRegistry, ObservabilityBus
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
+from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
@@ -38,6 +40,15 @@ from .tts_synthesizer import TextToSpeechSynthesizer
 
 logger.remove(0)
 logger.add(sys.stderr, level="SUCCESS")
+
+
+@dataclass(frozen=True)
+class CommandSpec:
+    name: str
+    description: str
+    handler: Callable[[list[str]], str]
+    usage: str | None = None
+    aliases: tuple[str, ...] = ()
 
 
 class PersonalityPrompt(BaseModel):
@@ -223,6 +234,8 @@ class Glados:
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
         self.asr_muted_event = threading.Event()
+        self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
+        self._command_registry, self._command_order = self._build_command_registry()
         if self.autonomy_config.enabled:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
@@ -607,45 +620,259 @@ class Glados:
         if not parts:
             return "No command entered."
         cmd = parts[0].lower()
-        args = [part.lower() for part in parts[1:]]
+        args = parts[1:]
+        spec = self._command_registry.get(cmd)
+        if not spec:
+            return f"Unknown command: /{cmd}. Try /help."
+        return spec.handler(args)
 
-        if cmd in {"help", "?"}:
-            return "Commands: /help, /status, /asr on|off|toggle, /mute-asr, /unmute-asr, /observe (TUI)"
+    def _build_command_registry(self) -> tuple[dict[str, CommandSpec], list[str]]:
+        registry: dict[str, CommandSpec] = {}
+        order: list[str] = []
 
-        if cmd in {"observe", "observability"}:
-            return "Observability is available in the TUI (Ctrl+O)."
+        def register(spec: CommandSpec) -> None:
+            registry[spec.name] = spec
+            order.append(spec.name)
+            for alias in spec.aliases:
+                registry[alias] = spec
 
-        if cmd in {"mute-asr", "asr-mute"}:
-            self.set_asr_muted(True)
-            return "ASR muted."
+        register(
+            CommandSpec(
+                name="help",
+                description="Show available commands",
+                usage="/help",
+                handler=self._cmd_help,
+                aliases=("?",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="status",
+                description="Show engine status",
+                usage="/status",
+                handler=self._cmd_status,
+            )
+        )
+        register(
+            CommandSpec(
+                name="asr",
+                description="Control ASR input",
+                usage="/asr on|off|toggle",
+                handler=self._cmd_asr,
+            )
+        )
+        register(
+            CommandSpec(
+                name="mute-asr",
+                description="Mute ASR input",
+                usage="/mute-asr",
+                handler=self._cmd_mute_asr,
+                aliases=("asr-mute",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="unmute-asr",
+                description="Unmute ASR input",
+                usage="/unmute-asr",
+                handler=self._cmd_unmute_asr,
+                aliases=("asr-unmute",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="observe",
+                description="Open observability screen (TUI)",
+                usage="/observe",
+                handler=self._cmd_observe,
+                aliases=("observability",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="slots",
+                description="Show autonomy slots",
+                usage="/slots",
+                handler=self._cmd_slots,
+            )
+        )
+        register(
+            CommandSpec(
+                name="minds",
+                description="Show active minds",
+                usage="/minds",
+                handler=self._cmd_minds,
+            )
+        )
+        register(
+            CommandSpec(
+                name="vision",
+                description="Show latest vision snapshot",
+                usage="/vision",
+                handler=self._cmd_vision,
+            )
+        )
+        register(
+            CommandSpec(
+                name="config",
+                description="Show config summary",
+                usage="/config",
+                handler=self._cmd_config,
+            )
+        )
+        register(
+            CommandSpec(
+                name="knowledge",
+                description="Manage local knowledge notes",
+                usage="/knowledge add|list|set|delete|clear",
+                handler=self._cmd_knowledge,
+            )
+        )
+        return registry, order
 
-        if cmd in {"unmute-asr", "asr-unmute"}:
+    def _cmd_help(self, _args: list[str]) -> str:
+        lines = ["Commands:"]
+        for name in self._command_order:
+            spec = self._command_registry[name]
+            usage = spec.usage or f"/{spec.name}"
+            lines.append(f"- {usage}: {spec.description}")
+        return "\n".join(lines)
+
+    def _cmd_status(self, _args: list[str]) -> str:
+        autonomy_enabled = self.autonomy_config.enabled
+        vision_enabled = self.vision_config is not None
+        jobs_enabled = bool(self.autonomy_config.jobs.enabled) if self.autonomy_config else False
+        return (
+            f"input_mode={self.input_mode}, "
+            f"asr_muted={self.asr_muted_event.is_set()}, "
+            f"autonomy_enabled={autonomy_enabled}, "
+            f"vision_enabled={vision_enabled}, "
+            f"jobs_enabled={jobs_enabled}"
+        )
+
+    def _cmd_asr(self, args: list[str]) -> str:
+        if not args:
+            return f"ASR is {'muted' if self.asr_muted_event.is_set() else 'active'}."
+        arg = args[0].lower()
+        if arg in {"on", "unmute", "active"}:
             self.set_asr_muted(False)
             return "ASR unmuted."
+        if arg in {"off", "mute"}:
+            self.set_asr_muted(True)
+            return "ASR muted."
+        if arg in {"toggle", "swap"}:
+            muted = self.toggle_asr_muted()
+            return f"ASR {'muted' if muted else 'unmuted'}."
+        return "Usage: /asr on|off|toggle"
 
-        if cmd == "asr":
-            if not args:
-                return f"ASR is {'muted' if self.asr_muted_event.is_set() else 'active'}."
-            if args[0] in {"on", "unmute", "active"}:
-                self.set_asr_muted(False)
-                return "ASR unmuted."
-            if args[0] in {"off", "mute"}:
-                self.set_asr_muted(True)
-                return "ASR muted."
-            if args[0] in {"toggle", "swap"}:
-                muted = self.toggle_asr_muted()
-                return f"ASR {'muted' if muted else 'unmuted'}."
-            return "Usage: /asr on|off|toggle"
+    def _cmd_mute_asr(self, _args: list[str]) -> str:
+        self.set_asr_muted(True)
+        return "ASR muted."
 
-        if cmd == "status":
-            autonomy_enabled = self.autonomy_config.enabled
-            return (
-                f"input_mode={self.input_mode}, "
-                f"asr_muted={self.asr_muted_event.is_set()}, "
-                f"autonomy_enabled={autonomy_enabled}"
-            )
+    def _cmd_unmute_asr(self, _args: list[str]) -> str:
+        self.set_asr_muted(False)
+        return "ASR unmuted."
 
-        return f"Unknown command: /{cmd}. Try /help."
+    def _cmd_observe(self, _args: list[str]) -> str:
+        return "Observability is available in the TUI via /observe."
+
+    def _cmd_slots(self, _args: list[str]) -> str:
+        if not self.autonomy_slots:
+            return "Autonomy slots are unavailable."
+        slots = self.autonomy_slots.list_slots()
+        if not slots:
+            return "No active slots."
+        lines = ["Slots:"]
+        for slot in slots[:20]:
+            summary = slot.summary.strip()
+            summary_text = f" - {summary}" if summary else ""
+            lines.append(f"- {slot.title}: {slot.status}{summary_text}")
+        if len(slots) > 20:
+            lines.append(f"... {len(slots) - 20} more")
+        return "\n".join(lines)
+
+    def _cmd_minds(self, _args: list[str]) -> str:
+        minds = self.mind_registry.snapshot()
+        if not minds:
+            return "No minds registered."
+        lines = ["Minds:"]
+        for mind in minds[:20]:
+            summary = mind.summary.strip()
+            summary_text = f" - {summary}" if summary else ""
+            lines.append(f"- {mind.title}: {mind.status}{summary_text}")
+        if len(minds) > 20:
+            lines.append(f"... {len(minds) - 20} more")
+        return "\n".join(lines)
+
+    def _cmd_vision(self, _args: list[str]) -> str:
+        if not self.vision_state:
+            return "Vision is disabled."
+        snapshot = self.vision_state.snapshot()
+        return snapshot or "Vision has no snapshot yet."
+
+    def _cmd_config(self, _args: list[str]) -> str:
+        jobs_enabled = bool(self.autonomy_config.jobs.enabled) if self.autonomy_config else False
+        return (
+            f"input_mode={self.input_mode}, "
+            f"autonomy.enabled={self.autonomy_config.enabled}, "
+            f"autonomy.jobs.enabled={jobs_enabled}, "
+            f"vision.enabled={self.vision_config is not None}"
+        )
+
+    def _cmd_knowledge(self, args: list[str]) -> str:
+        if not args or args[0] == "list":
+            entries = self.knowledge_store.list_entries()
+            if not entries:
+                return "Knowledge: no entries."
+            lines = ["Knowledge:"]
+            for entry in entries[:20]:
+                text = entry.text.strip()
+                preview = (text[:120] + "...") if len(text) > 120 else text
+                lines.append(f"- {entry.entry_id}: {preview}")
+            if len(entries) > 20:
+                lines.append(f"... {len(entries) - 20} more")
+            return "\n".join(lines)
+
+        action = args[0].lower()
+        if action == "add":
+            text = " ".join(args[1:]).strip()
+            if not text:
+                return "Usage: /knowledge add <text>"
+            entry = self.knowledge_store.add(text)
+            return f"Added knowledge #{entry.entry_id}."
+
+        if action in {"set", "update"}:
+            if len(args) < 3:
+                return "Usage: /knowledge set <id> <text>"
+            try:
+                entry_id = int(args[1])
+            except ValueError:
+                return "Knowledge id must be a number."
+            text = " ".join(args[2:]).strip()
+            if not text:
+                return "Usage: /knowledge set <id> <text>"
+            updated = self.knowledge_store.update(entry_id, text)
+            if not updated:
+                return f"Knowledge #{entry_id} not found."
+            return f"Updated knowledge #{entry_id}."
+
+        if action in {"delete", "remove"}:
+            if len(args) < 2:
+                return "Usage: /knowledge delete <id>"
+            try:
+                entry_id = int(args[1])
+            except ValueError:
+                return "Knowledge id must be a number."
+            removed = self.knowledge_store.delete(entry_id)
+            if not removed:
+                return f"Knowledge #{entry_id} not found."
+            return f"Deleted knowledge #{entry_id}."
+
+        if action == "clear":
+            removed = self.knowledge_store.clear()
+            return f"Cleared {removed} knowledge entr{'y' if removed == 1 else 'ies'}."
+
+        return "Usage: /knowledge add|list|set|delete|clear"
 
     def _run_autonomy_ticker(self) -> None:
         assert self.autonomy_event_bus is not None
