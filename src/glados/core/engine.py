@@ -610,7 +610,10 @@ class Glados:
         args = [part.lower() for part in parts[1:]]
 
         if cmd in {"help", "?"}:
-            return "Commands: /help, /status, /asr on|off|toggle, /mute-asr, /unmute-asr"
+            return "Commands: /help, /status, /asr on|off|toggle, /mute-asr, /unmute-asr, /observe (TUI)"
+
+        if cmd in {"observe", "observability"}:
+            return "Observability is available in the TUI (Ctrl+O)."
 
         if cmd in {"mute-asr", "asr-mute"}:
             self.set_asr_muted(True)
