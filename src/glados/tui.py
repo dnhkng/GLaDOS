@@ -352,7 +352,6 @@ class GladosUI(App[None]):
             key_display="?",
         ),
         Binding(key="slash", action="command", description="Command", key_display="/"),
-        Binding(key="ctrl+o", action="observability", description="Observability", key_display="Ctrl+O"),
     ]
     CSS_PATH = "glados_ui/glados.tcss"
 

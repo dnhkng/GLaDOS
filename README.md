@@ -111,7 +111,15 @@ Install the PortAudio library, if you don't yet have it installed:
 
         uv run glados start --input-mode both
 
-    In text or TUI mode, type `/help` to see available slash commands (e.g. `/asr off`).
+    In text or TUI mode, type `/help` to see available slash commands. Highlights:
+
+        /status
+        /asr on|off|toggle
+        /observe
+        /slots
+        /minds
+        /vision
+        /knowledge add|list|set|delete|clear
 
 ## Speech Generation
 You can also get her to say something with:
