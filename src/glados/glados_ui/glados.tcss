@@ -75,6 +75,17 @@ HeaderClock {
     layer: top;
 }
 
+#command_bar {
+    margin: 0 2 1 2;
+    height: 3;
+    border: solid $primary;
+}
+
+#command_input {
+    width: 100%;
+    color: $foreground;
+}
+
 #scrolling_block {
     padding: 0 1;
 }

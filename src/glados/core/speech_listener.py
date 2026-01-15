@@ -48,6 +48,7 @@ class SpeechListener:
         interruptible: bool = True,
         interaction_state: "InteractionState | None" = None,
         observability_bus: ObservabilityBus | None = None,
+        asr_muted_event: threading.Event | None = None,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -83,6 +84,7 @@ class SpeechListener:
         self.processing_active_event = processing_active_event
         self._interaction_state = interaction_state
         self._observability_bus = observability_bus
+        self._asr_muted_event = asr_muted_event
 
     def run(self) -> None:
         """
@@ -106,6 +108,10 @@ class SpeechListener:
                 try:
                     # Use a timeout for the queue get
                     sample, vad_confidence = self._sample_queue.get(timeout=self.pause_time)
+                    if self._asr_muted_event and self._asr_muted_event.is_set():
+                        if self._recording_started or self._samples or self._buffer:
+                            self.reset()
+                        continue
                     self._handle_audio_sample(sample, vad_confidence)
                 except queue.Empty:
                     # Timeout occurred, loop again to check shutdown_event
