@@ -6,13 +6,13 @@ This document describes the autonomy system, background jobs/slots, and a prompt
 ## Goals
 - Provide proactive updates when they are important and timely.
 - Avoid spam and interruptions during active conversation.
-- Enable safe, testable prompt evolution for sub-agents.
+- Enable safe prompt evolution for sub-agents with fast rollback and user feedback.
 - Keep core personality stable while allowing contextual flexibility.
 
 ## Core Components
 1) Background jobs + slots
 2) Importance scoring + notification policy
-3) Prompt governor (sub-agent prompt updates)
+3) Prompt governor + observer agent (sub-agent prompt updates + rollback)
 4) Memory scoping + decay
 5) Safety boundaries for external tools (Home Assistant)
 6) Observability (latency, tool failure, interruption metrics)
@@ -84,7 +84,7 @@ Personality should live in config as OCEAN traits (stable across sessions).
 This informs baseline tone and influences how emotion/drive vectors affect speech.
 
 ## Prompt Governor (Meta-Agent)
-A higher-level agent that updates sub-agent prompts safely without changing the core system prompt.
+A higher-level agent that updates sub-agent prompts without changing the core system prompt.
 
 ### Prompt Layers
 1) Immutable constitution (never edited)
@@ -94,6 +94,15 @@ A higher-level agent that updates sub-agent prompts safely without changing the 
 5) Dynamic context (slots, vision, memory summaries)
 
 The governor edits only layers 3-4 via versioned prompt packs.
+
+## Observer Agent (Feedback-Driven Updates)
+An observer agent reads recent outputs, the current prompt packs, and explicit user feedback.
+It proposes small prompt deltas for sub-agents and applies them with rollback support.
+
+### Observer Slot
+- Stores the latest feedback, proposed delta, confidence, and applied version.
+- Example user feedback: \"That report was too detailed. Summaries only.\"
+  -> Observer updates brevity and max_sentences in the sub-agent pack.
 
 ### Prompt Pack Format (Example)
 ```
@@ -111,18 +120,17 @@ allowed_tools:
   - "mcp.home_assistant.call_service"
 ```
 
-### Governor Loop (Safe Update Flow)
-1) Collect signals (interruptions, tool failures, slot ignores)
+### Governor Loop (Observer-Driven)
+1) Collect signals (user feedback, interruptions, output review)
 2) Propose prompt delta (short, bounded change)
-3) Lint prompt (length caps, forbidden phrases)
-4) Shadow eval on synthetic tests
-5) Promote or revert based on scores
-6) Persist with version + timestamp
+3) Apply change (versioned prompt pack)
+4) Monitor feedback and output quality in real usage
+5) Roll back on explicit user request or repeated complaints
 
-### Evaluation Harness (Lightweight)
-- Golden conversations
-- Tool call checks (valid args)
-- Output length and safety checks
+### Rollback Mechanism
+- Keep the previous prompt pack version for each sub-agent.
+- Provide a manual override: \"undo last prompt change\".
+- Auto-rollback after repeated negative feedback within a cooldown window.
 
 ## Memory Scoping + Decay
 - Short-term: per session
@@ -137,7 +145,7 @@ allowed_tools:
 
 ## Observability
 - Metrics: LLM latency, tool failure rates, interruptions accepted/ignored
-- Logs: slot updates, governor promotions, prompt versions
+- Logs: slot updates, prompt changes, rollbacks, feedback events
 
 ## MVP Sequence
 1) Slot schema + storage
