@@ -39,9 +39,9 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/parakeet-tdt-0.6b-v3_joiner.onnx",
         "checksum": "e22366c5c222c21d1a88083d04536fd314fca441b5fbbfe8a7c600f218736557",
     },
-    "models/ASR/silero_vad_v5.onnx": {
-        "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/silero_vad_v5.onnx",
-        "checksum": "6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396",
+    "models/ASR/silero_vad_16k_op15.onnx": {
+        "url": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/silero_vad_16k_op15.onnx",
+        "checksum": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49",
     },
     "models/TTS/glados.onnx": {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/glados.onnx",
@@ -126,7 +126,7 @@ async def download_models() -> int:
     """
     Main async controller for downloading all the specified models:
         - ASR model: nemo-parakeet_tdt_ctc_110m.onnx
-        - VAD model: silero_vad.onnx
+        - VAD model: silero_vad_16k_op15.onnx
         - TTS model: glados.onnx
         - Phonemizer model: phomenizer_en.onnx
 
