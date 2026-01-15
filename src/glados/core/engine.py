@@ -296,16 +296,6 @@ class Glados:
             pause_time=self.PAUSE_TIME,
         )
 
-        self.tool_executor = ToolExecutor(
-            llm_queue=self.llm_queue,
-            tool_calls_queue=self.tool_calls_queue,
-            processing_active_event=self.processing_active_event,
-            shutdown_event=self.shutdown_event,
-            tool_config=self.tool_config,
-            tool_timeout=self.tool_timeout,
-            pause_time=self.PAUSE_TIME,
-        )
-
         self.tts_synthesizer = TextToSpeechSynthesizer(
             tts_input_queue=self.tts_queue,
             audio_output_queue=self.audio_queue,
