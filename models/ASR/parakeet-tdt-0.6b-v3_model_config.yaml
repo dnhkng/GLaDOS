@@ -66,6 +66,7 @@ preprocessor:
   dither: 1.0e-05
   pad_to: 0
   pad_value: 0.0
+  max_threads: 1
 spec_augment:
   _target_: nemo.collections.asr.modules.SpectrogramAugmentation
   freq_masks: 2

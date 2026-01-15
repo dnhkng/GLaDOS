@@ -52,6 +52,7 @@ from numba import jit  # type: ignore
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field
+from threadpoolctl import threadpool_limits
 import yaml  # PyYAML for YAML loading
 
 NEMO_CONSTANT = 1e-5  # Used as dither and guard, aligned with some NeMo practices
@@ -154,6 +155,10 @@ class MelSpectrogramConfig(BaseModel):
         description="If True, uses a specific padding scheme before STFT similar to NeMo's exact_pad "
         "(typically corresponding to STFT center=False on a pre-padded signal). "
         "If False, uses n_fft // 2 padding (STFT center=True like behavior).",
+    )
+    max_threads: int | None = Field(
+        None,
+        description="Optional cap for native threadpools during mel computation. None leaves defaults.",
     )
 
     class Config:
@@ -263,6 +268,7 @@ class MelSpectrogramCalculator:
     log_zero_guard_type: str
     log_zero_guard_value: float
     mel_norm: str
+    max_threads: int | None
 
     def __init__(
         self,
@@ -286,6 +292,7 @@ class MelSpectrogramCalculator:
         log_zero_guard_value: float = 2**-24,
         mel_norm: str = "slaney",
         exact_pad: bool = False,
+        max_threads: int | None = None,
         **kwargs: float,  # To absorb any other potential NeMo args from config
     ) -> None:
         """Initializes the MelSpectrogramCalculator."""
@@ -313,6 +320,9 @@ class MelSpectrogramCalculator:
         self.log_zero_guard_type = log_zero_guard_type
         self.log_zero_guard_value = log_zero_guard_value
         self.mel_norm = mel_norm
+        if max_threads is not None and max_threads < 1:
+            raise ValueError("max_threads must be >= 1 when set.")
+        self.max_threads = max_threads
 
         self.exact_pad = exact_pad
         if self.exact_pad:
@@ -585,66 +595,73 @@ class MelSpectrogramCalculator:
         if not np.all(np.isfinite(audio)):
             raise ValueError("Input audio contains non-finite values.")
 
-        if self.dither > 0:
-            audio = audio + self.dither * np.random.randn(*audio.shape).astype(np.float32)
+        def _compute_impl(audio_in: NDArray[np.float32]) -> NDArray[np.float32]:
+            if self.dither > 0:
+                audio_in = audio_in + self.dither * np.random.randn(*audio_in.shape).astype(np.float32)
 
-        audio_preemph = self._apply_preemphasis(audio)
+            audio_preemph = self._apply_preemphasis(audio_in)
 
-        if self.exact_pad:
-            # NeMo's exact_pad=True applies this specific padding *before* STFT (which then uses center=False)
-            # self.stft_pad_amount should be non-None and non-negative here due to __init__ checks.
-            audio_padded = np.pad(
-                audio_preemph,
-                (self.stft_pad_amount, self.stft_pad_amount),
-                mode="reflect",
-            )
-        else:
-            # This is the center=True like behavior
-            center_padding_val = self.n_fft // 2
-            audio_padded = np.pad(audio_preemph, (center_padding_val, center_padding_val), mode="reflect")
-
-        if len(audio_padded) < self.n_fft:
-            n_frames = 0
-        elif self.hop_length == 0:
-            n_frames = 1 if len(audio_padded) >= self.n_fft else 0
-        else:
-            n_frames = 1 + (len(audio_padded) - self.n_fft) // self.hop_length
-
-        if n_frames <= 0:
-            return np.empty((final_num_features, 0), dtype=np.float32)
-
-        frames = _extract_windows_numba(audio_padded, self.window_coeffs, self.n_fft, self.hop_length, n_frames)
-        stft_result = np.fft.rfft(frames, n=self.n_fft, axis=1).T
-        power_spec = (np.abs(stft_result) ** self.mag_power).astype(np.float32)
-        mel_spec = self.mel_filterbank @ power_spec
-
-        if self.log:
-            guard_val = self.log_zero_guard_value
-            if self.log_zero_guard_type == "add":
-                mel_spec = np.log(mel_spec + guard_val)
-            elif self.log_zero_guard_type == "clamp":
-                mel_spec = np.log(np.maximum(mel_spec, guard_val))
+            if self.exact_pad:
+                # NeMo's exact_pad=True applies this specific padding *before* STFT (which then uses center=False)
+                # self.stft_pad_amount should be non-None and non-negative here due to __init__ checks.
+                audio_padded = np.pad(
+                    audio_preemph,
+                    (self.stft_pad_amount, self.stft_pad_amount),
+                    mode="reflect",
+                )
             else:
-                raise ValueError(
-                    f"Unsupported log_zero_guard_type: {self.log_zero_guard_type}. Expected 'add' or 'clamp'."
-                )
+                # This is the center=True like behavior
+                center_padding_val = self.n_fft // 2
+                audio_padded = np.pad(audio_preemph, (center_padding_val, center_padding_val), mode="reflect")
 
-        # NeMo order: log -> splice -> normalize -> pad_to
-        if self.frame_splicing > 1:
-            mel_spec = self._stack_frames(mel_spec)
+            if len(audio_padded) < self.n_fft:
+                n_frames = 0
+            elif self.hop_length == 0:
+                n_frames = 1 if len(audio_padded) >= self.n_fft else 0
+            else:
+                n_frames = 1 + (len(audio_padded) - self.n_fft) // self.hop_length
 
-        if self.normalize:
-            mel_spec = self._normalize_spectrogram(mel_spec)
+            if n_frames <= 0:
+                return np.empty((final_num_features, 0), dtype=np.float32)
 
-        if self.pad_to > 1 and mel_spec.shape[1] > 0:
-            current_time_frames = mel_spec.shape[1]
-            if current_time_frames % self.pad_to != 0:
-                padding_needed = self.pad_to - (current_time_frames % self.pad_to)
-                pad_width = ((0, 0), (0, padding_needed))
-                mel_spec = np.pad(
-                    mel_spec,
-                    pad_width,
-                    mode="constant",
-                    constant_values=self.spec_pad_value,
-                )
-        return mel_spec
+            frames = _extract_windows_numba(audio_padded, self.window_coeffs, self.n_fft, self.hop_length, n_frames)
+            stft_result = np.fft.rfft(frames, n=self.n_fft, axis=1).T
+            power_spec = (np.abs(stft_result) ** self.mag_power).astype(np.float32)
+            mel_spec = self.mel_filterbank @ power_spec
+
+            if self.log:
+                guard_val = self.log_zero_guard_value
+                if self.log_zero_guard_type == "add":
+                    mel_spec = np.log(mel_spec + guard_val)
+                elif self.log_zero_guard_type == "clamp":
+                    mel_spec = np.log(np.maximum(mel_spec, guard_val))
+                else:
+                    raise ValueError(
+                        f"Unsupported log_zero_guard_type: {self.log_zero_guard_type}. Expected 'add' or 'clamp'."
+                    )
+
+            # NeMo order: log -> splice -> normalize -> pad_to
+            if self.frame_splicing > 1:
+                mel_spec = self._stack_frames(mel_spec)
+
+            if self.normalize:
+                mel_spec = self._normalize_spectrogram(mel_spec)
+
+            if self.pad_to > 1 and mel_spec.shape[1] > 0:
+                current_time_frames = mel_spec.shape[1]
+                if current_time_frames % self.pad_to != 0:
+                    padding_needed = self.pad_to - (current_time_frames % self.pad_to)
+                    pad_width = ((0, 0), (0, padding_needed))
+                    mel_spec = np.pad(
+                        mel_spec,
+                        pad_width,
+                        mode="constant",
+                        constant_values=self.spec_pad_value,
+                    )
+            return mel_spec
+
+        if self.max_threads is None:
+            return _compute_impl(audio)
+
+        with threadpool_limits(limits=self.max_threads):
+            return _compute_impl(audio)
