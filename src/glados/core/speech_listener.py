@@ -17,6 +17,7 @@ from numpy.typing import NDArray
 
 from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
+from .audio_state import AudioState
 from ..observability import ObservabilityBus, trim_message
 
 
@@ -49,6 +50,7 @@ class SpeechListener:
         interaction_state: "InteractionState | None" = None,
         observability_bus: ObservabilityBus | None = None,
         asr_muted_event: threading.Event | None = None,
+        audio_state: AudioState | None = None,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -85,6 +87,7 @@ class SpeechListener:
         self._interaction_state = interaction_state
         self._observability_bus = observability_bus
         self._asr_muted_event = asr_muted_event
+        self._audio_state = audio_state
 
     def run(self) -> None:
         """
@@ -141,6 +144,12 @@ class SpeechListener:
             sample: The audio sample (numpy array) to process.
             vad_confidence: True if voice activity is detected in the sample, False otherwise.
         """
+        if self._audio_state is not None:
+            if sample.size:
+                rms = float(np.sqrt(np.mean(sample * sample)))
+            else:
+                rms = 0.0
+            self._audio_state.update(rms, vad_confidence)
         if not self._recording_started:
             self._manage_pre_activation_buffer(sample, vad_confidence)
         else:
@@ -235,6 +244,8 @@ class SpeechListener:
         self._samples.clear()
         self._gap_counter = 0
         self._buffer.clear()
+        if self._audio_state is not None:
+            self._audio_state.reset()
 
     def _process_detected_audio(self) -> None:
         """

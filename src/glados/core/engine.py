@@ -30,6 +30,7 @@ from ..observability import MindRegistry, ObservabilityBus
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
+from .audio_state import AudioState
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
 from .speech_listener import SpeechListener
@@ -234,6 +235,7 @@ class Glados:
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
         self.asr_muted_event = threading.Event()
+        self.audio_state = AudioState()
         self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
         self._command_registry, self._command_order = self._build_command_registry()
         if self.autonomy_config.enabled:
@@ -310,6 +312,7 @@ class Glados:
                 interaction_state=self.interaction_state,
                 observability_bus=self.observability_bus,
                 asr_muted_event=self.asr_muted_event,
+                audio_state=self.audio_state,
             )
         if self.input_mode in {"text", "both"}:
             if self.input_mode == "text":
@@ -596,6 +599,7 @@ class Glados:
             self.asr_muted_event.clear()
         if self.speech_listener:
             self.speech_listener.reset()
+        self.audio_state.reset()
         if self.observability_bus:
             state = "muted" if muted else "unmuted"
             self.observability_bus.emit(

@@ -1,7 +1,8 @@
 from collections.abc import Iterator
+from dataclasses import dataclass
+import math
 from datetime import datetime
 from pathlib import Path
-import random
 import sys
 from typing import ClassVar, cast
 
@@ -12,11 +13,11 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Digits, Footer, Header, Input, Label, Log, RichLog, Static
+from textual.widgets import Footer, Header, Input, Label, RichLog, Static
 from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
-from glados.glados_ui.text_resources import aperture, help_text, login_text, recipe
+from glados.glados_ui.text_resources import aperture, help_text, login_text
 from glados.observability import ObservabilityEvent
 
 # Custom Widgets
@@ -33,52 +34,6 @@ class Printer(RichLog):
     def on_print(self, event: events.Print) -> None:
         if (text := event.text) != "\n":
             self.write(text.rstrip().replace("DEBUG", "[red]DEBUG[/]"))
-
-
-class ScrollingBlocks(Log):
-    """A widget for displaying random scrolling blocks."""
-
-    BLOCKS = "⚊⚌☰𝌆䷀"
-    DEFAULT_CSS = """
-    ScrollingBlocks {
-        scrollbar_size: 0 0;
-        overflow-x: hidden;
-    }"""
-
-    def _animate_blocks(self) -> None:
-        # Create a string of blocks of the right length, allowing
-        # for border and padding
-        """
-        Generates and writes a line of random block characters to the log.
-
-        This method creates a string of random block characters with a length adjusted
-        to fit the current widget width, accounting for border and padding. Each block
-        is randomly selected from the predefined `BLOCKS` attribute.
-
-        The generated line is written to the log using `write_line()`, creating a
-        visually dynamic scrolling effect of random block characters.
-
-        Parameters:
-            None
-
-        Returns:
-            None
-        """
-        # Ensure width calculation doesn't go negative if self.size.width is small
-        num_blocks_to_generate = max(0, self.size.width - 8)
-        random_blocks = " ".join(random.choice(self.BLOCKS) for _ in range(num_blocks_to_generate))
-        self.write_line(f"{random_blocks}")
-
-    def on_show(self) -> None:
-        """
-        Set up an interval timer to periodically animate scrolling blocks.
-
-        This method is called when the widget becomes visible, initiating a recurring animation
-        that calls the `_animate_blocks` method at a fixed time interval of 0.18 seconds.
-
-        The interval timer ensures continuous block animation while the widget is displayed.
-        """
-        self.set_interval(0.18, self._animate_blocks)
 
 
 class Typewriter(Static):
@@ -160,6 +115,88 @@ class Typewriter(Static):
             # else:
             # Optional: If not repeating, remove the cursor or show final text without cursor.
             # For example: self._static.update(self._text)
+
+
+@dataclass(frozen=True)
+class DialogLine:
+    role: str
+    content: str
+
+
+class DialogLog(RichLog):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self._last_timestamp = 0.0
+        self.wrap = True
+        self.markup = True
+
+    def refresh_from_bus(self, events: list[ObservabilityEvent]) -> None:
+        new_events = [event for event in events if event.timestamp > self._last_timestamp]
+        if not new_events:
+            return
+        new_events.sort(key=lambda event: event.timestamp)
+        for event in new_events:
+            dialog_line = self._event_to_dialog(event)
+            if dialog_line:
+                self._write_dialog(dialog_line)
+        self._last_timestamp = new_events[-1].timestamp
+
+    def _event_to_dialog(self, event: ObservabilityEvent) -> DialogLine | None:
+        if event.kind == "user_input" and event.source in {"asr", "text"}:
+            return DialogLine(role="You", content=event.message)
+        if event.source == "tts" and event.kind == "play":
+            return DialogLine(role="GLaDOS", content=event.message)
+        return None
+
+    def _write_dialog(self, line: DialogLine) -> None:
+        color = "cyan" if line.role == "You" else "yellow"
+        self.write(f"[bold {color}]{line.role}[/]: {line.content}")
+
+
+class StatusPanel(Static):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.markup = True
+
+    @staticmethod
+    def _volume_bar(level: float, width: int = 18) -> str:
+        level = max(0.0, min(1.0, level))
+        filled = int(round(level * width))
+        empty = max(0, width - filled)
+        return f"[{'#' * filled}{'.' * empty}]"
+
+    @staticmethod
+    def _rms_to_db(rms: float) -> float:
+        return 20.0 * math.log10(max(rms, 1e-6))
+
+    def render_status(self, app: "GladosUI") -> None:
+        engine = app.glados_engine_instance
+        if not engine:
+            self.update("Engine: starting...")
+            return
+        snapshot = engine.audio_state.snapshot()
+        rms_db = self._rms_to_db(snapshot.rms)
+        level = (rms_db + 60.0) / 60.0
+        bar = self._volume_bar(level)
+        vad_text = "[green]ON[/]" if snapshot.vad_active else "[red]OFF[/]"
+        speaking = "[green]YES[/]" if engine.currently_speaking_event.is_set() else "NO"
+        processing = "[green]YES[/]" if engine.processing_active_event.is_set() else "NO"
+        autonomy = "ON" if engine.autonomy_config.enabled else "OFF"
+        jobs = "ON" if engine.autonomy_config.jobs.enabled else "OFF"
+        vision = "ON" if engine.vision_config is not None else "OFF"
+        asr = "MUTED" if engine.asr_muted_event.is_set() else "ACTIVE"
+        lines = [
+            f"Input: {engine.input_mode}",
+            f"ASR: {asr}",
+            f"Speaking: {speaking}",
+            f"Processing: {processing}",
+            f"Autonomy: {autonomy}  Jobs: {jobs}",
+            f"Vision: {vision}",
+            "",
+            f"VAD: {vad_text}",
+            f"Volume: {bar} {rms_db:5.1f} dB",
+        ]
+        self.update("\n".join(lines))
 
 
 # Screens
@@ -376,14 +413,15 @@ class GladosUI(App[None]):
         """
         Compose the user interface layout for the GladosUI application.
 
-        This method generates the primary UI components, including a header, body with log and utility areas,
-        a footer, and additional decorative blocks. The layout is structured to display:
+        This method generates the primary UI components, including a header, a dialog area, status panels,
+        a system log, and a command bar. The layout is structured to display:
         - A header with a clock
         - A body containing:
-          - A log area (Printer widget)
-          - A utility area with a typewriter displaying a recipe
+          - Dialog log (user/assistant messages)
+          - System log
+          - Status and hints panels
+        - A command input bar
         - A footer
-        - Additional decorative elements like scrolling blocks, text digits, and a logo
 
         Returns:
             ComposeResult: A generator yielding Textual UI components for rendering
@@ -394,22 +432,20 @@ class GladosUI(App[None]):
 
         with Container(id="body"):
             with Horizontal():
-                yield (Printer(id="log_area"))
-                with Container(id="utility_area"):
-                    typewriter = Typewriter(recipe, id="recipe", speed=0.01, repeat=True)
-                    yield typewriter
+                with Vertical(id="left_panel"):
+                    yield Label("Dialog", id="dialog_title")
+                    yield DialogLog(id="dialog_log")
+                    yield Label("System Log", id="system_title")
+                    yield Printer(id="log_area")
+                with Vertical(id="right_panel"):
+                    yield Label("Status", id="status_title")
+                    yield StatusPanel(id="status_panel")
+                    yield Label("Hints", id="tips_title")
+                    yield Static("Type /help for commands\nUse /observe to open observability", id="tips_panel")
 
         yield Container(Input(placeholder="/help for commands", id="command_input"), id="command_bar")
 
         yield Footer()
-
-        with Container(id="block_container", classes="fadeable"):
-            yield ScrollingBlocks(id="scrolling_block", classes="block")
-            with Vertical(id="text_block", classes="block"):
-                yield Digits("2.67")
-                yield Digits("1002")
-                yield Digits("45.6")
-            yield Label(self.LOGO_ANSI, id="logo_block", classes="block")
 
     def on_load(self) -> None:
         """
@@ -457,6 +493,9 @@ class GladosUI(App[None]):
         # Display the splash screen for a few moments
         self.push_screen(SplashScreen())
         self.notify("Loading AI engine...", title="GLaDOS", timeout=6)
+        self._dialog_log = self.query_one("#dialog_log", DialogLog)
+        self._status_panel = self.query_one("#status_panel", StatusPanel)
+        self.set_interval(0.3, self._refresh_panels)
 
     def on_unmount(self) -> None:
         """
@@ -523,6 +562,15 @@ class GladosUI(App[None]):
             return
         self.action_command()
         event.stop()
+
+    def _refresh_panels(self) -> None:
+        engine = self.glados_engine_instance
+        if not engine:
+            self._status_panel.render_status(self)
+            return
+        events = engine.observability_bus.snapshot(limit=200)
+        self._dialog_log.refresh_from_bus(events)
+        self._status_panel.render_status(self)
 
     def start_glados(self) -> None:
         """
