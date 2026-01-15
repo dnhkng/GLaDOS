@@ -1,21 +1,49 @@
 # Autonomy System Plan
 
 ## Overview
-This document describes the autonomy system, background jobs/slots, and a prompt governor that can safely update sub-agent prompts. The goal is a responsive, low-noise system that can decide when to speak and when to stay silent.
+This document describes a prompt-driven autonomy system with background jobs/slots and a "many minds" hierarchy. The goal is a responsive, low-noise system that can decide when to speak and when to stay silent, while staying maximally flexible and mostly governed by system prompts.
 
 ## Goals
 - Provide proactive updates when they are important and timely.
 - Avoid spam and interruptions during active conversation.
 - Enable safe prompt evolution for sub-agents with fast rollback and user feedback.
 - Keep core personality stable while allowing contextual flexibility.
+- Maximize flexibility by making behavior primarily prompt-driven, not code-driven.
 
 ## Core Components
-1) Background jobs + slots
-2) Importance scoring + notification policy
-3) Prompt governor + observer agent (sub-agent prompt updates + rollback)
-4) Memory scoping + decay
-5) Safety boundaries for external tools (Home Assistant)
-6) Observability (latency, tool failure, interruption metrics)
+1) Many-minds hierarchy (parallel sub-agents)
+2) Background jobs + slots
+3) Importance scoring + notification policy
+4) Prompt governor + observer agent (sub-agent prompt updates + rollback)
+5) Memory scoping + decay
+6) Safety boundaries for external tools (Home Assistant)
+7) Observability (latency, tool failure, interruption metrics)
+
+## Many Minds Architecture (Prompt-Driven)
+The system is organized as a hierarchy of "minds" (LLM streams), each with a strict system prompt.
+The orchestrator only routes inputs, enforces timeouts, and merges outputs.
+
+### Mind Roles (Example)
+1) Conductor (top-level): decides what to do now, which minds to spawn, and when to speak.
+2) Observer (meta-mind): reads outputs + feedback, updates sub-agent prompt packs.
+3) Context Curators (parallel): weather, news, memory, system health, vision, calendar.
+4) Home Assistant Planner: proposes tool calls or safe action suggestions.
+5) Safety/Policy Mind: vetoes unsafe actions and enforces boundaries.
+6) Narrator/Voice Mind: final phrasing and tone, preserves personality.
+
+### Parallel Streams (Up to 12)
+- 1-4: Context curators (weather/news/system/vision)
+- 5: Memory summarizer
+- 6: Home Assistant planner
+- 7: Observer
+- 8: Safety/Policy
+- 9: Narrator
+- 10-12: on-demand task minds (user-specific requests)
+
+### Prompt-First Control
+- Most behavior is defined in system prompts (verbosity, thresholds, tone).
+- Observer adjusts prompt packs in response to explicit user feedback.
+- Rollbacks are immediate and user-driven ("undo last prompt change").
 
 ## Background Jobs + Slots
 Slots are durable state objects that store updates from background jobs.
