@@ -157,7 +157,7 @@ allowed_tools:
 
 ### Rollback Mechanism
 - Keep the previous prompt pack version for each sub-agent.
-- Provide a manual override: \"undo last prompt change\".
+- Provide a manual override: "undo last prompt change".
 - Auto-rollback after repeated negative feedback within a cooldown window.
 
 ## Memory Scoping + Decay
@@ -175,9 +175,36 @@ allowed_tools:
 - Metrics: LLM latency, tool failure rates, interruptions accepted/ignored
 - Logs: slot updates, prompt changes, rollbacks, feedback events
 
+## TUI Observability Console
+A dedicated TUI for live debugging and visibility into the autonomy system.
+
+### Views (Suggested)
+- Timeline: last N events (ASR -> minds -> tools -> TTS), with durations.
+- Minds: each mind’s status, last run time, latency, and outputs summary.
+- Slots: current slot states, importance/confidence, next_run, and cooldowns.
+- Prompts: active prompt pack versions + last observer update/rollback.
+- Tools: recent tool calls, args, responses, and errors.
+- Audio: VAD state, ASR latency, TTS queue depth.
+
+### Controls
+- Pause/resume autonomy.
+- Toggle mind streams (disable a mind temporarily).
+- Force refresh slots.
+- Roll back last prompt update.
+- Export logs for bug reports.
+
 ## Low-Latency Strategy
 - Context should be prebuilt and cached before the user speaks.
-- Response mind never blocks on slow context; it uses the latest cached state.\n+- Late updates trigger optional follow-up replies rather than delaying the first response.\n+- ASR partials can start the response stream, then finalize on full text.\n+\n+### Latency Masking + Deferral Policy\n+- Fast (<300ms): reply immediately with no filler.\n+- Likely fast (<1s, memory/slot lookup): allow a single short filler (\"uhh...\", \"one sec...\") and continue if data arrives.\n+- Slow (>1s, research mind): say \"Let me check and get back to you,\" spawn a background job, and reply when the slot updates.\n+- Guardrails: one filler per turn max; never during user speech; observer can dial this down via feedback.\n+
+- Response mind never blocks on slow context; it uses the latest cached state.
+- Late updates trigger optional follow-up replies rather than delaying the first response.
+- ASR partials can start the response stream, then finalize on full text.
+
+### Latency Masking + Deferral Policy
+- Fast (<300ms): reply immediately with no filler.
+- Likely fast (<1s, memory/slot lookup): allow a single short filler ("uhh...", "one sec...") and continue if data arrives.
+- Slow (>1s, research mind): say "Let me check and get back to you," spawn a background job, and reply when the slot updates.
+- Guardrails: one filler per turn max; never during user speech; observer can dial this down via feedback.
+
 ## MVP Sequence
 1) Slot schema + storage
 2) Job runner with 2 jobs (weather + HN)
