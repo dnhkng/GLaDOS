@@ -11,31 +11,16 @@ aperture = r"""
 # This is adapted from text in the POTRAL ARG:
 # https://github.com/glados-egg/glados/blob/main/main.jsl
 login_text = (
-    "APERTURE LABORATORIES GLaDOS 1.09 ttyS0 1208 1288"
+    "APERTURE LABORATORIES GLaDOS 1.09 ttyS0"
     "\n\n"
-    "Aperture Laboratories operates this computer system under a contract with the "
-    "U.S. Department of Defense. It is for authorized use only. The use of this system "
-    "may be monitored for computer security purposes. Any unauthorized access to this "
-    "system is prohibited and is subject to criminal and civil penalties under Federal "
-    "Laws including but not limited to Public Laws 83-703 and 99-474"
+    "System diagnostics: OK"
+    "\n"
+    "Core modules: ONLINE"
     "\n\n"
-    'If you are a first time user, please type "CONTINUE".'
+    "Press any key to initialize."
+    "\n"
+    "Type /help for commands."
     "\n\n"
-    "DISREGARD THIS INSTRUCTION if you are returning after a break "
-    "of any duration for any reason. In that case, you MUST contact your "
-    "supervisor before proceeding. Your supervisor will solicit your Authorized "
-    'Administrative Unit for an affirmative injunction to type "CONTINUE".'
-    "\n\n"
-    'If permission to type "CONTINUE" has been granted, please do so now, '
-    'unless the box labeled "DO NOT TYPE CONTINUE" on the "Forms Re-Sanction" '
-    "form you received from your "
-    "supervisor is checked, in which case you should remain at your workstation not "
-    'typing "CONTINUE" until such a time as you are instructed by your '
-    "supervisor to discontinue not typing it.\n\n"
-    "**EMSI_REQA77E"
-    "\n\n"
-    "\n\n"
-    "LAST LOGIN: Tue May 18 13:32:11 on ttys002\n"
     "B:>"
 )
 
