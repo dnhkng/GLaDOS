@@ -27,6 +27,7 @@ class SpeechPlayer:
         currently_speaking_event: threading.Event,
         processing_active_event: threading.Event,
         pause_time: float,
+        tts_muted_event: threading.Event | None = None,
         interaction_state: "InteractionState | None" = None,
         observability_bus: ObservabilityBus | None = None,
     ) -> None:
@@ -38,6 +39,7 @@ class SpeechPlayer:
         self.currently_speaking_event = currently_speaking_event
         self.processing_active_event = processing_active_event
         self.pause_time = pause_time
+        self._tts_muted_event = tts_muted_event
         self._interaction_state = interaction_state
         self._observability_bus = observability_bus
 
@@ -55,6 +57,7 @@ class SpeechPlayer:
                 audio_msg = self.audio_output_queue.get(timeout=self.pause_time)
 
                 audio_len = len(audio_msg.audio) if audio_msg.audio is not None else 0
+                tts_muted = bool(self._tts_muted_event and self._tts_muted_event.is_set())
 
                 if audio_msg.is_eos:
                     logger.debug("AudioPlayer: Processing end of stream token.")
@@ -63,6 +66,30 @@ class SpeechPlayer:
                             {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
                         )
                     assistant_text_accumulator = []
+                    self.currently_speaking_event.clear()
+                    continue
+
+                if tts_muted:
+                    if audio_msg.text:
+                        logger.success(f"Assistant: {audio_msg.text}")
+                        if self._interaction_state:
+                            self._interaction_state.mark_assistant()
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="tts",
+                                kind="play",
+                                message=trim_message(audio_msg.text),
+                                meta={"audio_samples": 0, "muted": True},
+                            )
+                            self._observability_bus.emit(
+                                source="tts",
+                                kind="finish",
+                                message=trim_message(audio_msg.text),
+                                meta={"muted": True},
+                            )
+                        assistant_text_accumulator.append(audio_msg.text)
+                    else:
+                        logger.warning(f"AudioPlayer: Received empty audio message or no text: {audio_len, audio_msg}")
                     self.currently_speaking_event.clear()
                     continue
 

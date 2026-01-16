@@ -81,6 +81,7 @@ class AutonomyLoop:
                 kind="dispatch",
                 message=trim_message(prompt),
             )
+        logger.success("Autonomy dispatch: {}", trim_message(prompt))
         self._llm_queue.put({"role": "user", "content": prompt, "autonomy": True})
         self._processing_active_event.set()
         self._last_prompt_ts = time.time()

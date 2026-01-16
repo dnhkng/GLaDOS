@@ -67,9 +67,10 @@ class TextListener:
                 text = line.strip()
                 if not text:
                     continue
+                logger.success(f"Text input: '{text}'")
                 if text.startswith("/") and self._command_handler:
                     response = self._command_handler(text)
-                    logger.info("Command: %s -> %s", text, response)
+                    logger.success("Command: {} -> {}", text, response)
                     continue
                 if self._observability_bus:
                     self._observability_bus.emit(

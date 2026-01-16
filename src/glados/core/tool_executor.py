@@ -60,6 +60,7 @@ class ToolExecutor:
 
                 logger.info(f"ToolExecutor: Received tool call: '{tool_call}'")
                 tool = tool_call["function"]["name"]
+                logger.success("ToolExecutor: executing {}", tool)
                 tool_call_id = tool_call["id"]
                 started_at = time.perf_counter()
                 autonomy_mode = bool(tool_call.get("autonomy", False))
@@ -118,6 +119,7 @@ class ToolExecutor:
                                 message=tool,
                                 meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                             )
+                        logger.success("ToolExecutor: finished {}", tool)
                         llm_queue.put(
                             {
                                 "role": "tool",
@@ -166,6 +168,7 @@ class ToolExecutor:
                                     message=tool,
                                     meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                                 )
+                            logger.success("ToolExecutor: finished {}", tool)
                         except FuturesTimeoutError:
                             timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
                             logger.error(f"ToolExecutor: {timeout_error}")

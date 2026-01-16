@@ -27,6 +27,7 @@ class TextToSpeechSynthesizer:
         stc_instance: stc.SpokenTextConverter,
         shutdown_event: threading.Event,
         pause_time: float,
+        tts_muted_event: threading.Event | None = None,
         observability_bus: ObservabilityBus | None = None,
     ) -> None:
         self.tts_input_queue = tts_input_queue
@@ -35,6 +36,7 @@ class TextToSpeechSynthesizer:
         self.stc = stc_instance
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
+        self._tts_muted_event = tts_muted_event
         self._observability_bus = observability_bus
 
     def run(self) -> None:
@@ -72,10 +74,13 @@ class TextToSpeechSynthesizer:
 
                     start_time = time.time()
                     spoken_text_variant = self.stc.text_to_spoken(text_to_speak)
-                    audio_data = self.tts_model.generate_speech_audio(spoken_text_variant)
+                    if self._tts_muted_event and self._tts_muted_event.is_set():
+                        audio_data = np.array([], dtype=np.float32)
+                    else:
+                        audio_data = self.tts_model.generate_speech_audio(spoken_text_variant)
                     processing_time = time.time() - start_time
 
-                    audio_duration = len(audio_data) / self.tts_model.sample_rate
+                    audio_duration = len(audio_data) / self.tts_model.sample_rate if audio_data.size else 0.0
                     logger.info(
                         f"TTS Synthesizer: TTS Complete. Inference: {processing_time:.2f}s, "
                         f"Audio length: {audio_duration:.2f}s for text: '{spoken_text_variant}'"
@@ -88,6 +93,7 @@ class TextToSpeechSynthesizer:
                             meta={
                                 "inference_s": round(processing_time, 3),
                                 "audio_s": round(audio_duration, 3),
+                                "muted": bool(self._tts_muted_event and self._tts_muted_event.is_set()),
                             },
                         )
 

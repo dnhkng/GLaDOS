@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import threading
 import time
 
+from loguru import logger
+
 from ..observability import ObservabilityBus
 
 
@@ -59,6 +61,8 @@ class TaskSlotStore:
                 next_run=next_run,
             )
             self._slots[slot_id] = slot
+        if existing is None or existing.status != status or existing.summary != summary:
+            logger.success("Slot update: {} -> {} ({})", title, status, summary)
         if self._observability_bus:
             self._observability_bus.emit(
                 source="autonomy",

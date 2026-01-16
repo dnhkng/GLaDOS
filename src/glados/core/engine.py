@@ -26,7 +26,7 @@ from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState,
 from ..autonomy.events import TimeTickEvent
 from ..autonomy.jobs import BackgroundJobScheduler, build_jobs
 from ..mcp import MCPManager, MCPServerConfig
-from ..observability import MindRegistry, ObservabilityBus
+from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -96,10 +96,13 @@ class GladosConfig(BaseModel):
     interruptible: bool
     audio_io: str
     input_mode: Literal["audio", "text", "both"] = "audio"
+    tts_enabled: bool = True
+    asr_muted: bool = False
     asr_engine: str
     wake_word: str | None
     voice: str
     announcement: str | None
+    llm_headers: dict[str, str] | None = None
     personality_preprompt: list[PersonalityPrompt]
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0
@@ -183,6 +186,9 @@ class Glados:
         autonomy_config: AutonomyConfig | None = None,
         mcp_servers: list[MCPServerConfig] | None = None,
         input_mode: Literal["audio", "text", "both"] = "audio",
+        tts_enabled: bool = True,
+        asr_muted: bool = False,
+        llm_headers: dict[str, str] | None = None,
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -208,6 +214,9 @@ class Glados:
             vision_config (VisionConfig | None): Optional vision configuration.
             autonomy_config (AutonomyConfig | None): Optional autonomy configuration.
             mcp_servers (list[MCPServerConfig] | None): Optional MCP server configurations.
+            tts_enabled (bool): Whether TTS audio output is enabled at startup.
+            asr_muted (bool): Whether ASR starts muted.
+            llm_headers (dict[str, str] | None): Extra headers for LLM requests.
         """
         self._asr_model = asr_model
         self._tts = tts_model
@@ -235,9 +244,18 @@ class Glados:
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
         self.asr_muted_event = threading.Event()
+        if asr_muted:
+            self.asr_muted_event.set()
+        self.tts_muted_event = threading.Event()
+        if not tts_enabled:
+            self.tts_muted_event.set()
         self.audio_state = AudioState()
         self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
         self._command_registry, self._command_order = self._build_command_registry()
+        # Initialize events for thread synchronization
+        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
+        self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
+        self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
         if self.autonomy_config.enabled:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
@@ -268,11 +286,6 @@ class Glados:
 
         # warm up onnx ASR model, this is needed to avoid long pauses on first request
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
-
-        # Initialize events for thread synchronization
-        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
-        self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
-        self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
         # Initialize queues for inter-thread communication
         self.llm_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Data from SpeechListener and ToolExecutor to LLMProcessor
@@ -343,6 +356,7 @@ class Glados:
             autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
+            extra_headers=llm_headers,
         )
 
         self.tool_executor = ToolExecutor(
@@ -369,6 +383,7 @@ class Glados:
             stc_instance=self._stc,
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
+            tts_muted_event=self.tts_muted_event,
             observability_bus=self.observability_bus,
         )
 
@@ -381,6 +396,7 @@ class Glados:
             currently_speaking_event=self.currently_speaking_event,
             processing_active_event=self.processing_active_event,
             pause_time=self.PAUSE_TIME,
+            tts_muted_event=self.tts_muted_event,
             interaction_state=self.interaction_state,
             observability_bus=self.observability_bus,
         )
@@ -527,6 +543,9 @@ class Glados:
             autonomy_config=config.autonomy,
             mcp_servers=config.mcp_servers,
             input_mode=config.input_mode,
+            tts_enabled=config.tts_enabled,
+            asr_muted=config.asr_muted,
+            llm_headers=config.llm_headers,
         )
 
     @classmethod
@@ -614,6 +633,46 @@ class Glados:
         self.set_asr_muted(muted)
         return muted
 
+    def set_tts_muted(self, muted: bool) -> None:
+        if muted:
+            self.tts_muted_event.set()
+            self.audio_io.stop_speaking()
+            self.currently_speaking_event.clear()
+        else:
+            self.tts_muted_event.clear()
+        if self.observability_bus:
+            state = "muted" if muted else "unmuted"
+            self.observability_bus.emit(
+                source="tts",
+                kind="mute",
+                message=f"TTS {state}",
+                meta={"muted": muted},
+            )
+
+    def toggle_tts_muted(self) -> bool:
+        muted = not self.tts_muted_event.is_set()
+        self.set_tts_muted(muted)
+        return muted
+
+    def command_specs(self) -> list[CommandSpec]:
+        return [self._command_registry[name] for name in self._command_order]
+
+    def submit_text_input(self, text: str, source: str = "text") -> bool:
+        text = text.strip()
+        if not text:
+            return False
+        if self.observability_bus:
+            self.observability_bus.emit(
+                source=source,
+                kind="user_input",
+                message=trim_message(text),
+            )
+        self.llm_queue.put({"role": "user", "content": text})
+        if self.interaction_state:
+            self.interaction_state.mark_user()
+        self.processing_active_event.set()
+        return True
+
     def handle_command(self, command: str) -> str:
         text = command.strip()
         if not text:
@@ -655,6 +714,41 @@ class Glados:
                 description="Show engine status",
                 usage="/status",
                 handler=self._cmd_status,
+            )
+        )
+        register(
+            CommandSpec(
+                name="tts",
+                description="Control TTS output",
+                usage="/tts on|off|toggle",
+                handler=self._cmd_tts,
+            )
+        )
+        register(
+            CommandSpec(
+                name="mute-tts",
+                description="Mute TTS output",
+                usage="/mute-tts",
+                handler=self._cmd_mute_tts,
+                aliases=("tts-mute",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="unmute-tts",
+                description="Unmute TTS output",
+                usage="/unmute-tts",
+                handler=self._cmd_unmute_tts,
+                aliases=("tts-unmute",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="quit",
+                description="Quit GLaDOS",
+                usage="/quit",
+                handler=self._cmd_quit,
+                aliases=("exit",),
             )
         )
         register(
@@ -749,10 +843,15 @@ class Glados:
         return (
             f"input_mode={self.input_mode}, "
             f"asr_muted={self.asr_muted_event.is_set()}, "
+            f"tts_muted={self.tts_muted_event.is_set()}, "
             f"autonomy_enabled={autonomy_enabled}, "
             f"vision_enabled={vision_enabled}, "
             f"jobs_enabled={jobs_enabled}"
         )
+
+    def _cmd_quit(self, _args: list[str]) -> str:
+        self.shutdown_event.set()
+        return "Shutting down."
 
     def _cmd_asr(self, args: list[str]) -> str:
         if not args:
@@ -769,6 +868,21 @@ class Glados:
             return f"ASR {'muted' if muted else 'unmuted'}."
         return "Usage: /asr on|off|toggle"
 
+    def _cmd_tts(self, args: list[str]) -> str:
+        if not args:
+            return f"TTS is {'muted' if self.tts_muted_event.is_set() else 'active'}."
+        arg = args[0].lower()
+        if arg in {"on", "unmute", "active"}:
+            self.set_tts_muted(False)
+            return "TTS unmuted."
+        if arg in {"off", "mute"}:
+            self.set_tts_muted(True)
+            return "TTS muted."
+        if arg in {"toggle", "swap"}:
+            muted = self.toggle_tts_muted()
+            return f"TTS {'muted' if muted else 'unmuted'}."
+        return "Usage: /tts on|off|toggle"
+
     def _cmd_mute_asr(self, _args: list[str]) -> str:
         self.set_asr_muted(True)
         return "ASR muted."
@@ -776,6 +890,14 @@ class Glados:
     def _cmd_unmute_asr(self, _args: list[str]) -> str:
         self.set_asr_muted(False)
         return "ASR unmuted."
+
+    def _cmd_mute_tts(self, _args: list[str]) -> str:
+        self.set_tts_muted(True)
+        return "TTS muted."
+
+    def _cmd_unmute_tts(self, _args: list[str]) -> str:
+        self.set_tts_muted(False)
+        return "TTS unmuted."
 
     def _cmd_observe(self, _args: list[str]) -> str:
         return "Observability is available in the TUI via /observe."

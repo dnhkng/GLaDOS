@@ -4,7 +4,10 @@ Glados:
   api_key: null # Add your API key here if needed!
   interruptible: false
   audio_io: "sounddevice"
+  tts_enabled: true
+  asr_muted: false
   asr_engine: "ctc"
+  llm_headers: null  # Optional extra headers (e.g., OpenRouter HTTP-Referer, X-Title)
   wake_word: null
   voice: "glados"
   announcement: "" # Disabled for now, glados keeps repeating this after each vision observation, not sure why.

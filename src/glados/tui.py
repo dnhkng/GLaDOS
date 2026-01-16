@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 import math
 from datetime import datetime
@@ -14,18 +14,22 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
+from textual.suggester import Suggester
 from textual.widgets import Footer, Header, Input, Label, RichLog, Static
 from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import aperture, help_text, login_text
 from glados.observability import ObservabilityEvent
+from glados.utils.resources import resource_path
 
 # Custom Widgets
 
 
 class Printer(RichLog):
     """A subclass of textual's RichLog which captures and displays all print calls."""
+
+    can_focus = False
 
     def on_mount(self) -> None:
         self.wrap = True
@@ -125,6 +129,8 @@ class DialogLine:
 
 
 class DialogLog(RichLog):
+    can_focus = False
+
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self._last_timestamp = 0.0
@@ -155,6 +161,8 @@ class DialogLog(RichLog):
 
 
 class StatusPanel(Static):
+    can_focus = False
+
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.markup = True
@@ -186,9 +194,11 @@ class StatusPanel(Static):
         jobs = "ON" if engine.autonomy_config.jobs.enabled else "OFF"
         vision = "ON" if engine.vision_config is not None else "OFF"
         asr = "MUTED" if engine.asr_muted_event.is_set() else "ACTIVE"
+        tts = "MUTED" if engine.tts_muted_event.is_set() else "ACTIVE"
         lines = [
             f"Input: {engine.input_mode}",
             f"ASR: {asr}",
+            f"TTS: {tts}",
             f"Speaking: {speaking}",
             f"Processing: {processing}",
             f"Autonomy: {autonomy}  Jobs: {jobs}",
@@ -198,6 +208,24 @@ class StatusPanel(Static):
             f"Volume: {bar} {rms_db:5.1f} dB",
         ]
         self.update("\n".join(lines))
+
+
+class CommandSuggester(Suggester):
+    def __init__(self, get_commands: Callable[[], list[str]]) -> None:
+        super().__init__(use_cache=False, case_sensitive=False)
+        self._get_commands = get_commands
+
+    async def get_suggestion(self, value: str) -> str | None:
+        if not value.startswith("/"):
+            return None
+        commands = self._get_commands()
+        if not commands:
+            return None
+        prefix = value.casefold()
+        for command in commands:
+            if command.casefold().startswith(prefix):
+                return command
+        return None
 
 
 # Screens
@@ -264,6 +292,7 @@ class SplashScreen(Screen[None]):
             app.glados_engine_instance.play_announcement()
             app.start_glados()
             self.dismiss()
+            app.focus_command_input()
 
 
 class HelpScreen(ModalScreen[None]):
@@ -381,6 +410,8 @@ class ObservabilityScreen(ModalScreen[None]):
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
 
+    DEFAULT_TIPS = "Type a message (Enter to send)\nUse /help for commands"
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding(key="q", action="quit", description="Quit"),
         Binding(
@@ -411,6 +442,25 @@ class GladosUI(App[None]):
     instantiation_worker: Worker[None] | None = None
     _dialog_log: DialogLog | None = None
     _status_panel: StatusPanel | None = None
+    _tips_panel: Static | None = None
+    _config_path: Path
+    _input_mode_override: str | None
+    _tts_enabled_override: bool | None
+    _asr_muted_override: bool | None
+
+    def __init__(
+        self,
+        config_path: str | Path | None = None,
+        input_mode: str | None = None,
+        tts_enabled: bool | None = None,
+        asr_muted: bool | None = None,
+    ) -> None:
+        super().__init__()
+        default_config = resource_path("configs/glados_config.yaml")
+        self._config_path = Path(config_path) if config_path else Path(default_config)
+        self._input_mode_override = input_mode
+        self._tts_enabled_override = tts_enabled
+        self._asr_muted_override = asr_muted
 
     def compose(self) -> ComposeResult:
         """
@@ -444,9 +494,16 @@ class GladosUI(App[None]):
                     yield Label("Status", id="status_title")
                     yield StatusPanel(id="status_panel")
                     yield Label("Hints", id="tips_title")
-                    yield Static("Type /help for commands\nUse /observe to open observability", id="tips_panel")
+                    yield Static(self.DEFAULT_TIPS, id="tips_panel")
 
-        yield Container(Input(placeholder="/help for commands", id="command_input"), id="command_bar")
+        yield Container(
+            Input(
+                placeholder="Type a message or /command",
+                id="command_input",
+                suggester=CommandSuggester(self._command_names),
+            ),
+            id="command_bar",
+        )
 
         yield Footer()
 
@@ -480,7 +537,7 @@ class GladosUI(App[None]):
         self.instantiation_worker = None  # Reset the instantiation worker reference
         self.start_instantiation()
 
-        logger.add(print, format=fmt, level="SUCCESS")  # Changed to DEBUG for more verbose logging during dev
+        logger.add(print, format=fmt, level="SUCCESS")
 
     def on_mount(self) -> None:
         """
@@ -517,7 +574,8 @@ class GladosUI(App[None]):
     def action_command(self) -> None:
         """Focus the command input."""
         command_input = self.query_one("#command_input", Input)
-        command_input.value = "/"
+        if not command_input.value:
+            command_input.value = "/"
         command_input.focus()
 
     def action_observability(self) -> None:
@@ -533,6 +591,12 @@ class GladosUI(App[None]):
 
         if message.state == WorkerState.SUCCESS:
             self.notify("AI Engine operational", title="GLaDOS", timeout=2)
+            try:
+                command_input = self.query_one("#command_input", Input)
+            except NoMatches:
+                command_input = None
+            if command_input is not None:
+                self._update_command_hints(command_input.value)
         elif message.state == WorkerState.ERROR:
             self.notify("Instantiation failed!", severity="error")
 
@@ -545,17 +609,32 @@ class GladosUI(App[None]):
         event.input.value = ""
         if not command:
             return
-        if not command.startswith("/"):
-            command = f"/{command}"
-        if command in {"/observe", "/observability"}:
-            self.action_observability()
+        if command.startswith("/"):
+            if command in {"/quit", "/exit"}:
+                if self.glados_engine_instance:
+                    self.glados_engine_instance.handle_command(command)
+                self.exit()
+                return
+            if command in {"/observe", "/observability"}:
+                self.action_observability()
+                return
+            if not self.glados_engine_instance:
+                self.notify("Engine not ready.", severity="warning")
+                return
+            response = self.glados_engine_instance.handle_command(command)
+            logger.success("TUI command: {} -> {}", command, response)
+            self.notify(response, title="Command", timeout=4)
             return
         if not self.glados_engine_instance:
             self.notify("Engine not ready.", severity="warning")
             return
-        response = self.glados_engine_instance.handle_command(command)
-        logger.info("TUI command: %s -> %s", command, response)
-        self.notify(response, title="Command", timeout=4)
+        if not self.glados_engine_instance.submit_text_input(command):
+            self.notify("No text submitted.", severity="warning")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "command_input":
+            return
+        self._update_command_hints(event.value)
 
     def on_key(self, event: events.Key) -> None:
         if event.key != "/":
@@ -576,14 +655,63 @@ class GladosUI(App[None]):
         self._status_panel.render_status(self)
 
     def _bind_panels(self) -> bool:
-        if self._dialog_log is not None and self._status_panel is not None:
+        if self._dialog_log is not None and self._status_panel is not None and self._tips_panel is not None:
             return True
         try:
             self._dialog_log = self.query_one("#dialog_log", DialogLog)
             self._status_panel = self.query_one("#status_panel", StatusPanel)
+            self._tips_panel = self.query_one("#tips_panel", Static)
             return True
         except NoMatches:
             return False
+
+    def focus_command_input(self) -> None:
+        try:
+            command_input = self.query_one("#command_input", Input)
+        except NoMatches:
+            return
+        command_input.focus()
+
+    def _command_names(self) -> list[str]:
+        engine = self.glados_engine_instance
+        if not engine:
+            return []
+        names: list[str] = []
+        for spec in engine.command_specs():
+            names.append(f"/{spec.name}")
+            for alias in spec.aliases:
+                names.append(f"/{alias}")
+        return names
+
+    def _command_entries(self) -> list[tuple[str, str]]:
+        engine = self.glados_engine_instance
+        if not engine:
+            return []
+        entries: list[tuple[str, str]] = []
+        for spec in engine.command_specs():
+            label = f"/{spec.name}"
+            entries.append((label, spec.description))
+        return entries
+
+    def _update_command_hints(self, value: str) -> None:
+        if not self._bind_panels():
+            return
+        if self._tips_panel is None:
+            return
+        text = value.strip()
+        if not text.startswith("/"):
+            self._tips_panel.update(self.DEFAULT_TIPS)
+            return
+        entries = self._command_entries()
+        if not entries:
+            self._tips_panel.update("Commands loading...")
+            return
+        prefix = text.split()[0].casefold()
+        matches = [label for label, _desc in entries if label.casefold().startswith(prefix)]
+        if not matches:
+            self._tips_panel.update("No matching commands. Try /help.")
+            return
+        self._tips_panel.update(f"Commands: {' '.join(matches)}")
 
     def start_glados(self) -> None:
         """
@@ -620,11 +748,20 @@ class GladosUI(App[None]):
             Glados: An instance of the GLaDOS engine.
         """
 
-        config_path = Path("configs/glados_config.yaml")
+        config_path = self._config_path
         if not config_path.exists():
             logger.error(f"GLaDOS config file not found: {config_path}")
 
         glados_config = GladosConfig.from_yaml(str(config_path))
+        updates: dict[str, object] = {}
+        if self._input_mode_override:
+            updates["input_mode"] = self._input_mode_override
+        if self._tts_enabled_override is not None:
+            updates["tts_enabled"] = self._tts_enabled_override
+        if self._asr_muted_override is not None:
+            updates["asr_muted"] = self._asr_muted_override
+        if updates:
+            glados_config = glados_config.model_copy(update=updates)
         self.glados_engine_instance = Glados.from_config(glados_config)
 
     def start_instantiation(self) -> None:

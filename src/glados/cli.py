@@ -201,7 +201,12 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
     sd.wait()
 
 
-def start(config_path: str | Path = "glados_config.yaml", input_mode: str | None = None) -> None:
+def start(
+    config_path: str | Path = "glados_config.yaml",
+    input_mode: str | None = None,
+    tts_enabled: bool | None = None,
+    asr_muted: bool | None = None,
+) -> None:
     """
     Start the GLaDOS voice assistant and initialize its listening event loop.
 
@@ -221,15 +226,27 @@ def start(config_path: str | Path = "glados_config.yaml", input_mode: str | None
         start("/path/to/custom/config.yaml")  # Uses a custom configuration file
     """
     glados_config = GladosConfig.from_yaml(str(config_path))
+    updates: dict[str, object] = {}
     if input_mode:
-        glados_config = glados_config.model_copy(update={"input_mode": input_mode})
+        updates["input_mode"] = input_mode
+    if tts_enabled is not None:
+        updates["tts_enabled"] = tts_enabled
+    if asr_muted is not None:
+        updates["asr_muted"] = asr_muted
+    if updates:
+        glados_config = glados_config.model_copy(update=updates)
     glados = Glados.from_config(glados_config)
     if glados.announcement:
         glados.play_announcement()
     glados.run()
 
 
-def tui(config_path: str | Path = "glados_config.yaml") -> None:
+def tui(
+    config_path: str | Path = "glados_config.yaml",
+    input_mode: str | None = None,
+    tts_enabled: bool | None = None,
+    asr_muted: bool | None = None,
+) -> None:
     """
     Start the GLaDOS voice assistant with a terminal user interface (TUI).
 
@@ -242,7 +259,12 @@ def tui(config_path: str | Path = "glados_config.yaml") -> None:
     import glados.tui as tui
 
     try:
-        app = tui.GladosUI()
+        app = tui.GladosUI(
+            config_path=config_path,
+            input_mode=input_mode,
+            tts_enabled=tts_enabled,
+            asr_muted=asr_muted,
+        )
         app.run()
     except KeyboardInterrupt:
         sys.exit()
@@ -287,9 +309,77 @@ def main() -> int:
         default=None,
         help="Override input mode (audio, text, or both)",
     )
+    start_asr_group = start_parser.add_mutually_exclusive_group()
+    start_asr_group.add_argument(
+        "--asr-muted",
+        dest="asr_muted",
+        action="store_true",
+        help="Start with ASR muted",
+    )
+    start_asr_group.add_argument(
+        "--asr-unmuted",
+        dest="asr_muted",
+        action="store_false",
+        help="Start with ASR unmuted",
+    )
+    start_asr_group.set_defaults(asr_muted=None)
+    start_tts_group = start_parser.add_mutually_exclusive_group()
+    start_tts_group.add_argument(
+        "--tts-enabled",
+        dest="tts_enabled",
+        action="store_true",
+        help="Enable TTS output",
+    )
+    start_tts_group.add_argument(
+        "--tts-disabled",
+        dest="tts_enabled",
+        action="store_false",
+        help="Disable TTS output",
+    )
+    start_tts_group.set_defaults(tts_enabled=None)
 
     # TUI command
     tui_parser = subparsers.add_parser("tui", help="Start GLaDOS voice assistant with TUI")
+    tui_parser.add_argument(
+        "--config",
+        type=str,
+        default=DEFAULT_CONFIG,
+        help=f"Path to configuration file (default: {DEFAULT_CONFIG})",
+    )
+    tui_parser.add_argument(
+        "--input-mode",
+        choices=["audio", "text", "both"],
+        default=None,
+        help="Override input mode (audio, text, or both)",
+    )
+    tui_asr_group = tui_parser.add_mutually_exclusive_group()
+    tui_asr_group.add_argument(
+        "--asr-muted",
+        dest="asr_muted",
+        action="store_true",
+        help="Start with ASR muted",
+    )
+    tui_asr_group.add_argument(
+        "--asr-unmuted",
+        dest="asr_muted",
+        action="store_false",
+        help="Start with ASR unmuted",
+    )
+    tui_asr_group.set_defaults(asr_muted=None)
+    tui_tts_group = tui_parser.add_mutually_exclusive_group()
+    tui_tts_group.add_argument(
+        "--tts-enabled",
+        dest="tts_enabled",
+        action="store_true",
+        help="Enable TTS output",
+    )
+    tui_tts_group.add_argument(
+        "--tts-disabled",
+        dest="tts_enabled",
+        action="store_false",
+        help="Disable TTS output",
+    )
+    tui_tts_group.set_defaults(tts_enabled=None)
 
     # Say command
     say_parser = subparsers.add_parser("say", help="Make GLaDOS speak text")
@@ -312,9 +402,19 @@ def main() -> int:
         if args.command == "say":
             say(args.text, args.config)
         elif args.command == "start":
-            start(args.config, input_mode=args.input_mode)
+            start(
+                args.config,
+                input_mode=args.input_mode,
+                tts_enabled=args.tts_enabled,
+                asr_muted=args.asr_muted,
+            )
         elif args.command == "tui":
-            tui()
+            tui(
+                args.config,
+                input_mode=args.input_mode,
+                tts_enabled=args.tts_enabled,
+                asr_muted=args.asr_muted,
+            )
         else:
             # Default to start if no command specified
             start(DEFAULT_CONFIG)

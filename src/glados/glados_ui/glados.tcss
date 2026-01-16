@@ -64,6 +64,39 @@ HeaderClock {
 #command_input {
     width: 100%;
     color: $foreground;
+    background: $background;
+    border: none;
+    padding: 0 1;
+    background-tint: 0%;
+}
+
+#command_input:focus {
+    background: $background;
+    color: $foreground;
+    border: none;
+    background-tint: 0%;
+}
+
+#command_input:ansi {
+    background: $background;
+    color: $foreground;
+    border: none;
+    background-tint: 0%;
+}
+
+#command_input .input--cursor {
+    background: $primary;
+    color: $background;
+    text-style: none;
+}
+
+#command_input .input--selection {
+    background: $primary 30%;
+}
+
+#command_input .input--placeholder,
+#command_input .input--suggestion {
+    color: $foreground 60%;
 }
 
 #left_panel {
@@ -103,7 +136,7 @@ HeaderClock {
 }
 
 #status_panel {
-    height: 7;
+    height: 10;
 }
 
 #tips_panel {

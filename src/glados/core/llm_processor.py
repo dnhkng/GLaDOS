@@ -42,6 +42,7 @@ class LanguageModelProcessor:
         autonomy_system_prompt: str | None = None,
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -62,6 +63,8 @@ class LanguageModelProcessor:
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
             self.prompt_headers["Authorization"] = f"Bearer {api_key}"
+        if extra_headers:
+            self.prompt_headers.update(extra_headers)
 
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         """
@@ -173,20 +176,69 @@ class LanguageModelProcessor:
                     # Ollama format
                     tool_call["function"]["arguments"] = arguments
 
-    def _process_tool_call(self, tool_calls: list[dict[str, Any]], autonomy_mode: bool) -> None:
+    @staticmethod
+    def _sanitize_tool_name(name: str) -> str:
+        return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+    def _normalize_tool_name(self, name: str, known_names: set[str]) -> str:
+        if not name or not known_names:
+            return name
+        if name in known_names:
+            return name
+        for candidate in known_names:
+            if candidate.casefold() == name.casefold():
+                return candidate
+        if name.startswith("mcp."):
+            candidates = [candidate for candidate in known_names if candidate.startswith("mcp.")]
+        else:
+            candidates = [candidate for candidate in known_names if not candidate.startswith("mcp.")]
+        if not candidates:
+            candidates = list(known_names)
+        normalized = self._sanitize_tool_name(name)
+        if normalized:
+            normalized_candidates = [(candidate, self._sanitize_tool_name(candidate)) for candidate in candidates]
+            exact = [candidate for candidate, norm in normalized_candidates if norm == normalized]
+            if len(exact) == 1:
+                return exact[0]
+            substring = [candidate for candidate, norm in normalized_candidates if norm and norm in normalized]
+            if substring:
+                return max(substring, key=len)
+            superstrings = [candidate for candidate, norm in normalized_candidates if normalized and normalized in norm]
+            if len(superstrings) == 1:
+                return superstrings[0]
+        return name
+
+    def _normalize_tool_calls(self, tool_calls: list[dict[str, Any]], tool_names: set[str]) -> None:
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("function", {}).get("name")
+            if not tool_name:
+                continue
+            tool_call["function"]["name"] = self._normalize_tool_name(tool_name, tool_names)
+
+    def _process_tool_call(
+        self,
+        tool_calls: list[dict[str, Any]],
+        autonomy_mode: bool,
+        tool_names: set[str],
+    ) -> None:
         """
         Add tool calls to conversation history and send each to the tool calls queue.
 
         Args:
             tool_calls: List of tool calls to be run.
         """
+        self._normalize_tool_calls(tool_calls, tool_names)
         self.conversation_history.append(
             {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
         )
+        tool_labels = [call.get("function", {}).get("name", "unknown") for call in tool_calls]
+        tool_label_text = ", ".join(tool_labels)
+        suffix = " (autonomy)" if autonomy_mode else ""
+        logger.success("LLM tool calls queued: {}{}", tool_label_text, suffix)
         for tool_call in tool_calls:
             if autonomy_mode:
                 tool_call["autonomy"] = True
-            logger.info(f"LLM Processor: Sending to tool calls queue: '{tool_call}'")
+            logger.debug("LLM Processor: Sending to tool calls queue: '{}'", tool_call)
             self.tool_calls_queue.put(tool_call)
         if self._observability_bus:
             tool_names = [call.get("function", {}).get("name", "unknown") for call in tool_calls]
@@ -301,11 +353,17 @@ class LanguageModelProcessor:
                     )
                 self.conversation_history.append(llm_message)
 
+                tools = self._build_tools(autonomy_mode)
+                tool_names = {
+                    tool.get("function", {}).get("name", "")
+                    for tool in tools
+                    if tool.get("function", {}).get("name")
+                }
                 data = {
                     "model": self.model_name,
                     "stream": True,
                     "messages": self._build_messages(autonomy_mode),
-                    "tools": self._build_tools(autonomy_mode),
+                    "tools": tools,
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
 
@@ -346,7 +404,7 @@ class LanguageModelProcessor:
                                         break
 
                         if self.processing_active_event.is_set() and tool_calls_buffer:
-                            self._process_tool_call(tool_calls_buffer, autonomy_mode)
+                            self._process_tool_call(tool_calls_buffer, autonomy_mode, tool_names)
                         elif self.processing_active_event.is_set() and sentence_buffer:
                             self._process_sentence_for_tts(sentence_buffer)
 
