@@ -17,6 +17,8 @@ Glados:
     enabled: false
     tick_interval_s: 10
     cooldown_s: 20
+    autonomy_parallel_calls: 2
+    autonomy_queue_max: null
     jobs:
       enabled: false
       poll_interval_s: 1
@@ -38,6 +40,30 @@ Glados:
       transport: "stdio"
       command: "python"
       args: ["-m", "glados.mcp.slow_clap_server"]
+    - name: "system_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.system_info_server"]
+    # - name: "time_info"
+    #   transport: "stdio"
+    #   command: "python"
+    #   args: ["-m", "glados.mcp.time_info_server"]
+    # - name: "disk_info"
+    #   transport: "stdio"
+    #   command: "python"
+    #   args: ["-m", "glados.mcp.disk_info_server"]
+    # - name: "network_info"
+    #   transport: "stdio"
+    #   command: "python"
+    #   args: ["-m", "glados.mcp.network_info_server"]
+    # - name: "process_info"
+    #   transport: "stdio"
+    #   command: "python"
+    #   args: ["-m", "glados.mcp.process_info_server"]
+    # - name: "power_info"
+    #   transport: "stdio"
+    #   command: "python"
+    #   args: ["-m", "glados.mcp.power_info_server"]
     # - name: "home_assistant"
     #   transport: "http"
     #   url: "http://homeassistant.local:8123/mcp"

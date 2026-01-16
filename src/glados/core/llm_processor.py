@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # --- llm_processor.py ---
 import json
 import queue
@@ -10,6 +12,7 @@ from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
 from ..autonomy import TaskSlotStore
+from .llm_tracking import InFlightCounter
 from ..mcp import MCPManager
 from ..observability import ObservabilityBus, trim_message
 from ..tools import tool_definitions
@@ -43,6 +46,9 @@ class LanguageModelProcessor:
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
         extra_headers: dict[str, str] | None = None,
+        conversation_lock: threading.Lock | None = None,
+        lane: str = "priority",
+        inflight_counter: InFlightCounter | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
@@ -59,6 +65,9 @@ class LanguageModelProcessor:
         self.autonomy_system_prompt = autonomy_system_prompt
         self.mcp_manager = mcp_manager
         self._observability_bus = observability_bus
+        self._conversation_lock = conversation_lock
+        self._lane = lane
+        self._inflight_counter = inflight_counter
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
@@ -234,9 +243,15 @@ class LanguageModelProcessor:
             tool_calls: List of tool calls to be run.
         """
         self._normalize_tool_calls(tool_calls, tool_names)
-        self.conversation_history.append(
-            {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
-        )
+        if self._conversation_lock:
+            with self._conversation_lock:
+                self.conversation_history.append(
+                    {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
+                )
+        else:
+            self.conversation_history.append(
+                {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
+            )
         tool_labels = [call.get("function", {}).get("name", "unknown") for call in tool_calls]
         tool_label_text = ", ".join(tool_labels)
         suffix = " (autonomy)" if autonomy_mode else ""
@@ -272,7 +287,11 @@ class LanguageModelProcessor:
 
     def _build_messages(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting vision context if available."""
-        messages = list(self.conversation_history)
+        if self._conversation_lock:
+            with self._conversation_lock:
+                messages = list(self.conversation_history)
+        else:
+            messages = list(self.conversation_history)
         extra_messages: list[dict[str, Any]] = []
 
         if autonomy_mode and self.autonomy_system_prompt:
@@ -284,7 +303,7 @@ class LanguageModelProcessor:
                 extra_messages.append(slot_message)
         if self.mcp_manager:
             try:
-                extra_messages.extend(self.mcp_manager.get_context_messages())
+                extra_messages.extend(self.mcp_manager.get_context_messages(block=False))
             except Exception as e:
                 logger.warning(f"LLM Processor: Failed to load MCP context messages: {e}")
 
@@ -346,8 +365,22 @@ class LanguageModelProcessor:
                     # This logic might need refinement based on state. For now, assume no prior stream.
                     continue
 
+                inflight_guard = False
+                enqueued_at = llm_input.get("_enqueued_at")
+                wait_s = None
+                if isinstance(enqueued_at, (int, float)):
+                    wait_s = time.time() - float(enqueued_at)
+                queue_depth = None
+                try:
+                    queue_depth = self.llm_input_queue.qsize()
+                except NotImplementedError:
+                    queue_depth = None
                 autonomy_mode = bool(llm_input.get("autonomy", False))
-                llm_message = {key: value for key, value in llm_input.items() if key != "autonomy"}
+                llm_message = {
+                    key: value
+                    for key, value in llm_input.items()
+                    if key != "autonomy" and not key.startswith("_")
+                }
                 logger.info(f"LLM Processor: Received input for LLM: '{llm_message}'")
                 if self._observability_bus:
                     message_text = llm_message.get("content", "")
@@ -355,9 +388,29 @@ class LanguageModelProcessor:
                         source="llm",
                         kind="request",
                         message=trim_message(str(message_text)),
-                        meta={"autonomy": autonomy_mode},
+                        meta={"autonomy": autonomy_mode, "lane": self._lane},
                     )
-                self.conversation_history.append(llm_message)
+                    if wait_s is not None:
+                        self._observability_bus.emit(
+                            source="llm",
+                            kind="queue",
+                            message=self._lane,
+                            meta={
+                                "lane": self._lane,
+                                "wait_s": round(wait_s, 3),
+                                "queue_depth": queue_depth,
+                            },
+                        )
+                if self._inflight_counter and self._lane == "autonomy":
+                    self._inflight_counter.increment()
+                    inflight_guard = True
+                else:
+                    inflight_guard = False
+                if self._conversation_lock:
+                    with self._conversation_lock:
+                        self.conversation_history.append(llm_message)
+                else:
+                    self.conversation_history.append(llm_message)
 
                 tools = self._build_tools(autonomy_mode)
                 tool_names = {
@@ -446,6 +499,8 @@ class LanguageModelProcessor:
                         # If an EOS was already sent by TTS from a *previous* partial sentence,
                         # this could lead to an early clear of currently_speaking.
                         # The `processing_active_event` is key to synchronize.
+                    if inflight_guard:
+                        self._inflight_counter.decrement()
 
             except queue.Empty:
                 pass  # Normal

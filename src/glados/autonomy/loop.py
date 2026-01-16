@@ -13,6 +13,7 @@ from .interaction_state import InteractionState
 from .slots import TaskSlotStore
 from ..observability import ObservabilityBus, trim_message
 from ..vision.vision_state import VisionState
+from ..core.llm_tracking import InFlightCounter
 
 
 class AutonomyLoop:
@@ -28,6 +29,7 @@ class AutonomyLoop:
         currently_speaking_event: threading.Event,
         shutdown_event: threading.Event,
         observability_bus: ObservabilityBus | None = None,
+        inflight_counter: InFlightCounter | None = None,
         pause_time: float = 0.1,
     ) -> None:
         self._config = config
@@ -40,6 +42,7 @@ class AutonomyLoop:
         self._currently_speaking_event = currently_speaking_event
         self._shutdown_event = shutdown_event
         self._observability_bus = observability_bus
+        self._inflight_counter = inflight_counter
         self._pause_time = pause_time
         self._last_prompt_ts = 0.0
         self._last_scene: str | None = None
@@ -56,6 +59,9 @@ class AutonomyLoop:
                 continue
 
             if self._should_skip():
+                continue
+
+            if isinstance(event, TimeTickEvent) and self._pending_autonomy():
                 continue
 
             prompt = self._build_prompt(event)
@@ -82,7 +88,16 @@ class AutonomyLoop:
                 message=trim_message(prompt),
             )
         logger.success("Autonomy dispatch: {}", trim_message(prompt))
-        self._llm_queue.put({"role": "user", "content": prompt, "autonomy": True})
+        payload = {
+            "role": "user",
+            "content": prompt,
+            "autonomy": True,
+            "_enqueued_at": time.time(),
+            "_lane": "autonomy",
+        }
+        if not self._enqueue_llm(payload):
+            logger.warning("Autonomy dispatch dropped: LLM queue is full.")
+            return
         self._processing_active_event.set()
         self._last_prompt_ts = time.time()
 
@@ -146,6 +161,21 @@ class AutonomyLoop:
             meta_text = f" ({', '.join(meta_parts)})" if meta_parts else ""
             lines.append(f"{slot.title}: {slot.status}{summary_text}{meta_text}")
         return "\n".join(lines)
+
+    def _enqueue_llm(self, item: dict[str, Any]) -> bool:
+        try:
+            self._llm_queue.put_nowait(item)
+        except queue.Full:
+            return False
+        return True
+
+    def _pending_autonomy(self) -> bool:
+        inflight = self._inflight_counter.value() if self._inflight_counter else 0
+        try:
+            queued = self._llm_queue.qsize()
+        except NotImplementedError:
+            queued = 0
+        return (inflight + queued) > 0
 
     def update_slot(
         self,

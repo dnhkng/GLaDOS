@@ -21,7 +21,8 @@ class ToolExecutor:
 
     def __init__(
         self,
-        llm_queue: queue.Queue[dict[str, Any]],
+        llm_queue_priority: queue.Queue[dict[str, Any]],
+        llm_queue_autonomy: queue.Queue[dict[str, Any]],
         tool_calls_queue: queue.Queue[dict[str, Any]],
         processing_active_event: threading.Event,  # To check if we should stop streaming
         shutdown_event: threading.Event,
@@ -31,7 +32,8 @@ class ToolExecutor:
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
     ) -> None:
-        self.llm_queue = llm_queue
+        self.llm_queue_priority = llm_queue_priority
+        self.llm_queue_autonomy = llm_queue_autonomy
         self.tool_calls_queue = tool_calls_queue
         self.processing_active_event = processing_active_event
         self.shutdown_event = shutdown_event
@@ -65,7 +67,9 @@ class ToolExecutor:
                 started_at = time.perf_counter()
                 autonomy_mode = bool(tool_call.get("autonomy", False))
                 autonomy_flag = {"autonomy": True} if autonomy_mode else {}
-                llm_queue = self._wrap_llm_queue(self.llm_queue) if autonomy_mode else self.llm_queue
+                base_queue = self.llm_queue_autonomy if autonomy_mode else self.llm_queue_priority
+                lane = "autonomy" if autonomy_mode else "priority"
+                llm_queue = self._wrap_llm_queue(base_queue) if autonomy_mode else base_queue
                 if self._observability_bus:
                     self._observability_bus.emit(
                         source="tool",
@@ -99,14 +103,16 @@ class ToolExecutor:
                                 level="error",
                                 meta={"tool": tool, "tool_call_id": tool_call_id},
                             )
-                        llm_queue.put(
+                        self._enqueue(
+                            llm_queue,
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": tool_error,
                                 "type": "function_call_output",
                                 **autonomy_flag,
-                            }
+                            },
+                            lane=lane,
                         )
                         continue
                     try:
@@ -120,14 +126,16 @@ class ToolExecutor:
                                 meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                             )
                         logger.success("ToolExecutor: finished {}", tool)
-                        llm_queue.put(
+                        self._enqueue(
+                            llm_queue,
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": str(result),
                                 "type": "function_call_output",
                                 **autonomy_flag,
-                            }
+                            },
+                            lane=lane,
                         )
                     except Exception as e:
                         tool_error = f"error: MCP tool '{tool}' failed - {e}"
@@ -140,14 +148,16 @@ class ToolExecutor:
                                 level="error",
                                 meta={"tool": tool, "tool_call_id": tool_call_id},
                             )
-                        llm_queue.put(
+                        self._enqueue(
+                            llm_queue,
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": tool_error,
                                 "type": "function_call_output",
                                 **autonomy_flag,
-                            }
+                            },
+                            lane=lane,
                         )
                     continue
 
@@ -180,14 +190,16 @@ class ToolExecutor:
                                     level="warning",
                                     meta={"tool": tool, "tool_call_id": tool_call_id},
                                 )
-                            self.llm_queue.put(
+                            self._enqueue(
+                                llm_queue,
                                 {
                                     "role": "tool",
                                     "tool_call_id": tool_call_id,
                                     "content": timeout_error,
                                     "type": "function_call_output",
                                     **autonomy_flag,
-                                }
+                                },
+                                lane=lane,
                             )
                 else:
                     tool_error = f"error: no tool named {tool} is available"
@@ -200,14 +212,16 @@ class ToolExecutor:
                             level="error",
                             meta={"tool": tool, "tool_call_id": tool_call_id},
                         )
-                    self.llm_queue.put(
+                    self._enqueue(
+                        llm_queue,
                         {
                             "role": "tool",
                             "tool_call_id": tool_call_id,
                             "content": tool_error,
                             "type": "function_call_output",
                             **autonomy_flag,
-                        }
+                        },
+                        lane=lane,
                     )
             except queue.Empty:
                 pass  # Normal
@@ -225,9 +239,27 @@ class ToolExecutor:
             def put(self, item: dict[str, Any]) -> None:
                 if "autonomy" not in item:
                     item = {**item, "autonomy": True}
-                self._base_queue.put(item)
+                if "_enqueued_at" not in item:
+                    item = {**item, "_enqueued_at": time.time(), "_lane": "autonomy"}
+                try:
+                    self._base_queue.put_nowait(item)
+                except queue.Full:
+                    logger.warning("ToolExecutor: dropped autonomy tool output because LLM queue is full.")
 
             def put_nowait(self, item: dict[str, Any]) -> None:
                 self.put(item)
 
         return AutonomyQueue(llm_queue)
+
+    @staticmethod
+    def _enqueue(
+        target_queue: queue.Queue[dict[str, Any]],
+        item: dict[str, Any],
+        lane: str = "priority",
+    ) -> None:
+        try:
+            if "_enqueued_at" not in item:
+                item = {**item, "_enqueued_at": time.time(), "_lane": lane}
+            target_queue.put_nowait(item)
+        except queue.Full:
+            logger.warning("ToolExecutor: dropped tool output because LLM queue is full.")

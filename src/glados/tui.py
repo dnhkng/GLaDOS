@@ -368,7 +368,8 @@ class ThemePickerScreen(ModalScreen[None]):
 
     def on_option_list_option_selected(self, message: OptionList.OptionSelected) -> None:
         app = cast(GladosUI, self.app)
-        selected = message.option.prompt.plain
+        prompt = message.option.prompt
+        selected = prompt.plain if hasattr(prompt, "plain") else str(prompt)
         app._apply_theme(selected)
         app.notify(f"Theme set to {selected}.", title="Theme", timeout=3)
         self.dismiss()
@@ -477,6 +478,38 @@ class GladosUI(App[None]):
 
     COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
     THEMES: ClassVar[tuple[str, ...]] = ("aperture", "ice", "matrix", "mono", "ember")
+    THEME_VARIABLES: ClassVar[dict[str, dict[str, str]]] = {
+        "aperture": {
+            "primary": "#ffb000",
+            "foreground": "#ffb000",
+            "background": "#282828",
+            "surface": "#282828",
+        },
+        "ice": {
+            "primary": "#7dd3fc",
+            "foreground": "#e0f2fe",
+            "background": "#0b1220",
+            "surface": "#0f172a",
+        },
+        "matrix": {
+            "primary": "#22c55e",
+            "foreground": "#d1fae5",
+            "background": "#0a0f0a",
+            "surface": "#0f1a10",
+        },
+        "mono": {
+            "primary": "#e5e7eb",
+            "foreground": "#f9fafb",
+            "background": "#111827",
+            "surface": "#0b1020",
+        },
+        "ember": {
+            "primary": "#f97316",
+            "foreground": "#fdba74",
+            "background": "#1f1308",
+            "surface": "#2a1a0b",
+        },
+    }
     ENABLE_COMMAND_PALETTE = True
 
     TITLE = "GlaDOS v 1.09"
@@ -626,6 +659,17 @@ class GladosUI(App[None]):
         if hasattr(self, "glados_engine_instance") and self.glados_engine_instance is not None:
             logger.info("Signalling GLaDOS engine to stop...")
             self.glados_engine_instance.shutdown_event.set()
+
+    def get_css_variables(self) -> dict[str, str]:
+        variables = super().get_css_variables()
+        theme_name = (
+            getattr(self, "_active_theme", None)
+            or getattr(self, "_theme_override", None)
+            or "aperture"
+        )
+        theme_vars = self.THEME_VARIABLES.get(theme_name, self.THEME_VARIABLES["aperture"])
+        variables.update(theme_vars)
+        return variables
 
     def action_help(self) -> None:
         """Someone pressed the help key!."""
@@ -857,6 +901,7 @@ class GladosUI(App[None]):
             self.remove_class(f"theme-{name}")
         self.add_class(f"theme-{theme_name}")
         self._active_theme = theme_name
+        self.refresh_css(animate=False)
         return theme_name
 
     def _theme_label(self) -> str:

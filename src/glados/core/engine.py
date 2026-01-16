@@ -33,6 +33,7 @@ from .audio_data import AudioMessage
 from .audio_state import AudioState
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
+from .llm_tracking import InFlightCounter
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
 from .text_listener import TextListener
@@ -289,7 +290,12 @@ class Glados:
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
         # Initialize queues for inter-thread communication
-        self.llm_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Data from SpeechListener and ToolExecutor to LLMProcessor
+        self._conversation_lock = threading.Lock()
+        self._autonomy_inflight = InFlightCounter()
+        self.llm_queue_priority: queue.Queue[dict[str, Any]] = queue.Queue()
+        autonomy_queue_max = self.autonomy_config.autonomy_queue_max
+        autonomy_queue_size = autonomy_queue_max if autonomy_queue_max and autonomy_queue_max > 0 else 0
+        self.llm_queue_autonomy: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=autonomy_queue_size)
         self.tool_calls_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Tool calls from LLMProcessor to ToolExecutor
         self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
@@ -315,7 +321,7 @@ class Glados:
         if self.input_mode in {"audio", "both"}:
             self.speech_listener = SpeechListener(
                 audio_io=self.audio_io,
-                llm_queue=self.llm_queue,
+                llm_queue=self.llm_queue_priority,
                 asr_model=self._asr_model,
                 wake_word=self.wake_word,
                 interruptible=self.interruptible,
@@ -332,7 +338,7 @@ class Glados:
             if self.input_mode == "text":
                 logger.info("Text input mode enabled. ASR is disabled.")
             self.text_listener = TextListener(
-                llm_queue=self.llm_queue,
+                llm_queue=self.llm_queue_priority,
                 processing_active_event=self.processing_active_event,
                 shutdown_event=self.shutdown_event,
                 pause_time=self.PAUSE_TIME,
@@ -342,7 +348,7 @@ class Glados:
             )
 
         self.llm_processor = LanguageModelProcessor(
-            llm_input_queue=self.llm_queue,
+            llm_input_queue=self.llm_queue_priority,
             tool_calls_queue=self.tool_calls_queue,
             tts_input_queue=self.tts_queue,
             conversation_history=self._messages,  # Shared, to be refactored
@@ -358,10 +364,41 @@ class Glados:
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
             extra_headers=llm_headers,
+            conversation_lock=self._conversation_lock,
+            lane="priority",
         )
+        self.autonomy_llm_processors: list[LanguageModelProcessor] = []
+        autonomy_parallel_calls = 0
+        if self.autonomy_config.enabled:
+            autonomy_parallel_calls = max(0, self.autonomy_config.autonomy_parallel_calls)
+        for _ in range(autonomy_parallel_calls):
+            self.autonomy_llm_processors.append(
+                LanguageModelProcessor(
+                    llm_input_queue=self.llm_queue_autonomy,
+                    tool_calls_queue=self.tool_calls_queue,
+                    tts_input_queue=self.tts_queue,
+                    conversation_history=self._messages,
+                    completion_url=self.completion_url,
+                    model_name=self.llm_model,
+                    api_key=self.api_key,
+                    processing_active_event=self.processing_active_event,
+                    shutdown_event=self.shutdown_event,
+                    pause_time=self.PAUSE_TIME,
+                    vision_state=self.vision_state,
+                    slot_store=self.autonomy_slots,
+                    autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
+                    mcp_manager=self.mcp_manager,
+                    observability_bus=self.observability_bus,
+                    extra_headers=llm_headers,
+                    conversation_lock=self._conversation_lock,
+                    lane="autonomy",
+                    inflight_counter=self._autonomy_inflight,
+                )
+            )
 
         self.tool_executor = ToolExecutor(
-            llm_queue=self.llm_queue,
+            llm_queue_priority=self.llm_queue_priority,
+            llm_queue_autonomy=self.llm_queue_autonomy,
             tool_calls_queue=self.tool_calls_queue,
             processing_active_event=self.processing_active_event,
             shutdown_event=self.shutdown_event,
@@ -400,6 +437,7 @@ class Glados:
             tts_muted_event=self.tts_muted_event,
             interaction_state=self.interaction_state,
             observability_bus=self.observability_bus,
+            conversation_lock=self._conversation_lock,
         )
 
         self.vision_processor = None
@@ -425,11 +463,12 @@ class Glados:
                 interaction_state=self.interaction_state,
                 vision_state=self.vision_state,
                 slot_store=self.autonomy_slots,
-                llm_queue=self.llm_queue,
+                llm_queue=self.llm_queue_autonomy,
                 processing_active_event=self.processing_active_event,
                 currently_speaking_event=self.currently_speaking_event,
                 shutdown_event=self.shutdown_event,
                 observability_bus=self.observability_bus,
+                inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
             if not self.vision_config:
@@ -445,6 +484,8 @@ class Glados:
             "TTSSynthesizer": self.tts_synthesizer.run,
             "AudioPlayer": self.speech_player.run,
         }
+        for index, processor in enumerate(self.autonomy_llm_processors, start=1):
+            thread_targets[f"LLMProcessorAutonomy-{index}"] = processor.run
         if self.speech_listener:
             thread_targets["SpeechListener"] = self.speech_listener.run
         if self.text_listener:
@@ -668,7 +709,14 @@ class Glados:
                 kind="user_input",
                 message=trim_message(text),
             )
-        self.llm_queue.put({"role": "user", "content": text})
+        self.llm_queue_priority.put(
+            {
+                "role": "user",
+                "content": text,
+                "_enqueued_at": time.time(),
+                "_lane": "priority",
+            }
+        )
         if self.interaction_state:
             self.interaction_state.mark_user()
         self.processing_active_event.set()

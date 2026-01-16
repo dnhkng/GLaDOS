@@ -11,6 +11,7 @@ import queue
 import selectors
 import sys
 import threading
+import time
 from typing import Any, Callable, TextIO
 
 from loguru import logger
@@ -78,7 +79,14 @@ class TextListener:
                         kind="user_input",
                         message=trim_message(text),
                     )
-                self.llm_queue.put({"role": "user", "content": text})
+                self.llm_queue.put(
+                    {
+                        "role": "user",
+                        "content": text,
+                        "_enqueued_at": time.time(),
+                        "_lane": "priority",
+                    }
+                )
                 if self._interaction_state:
                     self._interaction_state.mark_user()
                 self.processing_active_event.set()

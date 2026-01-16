@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, conint
 
 
 class HackerNewsJobConfig(BaseModel):
@@ -29,6 +29,8 @@ class AutonomyConfig(BaseModel):
     enabled: bool = False
     tick_interval_s: float = 10.0
     cooldown_s: float = 20.0
+    autonomy_parallel_calls: conint(ge=1, le=16) = 2
+    autonomy_queue_max: int | None = None
     jobs: AutonomyJobsConfig = AutonomyJobsConfig()
     system_prompt: str = (
         "You are running in autonomous mode. "

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import queue
 import threading
 import time
@@ -30,6 +32,7 @@ class SpeechPlayer:
         tts_muted_event: threading.Event | None = None,
         interaction_state: "InteractionState | None" = None,
         observability_bus: ObservabilityBus | None = None,
+        conversation_lock: threading.Lock | None = None,
     ) -> None:
         self.audio_io = audio_io
         self.audio_output_queue = audio_output_queue
@@ -42,6 +45,7 @@ class SpeechPlayer:
         self._tts_muted_event = tts_muted_event
         self._interaction_state = interaction_state
         self._observability_bus = observability_bus
+        self._conversation_lock = conversation_lock
 
     def run(self) -> None:
         """
@@ -62,9 +66,15 @@ class SpeechPlayer:
                 if audio_msg.is_eos:
                     logger.debug("AudioPlayer: Processing end of stream token.")
                     if assistant_text_accumulator:
-                        self.conversation_history.append(
-                            {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
-                        )
+                        if self._conversation_lock:
+                            with self._conversation_lock:
+                                self.conversation_history.append(
+                                    {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
+                                )
+                        else:
+                            self.conversation_history.append(
+                                {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
+                            )
                     assistant_text_accumulator = []
                     self.currently_speaking_event.clear()
                     continue
@@ -126,17 +136,33 @@ class SpeechPlayer:
                             )
 
                         assistant_text_accumulator.append(clipped_text)
-                        self.conversation_history.append(
-                            {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
-                        )
-                        self.conversation_history.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"[SYSTEM: User interrupted mid-response! Full intended output: '{audio_msg.text}']"
-                                ),
-                            }
-                        )
+                        if self._conversation_lock:
+                            with self._conversation_lock:
+                                self.conversation_history.append(
+                                    {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
+                                )
+                                self.conversation_history.append(
+                                    {
+                                        "role": "user",
+                                        "content": (
+                                            "[SYSTEM: User interrupted mid-response! Full intended output: "
+                                            f"'{audio_msg.text}']"
+                                        ),
+                                    }
+                                )
+                        else:
+                            self.conversation_history.append(
+                                {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
+                            )
+                            self.conversation_history.append(
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "[SYSTEM: User interrupted mid-response! Full intended output: "
+                                        f"'{audio_msg.text}']"
+                                    ),
+                                }
+                            )
                         assistant_text_accumulator = []  # Reset accumulator
                         self._clear_audio_queue()
 

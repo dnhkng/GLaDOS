@@ -68,6 +68,7 @@ class MCPManager:
 
         self._resource_lock = threading.Lock()
         self._resource_cache: dict[tuple[str, str], _ResourceCacheEntry] = {}
+        self._resource_refreshing: set[tuple[str, str]] = set()
 
         self._session_tasks: dict[str, asyncio.Task[None]] = {}
         self._sessions: dict[str, ClientSession] = {}
@@ -98,7 +99,7 @@ class MCPManager:
         entries.sort(key=lambda item: item[0])
         return [self._tool_entry_to_definition(tool_name, entry) for tool_name, entry in entries]
 
-    def get_context_messages(self, timeout: float = 5.0) -> list[dict[str, str]]:
+    def get_context_messages(self, timeout: float = 5.0, block: bool = True) -> list[dict[str, str]]:
         if not self._servers:
             return []
         messages: list[dict[str, str]] = []
@@ -106,9 +107,14 @@ class MCPManager:
             if not server.context_resources:
                 continue
             for uri in server.context_resources:
-                cached = self._get_cached_resource(server.name, uri)
+                cached = self._get_cached_resource(server.name, uri, allow_expired=not block)
                 if cached:
                     messages.append(cached.message)
+                    if cached.expires_at < time.time():
+                        self._schedule_resource_refresh(server.name, uri, server.resource_ttl_s)
+                    continue
+                if not block:
+                    self._schedule_resource_refresh(server.name, uri, server.resource_ttl_s)
                     continue
                 fetched = self._fetch_resource(server.name, uri, timeout)
                 if fetched:
@@ -304,15 +310,53 @@ class MCPManager:
             return None
         return await self._read_resource(session, server_name, uri)
 
+    async def _refresh_resource_async(self, server_name: str, uri: str, ttl: float) -> None:
+        try:
+            message = await self._fetch_resource_async(server_name, uri)
+            if message:
+                self._cache_resource(server_name, uri, message, ttl)
+        except Exception as exc:
+            logger.warning(f"MCP: failed to refresh resource '{uri}' from {server_name}: {exc}")
+        finally:
+            self._mark_resource_refresh_complete(server_name, uri)
+
+    def _schedule_resource_refresh(self, server_name: str, uri: str, ttl: float) -> None:
+        if self._loop is None:
+            return
+        key = (server_name, uri)
+        with self._resource_lock:
+            if key in self._resource_refreshing:
+                return
+            self._resource_refreshing.add(key)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self._refresh_resource_async(server_name, uri, ttl),
+                self._loop,
+            )
+        except RuntimeError as exc:
+            logger.warning(f"MCP: failed to schedule refresh for '{uri}' from {server_name}: {exc}")
+            self._mark_resource_refresh_complete(server_name, uri)
+
+    def _mark_resource_refresh_complete(self, server_name: str, uri: str) -> None:
+        with self._resource_lock:
+            self._resource_refreshing.discard((server_name, uri))
+
     def _cache_resource(self, server_name: str, uri: str, message: dict[str, str], ttl: float) -> None:
         expires_at = time.time() + ttl if ttl > 0 else time.time()
         with self._resource_lock:
             self._resource_cache[(server_name, uri)] = _ResourceCacheEntry(message=message, expires_at=expires_at)
 
-    def _get_cached_resource(self, server_name: str, uri: str) -> _ResourceCacheEntry | None:
+    def _get_cached_resource(
+        self,
+        server_name: str,
+        uri: str,
+        allow_expired: bool = False,
+    ) -> _ResourceCacheEntry | None:
         with self._resource_lock:
             entry = self._resource_cache.get((server_name, uri))
-        if entry and entry.expires_at >= time.time():
+        if not entry:
+            return None
+        if allow_expired or entry.expires_at >= time.time():
             return entry
         return None
 
@@ -321,6 +365,9 @@ class MCPManager:
             keys = [key for key in self._resource_cache if key[0] == server_name]
             for key in keys:
                 self._resource_cache.pop(key, None)
+            refreshing = {key for key in self._resource_refreshing if key[0] == server_name}
+            for key in refreshing:
+                self._resource_refreshing.discard(key)
 
     def _remove_tools_for_server(self, server_name: str) -> None:
         with self._tool_lock:

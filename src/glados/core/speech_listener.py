@@ -8,6 +8,7 @@ voice activity detection, speech recognition, and wake word detection.
 from collections import deque
 import queue
 import threading
+import time
 from typing import Any
 
 from Levenshtein import distance
@@ -275,7 +276,14 @@ class SpeechListener:
                         kind="user_input",
                         message=trim_message(detected_text),
                     )
-                self.llm_queue.put({"role": "user", "content": detected_text})
+                self.llm_queue.put(
+                    {
+                        "role": "user",
+                        "content": detected_text,
+                        "_enqueued_at": time.time(),
+                        "_lane": "priority",
+                    }
+                )
                 if self._interaction_state:
                     self._interaction_state.mark_user()
                 self.processing_active_event.set()
