@@ -4,13 +4,13 @@ import math
 from datetime import datetime
 from pathlib import Path
 import sys
-from typing import ClassVar, cast
+from typing import ClassVar, cast, Iterable
 from urllib.parse import urlparse
 
 from loguru import logger
 from rich.text import Text
 from textual import events
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -340,6 +340,40 @@ class HelpScreen(ModalScreen[None]):
         dialog.border_subtitle = "Press Esc to close"
 
 
+class ThemePickerScreen(ModalScreen[None]):
+    """Theme picker for the command palette and /theme command."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    TITLE = "Themes"
+
+    def compose(self) -> ComposeResult:
+        with Container(id="theme_dialog"):
+            yield Label(self.TITLE, id="theme_title")
+            yield OptionList(id="theme_list")
+            yield Static("Enter to select • Esc to cancel", id="theme_hint")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#theme_dialog")
+        dialog.border_title = self.TITLE
+        dialog.border_title_align = "center"
+        option_list = self.query_one("#theme_list", OptionList)
+        app = cast(GladosUI, self.app)
+        option_list.clear_options()
+        option_list.add_options(list(app.THEMES))
+        if app._active_theme in app.THEMES:
+            option_list.highlighted = app.THEMES.index(app._active_theme)
+
+    def on_option_list_option_selected(self, message: OptionList.OptionSelected) -> None:
+        app = cast(GladosUI, self.app)
+        selected = message.option.prompt.plain
+        app._apply_theme(selected)
+        app.notify(f"Theme set to {selected}.", title="Theme", timeout=3)
+        self.dismiss()
+
+
 class ObservabilityScreen(ModalScreen[None]):
     """Live observability log for system events."""
 
@@ -443,7 +477,7 @@ class GladosUI(App[None]):
 
     COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
     THEMES: ClassVar[tuple[str, ...]] = ("aperture", "ice", "matrix", "mono", "ember")
-    ENABLE_COMMAND_PALETTE = False
+    ENABLE_COMMAND_PALETTE = True
 
     TITLE = "GlaDOS v 1.09"
 
@@ -597,6 +631,14 @@ class GladosUI(App[None]):
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
 
+    def action_theme_picker(self) -> None:
+        """Open the theme picker modal."""
+        self.push_screen(ThemePickerScreen(id="theme_picker_screen"))
+
+    def action_change_theme(self) -> None:
+        """Override Textual's default theme picker with our custom themes."""
+        self.action_theme_picker()
+
     def action_command(self) -> None:
         """Focus the command input."""
         command_input = self.query_one("#command_input", Input)
@@ -608,6 +650,11 @@ class GladosUI(App[None]):
     def action_observability(self) -> None:
         """Open the observability screen."""
         self.push_screen(ObservabilityScreen(id="observability_screen"))
+
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        yield SystemCommand("Choose color scheme", "Switch the TUI theme", self.action_theme_picker)
+        yield SystemCommand("Observability", "Open the observability screen", self.action_observability)
+        yield SystemCommand("Quit", "Quit the application", self.action_quit)
 
     # def on_key(self, event: events.Key) -> None:
     #     """Useful for debugging via key presses."""
@@ -657,11 +704,7 @@ class GladosUI(App[None]):
             if command.startswith("/theme"):
                 parts = command.split()
                 if len(parts) == 1:
-                    self.notify(
-                        f"Theme: {self._theme_label()} (options: {', '.join(self.THEMES)})",
-                        title="Theme",
-                        timeout=4,
-                    )
+                    self.action_theme_picker()
                     return
                 theme = self._apply_theme(parts[1])
                 self.notify(f"Theme set to {theme}.", title="Theme", timeout=4)

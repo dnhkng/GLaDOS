@@ -217,6 +217,32 @@ HeaderClock {
     width: 60;
 }
 
+#theme_dialog {
+    border-title-align: center;
+    border: $primary 70% panel;
+    color: $primary;
+    padding: 1 2;
+    height: 14;
+    width: 48;
+}
+
+#theme_title {
+    color: $primary;
+    text-style: bold;
+    height: 1;
+}
+
+#theme_list {
+    height: 1fr;
+    border: solid $primary 40%;
+    padding: 0 1;
+}
+
+#theme_hint {
+    color: $foreground 70%;
+    padding-top: 1;
+}
+
 
 /* ====================================================== */
 /* ==================== Splash screen =================== */
