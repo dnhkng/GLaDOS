@@ -17,6 +17,41 @@ $foreground: #ffb000;
 $background: #282828;
 $surface: $background;
 
+App.theme-aperture {
+    $primary: #ffb000;
+    $foreground: #ffb000;
+    $background: #282828;
+    $surface: #282828;
+}
+
+App.theme-ice {
+    $primary: #7dd3fc;
+    $foreground: #e0f2fe;
+    $background: #0b1220;
+    $surface: #0f172a;
+}
+
+App.theme-matrix {
+    $primary: #22c55e;
+    $foreground: #d1fae5;
+    $background: #0a0f0a;
+    $surface: #0f1a10;
+}
+
+App.theme-mono {
+    $primary: #e5e7eb;
+    $foreground: #f9fafb;
+    $background: #111827;
+    $surface: #0b1020;
+}
+
+App.theme-ember {
+    $primary: #f97316;
+    $foreground: #fdba74;
+    $background: #1f1308;
+    $surface: #2a1a0b;
+}
+
 
 
 

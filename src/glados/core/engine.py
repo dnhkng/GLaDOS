@@ -103,6 +103,7 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None
     llm_headers: dict[str, str] | None = None
+    tui_theme: str | None = None
     personality_preprompt: list[PersonalityPrompt]
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0

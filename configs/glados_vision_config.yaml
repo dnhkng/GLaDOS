@@ -6,6 +6,7 @@ Glados:
   audio_io: "sounddevice"
   tts_enabled: true
   asr_muted: false
+  tui_theme: "aperture"
   asr_engine: "ctc"
   llm_headers: null  # Optional extra headers (e.g., OpenRouter HTTP-Referer, X-Title)
   wake_word: null

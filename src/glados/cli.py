@@ -246,6 +246,7 @@ def tui(
     input_mode: str | None = None,
     tts_enabled: bool | None = None,
     asr_muted: bool | None = None,
+    theme: str | None = None,
 ) -> None:
     """
     Start the GLaDOS voice assistant with a terminal user interface (TUI).
@@ -264,6 +265,7 @@ def tui(
             input_mode=input_mode,
             tts_enabled=tts_enabled,
             asr_muted=asr_muted,
+            theme=theme,
         )
         app.run()
     except KeyboardInterrupt:
@@ -380,6 +382,12 @@ def main() -> int:
         help="Disable TTS output",
     )
     tui_tts_group.set_defaults(tts_enabled=None)
+    tui_parser.add_argument(
+        "--theme",
+        type=str,
+        default=None,
+        help="Override TUI theme (aperture, ice, matrix, mono, ember)",
+    )
 
     # Say command
     say_parser = subparsers.add_parser("say", help="Make GLaDOS speak text")
@@ -414,6 +422,7 @@ def main() -> int:
                 input_mode=args.input_mode,
                 tts_enabled=args.tts_enabled,
                 asr_muted=args.asr_muted,
+                theme=args.theme,
             )
         else:
             # Default to start if no command specified

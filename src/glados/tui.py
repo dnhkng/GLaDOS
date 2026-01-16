@@ -442,6 +442,8 @@ class GladosUI(App[None]):
     CSS_PATH = "glados_ui/glados.tcss"
 
     COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
+    THEMES: ClassVar[tuple[str, ...]] = ("aperture", "ice", "matrix", "mono", "ember")
+    ENABLE_COMMAND_PALETTE = False
 
     TITLE = "GlaDOS v 1.09"
 
@@ -466,6 +468,8 @@ class GladosUI(App[None]):
     _input_mode_override: str | None
     _tts_enabled_override: bool | None
     _asr_muted_override: bool | None
+    _theme_override: str | None
+    _active_theme: str | None
 
     def __init__(
         self,
@@ -473,6 +477,7 @@ class GladosUI(App[None]):
         input_mode: str | None = None,
         tts_enabled: bool | None = None,
         asr_muted: bool | None = None,
+        theme: str | None = None,
     ) -> None:
         super().__init__()
         default_config = resource_path("configs/glados_config.yaml")
@@ -480,6 +485,8 @@ class GladosUI(App[None]):
         self._input_mode_override = input_mode
         self._tts_enabled_override = tts_enabled
         self._asr_muted_override = asr_muted
+        self._theme_override = theme
+        self._active_theme = None
 
     def compose(self) -> ComposeResult:
         """
@@ -551,6 +558,7 @@ class GladosUI(App[None]):
 
         logger.remove()
         fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
+        self._apply_theme(self._resolve_theme())
 
         self.instantiation_worker = None  # Reset the instantiation worker reference
         self.start_instantiation()
@@ -646,6 +654,18 @@ class GladosUI(App[None]):
             if command in {"/observe", "/observability"}:
                 self.action_observability()
                 return
+            if command.startswith("/theme"):
+                parts = command.split()
+                if len(parts) == 1:
+                    self.notify(
+                        f"Theme: {self._theme_label()} (options: {', '.join(self.THEMES)})",
+                        title="Theme",
+                        timeout=4,
+                    )
+                    return
+                theme = self._apply_theme(parts[1])
+                self.notify(f"Theme set to {theme}.", title="Theme", timeout=4)
+                return
             if not self.glados_engine_instance:
                 self.notify("Engine not ready.", severity="warning")
                 return
@@ -725,23 +745,29 @@ class GladosUI(App[None]):
 
     def _command_names(self) -> list[str]:
         engine = self.glados_engine_instance
-        if not engine:
-            return []
         names: list[str] = []
-        for spec in engine.command_specs():
-            names.append(f"/{spec.name}")
-            for alias in spec.aliases:
-                names.append(f"/{alias}")
+        if engine:
+            for spec in engine.command_specs():
+                names.append(f"/{spec.name}")
+                for alias in spec.aliases:
+                    names.append(f"/{alias}")
+        names.extend(["/observe", "/quit", "/theme"])
         return names
 
     def _command_entries(self) -> list[tuple[str, str]]:
         engine = self.glados_engine_instance
-        if not engine:
-            return []
         entries: list[tuple[str, str]] = []
-        for spec in engine.command_specs():
-            label = f"/{spec.name}"
-            entries.append((label, spec.description))
+        if engine:
+            for spec in engine.command_specs():
+                label = f"/{spec.name}"
+                entries.append((label, spec.description))
+        entries.extend(
+            [
+                ("/observe", "Open observability screen"),
+                ("/quit", "Quit GLaDOS"),
+                ("/theme", "Switch TUI theme"),
+            ]
+        )
         return entries
 
     def _update_command_hints(self, value: str) -> None:
@@ -767,6 +793,31 @@ class GladosUI(App[None]):
             return
         self._show_command_palette(matches)
         self._tips_panel.update("Up/Down to select, Tab to complete, Enter to run.")
+
+    def _resolve_theme(self) -> str:
+        if self._theme_override:
+            return self._theme_override
+        try:
+            config = GladosConfig.from_yaml(str(self._config_path))
+            if config.tui_theme:
+                return config.tui_theme
+        except Exception as exc:
+            logger.warning("TUI theme load failed: {}", exc)
+        return "aperture"
+
+    def _apply_theme(self, theme: str | None) -> str:
+        theme_name = (theme or "aperture").strip().casefold()
+        if theme_name not in self.THEMES:
+            logger.warning("Unknown theme '{}', defaulting to aperture.", theme_name)
+            theme_name = "aperture"
+        for name in self.THEMES:
+            self.remove_class(f"theme-{name}")
+        self.add_class(f"theme-{theme_name}")
+        self._active_theme = theme_name
+        return theme_name
+
+    def _theme_label(self) -> str:
+        return self._active_theme or "aperture"
 
     def _show_command_palette(self, matches: list[tuple[str, str]]) -> None:
         if self._command_palette is None:

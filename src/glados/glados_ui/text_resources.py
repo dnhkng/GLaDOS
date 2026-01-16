@@ -39,6 +39,7 @@ welcome_tips = (
     "- /help for command list\n"
     "- /status for system status\n"
     "- /observe to view event stream\n"
+    "- /theme aperture|ice|matrix|mono|ember\n"
     "- Type a message and press Enter"
 )
 
@@ -49,6 +50,7 @@ shortcuts_text = (
     "?       shortcuts\n"
     "q       quit\n"
     "Esc     close dialogs\n"
+    "/theme  switch color scheme\n"
     "Up/Down select command\n"
     "Tab     complete command"
 )
