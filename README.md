@@ -17,6 +17,27 @@ See [autonomy.md](/autonomy.md) for the vision/time-driven autonomy loop.
 ## MCP Integration
 See [mcp.md](/mcp.md) for Model Context Protocol setup and demo server usage.
 
+### How MCP Servers Work
+MCP servers are lightweight helper processes that expose tools and resources to GLaDOS. Each server
+registers functions (tools) via the MCP protocol, and GLaDOS calls them as `mcp.<server>.<tool>`.
+Servers can run locally over stdio (fast, no network) or remotely over HTTP/SSE.
+
+Local servers included in this repo (enable in `configs/glados_config.yaml`):
+- `system_info`: CPU load, memory usage, temperatures, system overview
+- `time_info`: current time, uptime, boot time
+- `disk_info`: disk usage and mounts
+- `network_info`: host info and network interfaces
+- `process_info`: process count and top memory users
+- `power_info`: battery status
+
+To enable one, add a server entry like:
+```
+  - name: "system_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.system_info_server"]
+```
+
 ## Update 3-1-2025 *Got GLaDOS running on an 8Gb SBC!*
 
 https://github.com/user-attachments/assets/99e599bb-4701-438a-a311-8e6cd595796c
