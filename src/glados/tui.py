@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 from typing import ClassVar, cast
+from urllib.parse import urlparse
 
 from loguru import logger
 from rich.text import Text
@@ -15,11 +16,11 @@ from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.suggester import Suggester
-from textual.widgets import Footer, Header, Input, Label, RichLog, Static
+from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Static
 from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
-from glados.glados_ui.text_resources import aperture, help_text, login_text
+from glados.glados_ui.text_resources import shortcuts_text, welcome_tips
 from glados.observability import ObservabilityEvent
 from glados.utils.resources import resource_path
 
@@ -232,48 +233,61 @@ class CommandSuggester(Suggester):
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
 
-    # Ensure this path is correct relative to your project structure/runtime directory
-    # Using a try-except block for robustness if the file is missing
     try:
-        with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
-            SPLASH_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
+        with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
+            WELCOME_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
     except FileNotFoundError:
-        logger.error("Splash screen ANSI art file not found. Using placeholder.")
-        SPLASH_ANSI = Text.from_markup("[bold red]Splash ANSI Art Missing[/bold red]")
+        logger.error("Logo ANSI art file not found. Using placeholder.")
+        WELCOME_ANSI = Text.from_markup("[bold red]Logo ANSI Art Missing[/bold red]")
 
     def compose(self) -> ComposeResult:
         """
-        Compose the layout for the splash screen.
-
-        This method defines the visual composition of the SplashScreen, creating a container
-        with a logo, a banner, and a typewriter-style login text.
+        Compose the layout for the splash screen with a welcome panel and tips.
 
         Returns:
             ComposeResult: A generator yielding the screen's UI components, including:
-                - A container with a static ANSI logo
-                - A label displaying the aperture text
-                - A typewriter-animated login text with a slow character reveal speed
+                - A welcome panel with logo, metadata, and tips
+                - A prompt line and call-to-action
         """
-        with Container(id="splash_logo_container"):
-            yield Static(self.SPLASH_ANSI, id="splash_logo")
-            yield Label(aperture, id="banner")
-        yield Typewriter(login_text, id="login_text", speed=0.0075)
+        with Container(id="welcome_dialog"):
+            with Horizontal(id="welcome_body"):
+                with Vertical(id="welcome_left"):
+                    yield Label("Welcome back!", id="welcome_title")
+                    yield Static(self.WELCOME_ANSI, id="welcome_logo")
+                    yield Static("Model: loading...\nEndpoint: loading...\nPath: loading...", id="welcome_meta")
+                with Vertical(id="welcome_right"):
+                    yield Label("Tips for getting started", id="welcome_tips_title")
+                    yield Static(welcome_tips, id="welcome_tips")
+                    yield Label("Recent activity", id="welcome_recent_title")
+                    yield Static("No recent activity", id="welcome_recent")
+        yield Static('Try "/help" or ask a question.', id="welcome_prompt")
+        yield Static("Press any key to start.", id="welcome_cta")
 
     def on_mount(self) -> None:
-        """
-        Automatically scroll the widget to its bottom at regular intervals.
+        dialog = self.query_one("#welcome_dialog", Container)
+        dialog.border_title = GladosUI.TITLE
+        dialog.border_title_align = "center"
+        self._load_welcome_meta()
 
-        This method sets up a periodic timer to ensure the widget always displays
-        the most recent content by scrolling to the end. The scrolling occurs
-        every 0.5 seconds, providing a smooth and continuous view of the latest information.
+    def _load_welcome_meta(self) -> None:
+        app = cast(GladosUI, self.app)
+        model = "unknown"
+        endpoint = "unknown"
+        try:
+            config = GladosConfig.from_yaml(str(app._config_path))
+            model = config.llm_model
+            endpoint = self._format_endpoint(str(config.completion_url))
+        except Exception as exc:
+            logger.warning("Welcome screen failed to load config: {}", exc)
+        meta = f"Model: {model}\nEndpoint: {endpoint}\nPath: {Path.cwd()}"
+        self.query_one("#welcome_meta", Static).update(meta)
 
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        self.set_interval(0.5, self.scroll_end)
+    @staticmethod
+    def _format_endpoint(url: str) -> str:
+        host = urlparse(url).hostname or url
+        if host in {"localhost", "127.0.0.1"}:
+            return f"{host} (local)"
+        return host
 
     def on_key(self, event: events.Key) -> None:
         """
@@ -288,6 +302,9 @@ class SplashScreen(Screen[None]):
             event (events.Key): The key event that was triggered.
         """
         app = cast(GladosUI, self.app)  # mypy gets confused about app's type
+        if event.key == "question_mark":
+            app.action_help()
+            return
         if app.glados_engine_instance:
             app.glados_engine_instance.play_announcement()
             app.start_glados()
@@ -296,31 +313,31 @@ class SplashScreen(Screen[None]):
 
 
 class HelpScreen(ModalScreen[None]):
-    """The help screen. Possibly not that helpful."""
+    """Shortcut and keybinding help screen."""
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "app.pop_screen", "Close screen")
     ]
 
-    TITLE = "Help"
+    TITLE = "Shortcuts"
 
     def compose(self) -> ComposeResult:
         """
-        Compose the help screen's layout by creating a container with a typewriter widget.
+        Compose the shortcuts screen layout using a static text block.
 
-        This method generates the visual composition of the help screen, wrapping the help text
-        in a Typewriter widget for an animated text display within a Container.
+        This method generates the visual composition of the help screen, wrapping the shortcuts
+        text in a Container for easy scanning.
 
         Returns:
-            ComposeResult: A generator yielding the composed help screen container with animated text.
+            ComposeResult: A generator yielding the composed help screen container.
         """
-        yield Container(Typewriter(help_text, id="help_text"), id="help_dialog")
+        yield Container(Static(shortcuts_text, id="help_text"), id="help_dialog")
 
     def on_mount(self) -> None:
         dialog = self.query_one("#help_dialog")
         dialog.border_title = self.TITLE
         # Consistent use of explicit closing tag for blink
-        dialog.border_subtitle = "[blink]Press Esc key to continue[/blink]"
+        dialog.border_subtitle = "Press Esc to close"
 
 
 class ObservabilityScreen(ModalScreen[None]):
@@ -410,7 +427,7 @@ class ObservabilityScreen(ModalScreen[None]):
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
 
-    DEFAULT_TIPS = "Type a message (Enter to send)\nUse /help for commands"
+    DEFAULT_TIPS = "Enter to send\n/ for commands, ? for shortcuts"
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding(key="q", action="quit", description="Quit"),
@@ -424,7 +441,7 @@ class GladosUI(App[None]):
     ]
     CSS_PATH = "glados_ui/glados.tcss"
 
-    ENABLE_COMMAND_PALETTE = False
+    COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
 
     TITLE = "GlaDOS v 1.09"
 
@@ -443,6 +460,8 @@ class GladosUI(App[None]):
     _dialog_log: DialogLog | None = None
     _status_panel: StatusPanel | None = None
     _tips_panel: Static | None = None
+    _command_palette: OptionList | None = None
+    _command_matches: list[tuple[str, str]] = []
     _config_path: Path
     _input_mode_override: str | None
     _tts_enabled_override: bool | None
@@ -496,14 +515,13 @@ class GladosUI(App[None]):
                     yield Label("Hints", id="tips_title")
                     yield Static(self.DEFAULT_TIPS, id="tips_panel")
 
-        yield Container(
-            Input(
+        with Container(id="command_bar"):
+            yield OptionList(id="command_palette", classes="hidden")
+            yield Input(
                 placeholder="Type a message or /command",
                 id="command_input",
                 suggester=CommandSuggester(self._command_names),
-            ),
-            id="command_bar",
-        )
+            )
 
         yield Footer()
 
@@ -576,6 +594,7 @@ class GladosUI(App[None]):
         command_input = self.query_one("#command_input", Input)
         if not command_input.value:
             command_input.value = "/"
+            self._update_command_hints(command_input.value)
         command_input.focus()
 
     def action_observability(self) -> None:
@@ -606,9 +625,18 @@ class GladosUI(App[None]):
         if event.input.id != "command_input":
             return
         command = event.value.strip()
-        event.input.value = ""
         if not command:
+            event.input.value = ""
             return
+        if command.startswith("/") and self._palette_visible() and " " not in command:
+            selected = self._selected_command()
+            if selected and command != selected:
+                event.input.value = f"{selected} "
+                event.input.cursor_position = len(event.input.value)
+                self._update_command_hints(event.input.value)
+                return
+        event.input.value = ""
+        self._update_command_hints("")
         if command.startswith("/"):
             if command in {"/quit", "/exit"}:
                 if self.glados_engine_instance:
@@ -637,6 +665,23 @@ class GladosUI(App[None]):
         self._update_command_hints(event.value)
 
     def on_key(self, event: events.Key) -> None:
+        if self._palette_visible() and isinstance(self.focused, Input) and self.focused.id == "command_input":
+            if event.key == "up":
+                self._move_command_palette(-1)
+                event.stop()
+                return
+            if event.key == "down":
+                self._move_command_palette(1)
+                event.stop()
+                return
+            if event.key == "tab":
+                if self._complete_command_input(add_space=True):
+                    event.stop()
+                return
+            if event.key == "escape":
+                self._hide_command_palette()
+                event.stop()
+                return
         if event.key != "/":
             return
         if isinstance(self.focused, Input) and self.focused.id == "command_input":
@@ -655,12 +700,18 @@ class GladosUI(App[None]):
         self._status_panel.render_status(self)
 
     def _bind_panels(self) -> bool:
-        if self._dialog_log is not None and self._status_panel is not None and self._tips_panel is not None:
+        if (
+            self._dialog_log is not None
+            and self._status_panel is not None
+            and self._tips_panel is not None
+            and self._command_palette is not None
+        ):
             return True
         try:
             self._dialog_log = self.query_one("#dialog_log", DialogLog)
             self._status_panel = self.query_one("#status_panel", StatusPanel)
             self._tips_panel = self.query_one("#tips_panel", Static)
+            self._command_palette = self.query_one("#command_palette", OptionList)
             return True
         except NoMatches:
             return False
@@ -696,22 +747,82 @@ class GladosUI(App[None]):
     def _update_command_hints(self, value: str) -> None:
         if not self._bind_panels():
             return
-        if self._tips_panel is None:
+        if self._tips_panel is None or self._command_palette is None:
             return
         text = value.strip()
         if not text.startswith("/"):
             self._tips_panel.update(self.DEFAULT_TIPS)
+            self._hide_command_palette()
             return
         entries = self._command_entries()
         if not entries:
             self._tips_panel.update("Commands loading...")
+            self._hide_command_palette()
             return
         prefix = text.split()[0].casefold()
-        matches = [label for label, _desc in entries if label.casefold().startswith(prefix)]
+        matches = [(label, desc) for label, desc in entries if label.casefold().startswith(prefix)]
         if not matches:
             self._tips_panel.update("No matching commands. Try /help.")
+            self._hide_command_palette()
             return
-        self._tips_panel.update(f"Commands: {' '.join(matches)}")
+        self._show_command_palette(matches)
+        self._tips_panel.update("Up/Down to select, Tab to complete, Enter to run.")
+
+    def _show_command_palette(self, matches: list[tuple[str, str]]) -> None:
+        if self._command_palette is None:
+            return
+        visible_matches = matches[: self.COMMAND_PALETTE_LIMIT]
+        self._command_matches = visible_matches
+        options: list[Text] = []
+        for label, desc in visible_matches:
+            prompt = Text.assemble((label, "bold"), ("  ", ""), (desc, "dim"))
+            options.append(prompt)
+        self._command_palette.clear_options()
+        self._command_palette.add_options(options)
+        self._command_palette.highlighted = 0 if options else None
+        self._command_palette.remove_class("hidden")
+
+    def _hide_command_palette(self) -> None:
+        if self._command_palette is None:
+            return
+        self._command_palette.add_class("hidden")
+        self._command_matches = []
+
+    def _palette_visible(self) -> bool:
+        return bool(self._command_palette and not self._command_palette.has_class("hidden"))
+
+    def _selected_command(self) -> str | None:
+        if not self._command_palette or self._command_palette.option_count == 0:
+            return None
+        index = self._command_palette.highlighted
+        if index is None:
+            index = 0
+        if index < 0 or index >= len(self._command_matches):
+            return None
+        return self._command_matches[index][0]
+
+    def _move_command_palette(self, delta: int) -> None:
+        if not self._command_palette or self._command_palette.option_count == 0:
+            return
+        current = self._command_palette.highlighted
+        if current is None:
+            current = 0
+        new_index = (current + delta) % self._command_palette.option_count
+        self._command_palette.highlighted = new_index
+        self._command_palette.scroll_to_highlight()
+
+    def _complete_command_input(self, add_space: bool = True) -> bool:
+        command = self._selected_command()
+        if not command:
+            return False
+        try:
+            command_input = self.query_one("#command_input", Input)
+        except NoMatches:
+            return False
+        command_input.value = f"{command} " if add_space else command
+        command_input.cursor_position = len(command_input.value)
+        self._update_command_hints(command_input.value)
+        return True
 
     def start_glados(self) -> None:
         """

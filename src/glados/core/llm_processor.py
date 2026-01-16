@@ -148,7 +148,13 @@ class LanguageModelProcessor:
         """
         for tool_chunk in tool_chunks:
             tool_chunk_index = tool_chunk.get("index", 0)
-            if tool_chunk_index >= len(tool_calls_buffer):
+            try:
+                tool_chunk_index = int(tool_chunk_index)
+            except (TypeError, ValueError):
+                tool_chunk_index = 0
+            if tool_chunk_index < 0:
+                tool_chunk_index = 0
+            while tool_chunk_index >= len(tool_calls_buffer):
                 # we have a new tool call to initialize
                 tool_calls_buffer.append(
                     {

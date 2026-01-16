@@ -57,8 +57,26 @@ HeaderClock {
 
 #command_bar {
     margin: 0 2 1 2;
-    height: 3;
+    min-height: 3;
+    height: auto;
     border: solid $primary;
+}
+
+#command_palette {
+    height: 6;
+    border: solid $primary 40%;
+    background: $background;
+    color: $foreground;
+    padding: 0 1;
+}
+
+#command_palette.hidden {
+    display: none;
+}
+
+#command_palette > .option-list--option-highlighted {
+    background: $primary 30%;
+    color: $foreground;
 }
 
 #command_input {
@@ -140,7 +158,7 @@ HeaderClock {
 }
 
 #tips_panel {
-    height: 4;
+    height: 6;
     color: $foreground 70%;
 }
 
@@ -157,7 +175,7 @@ HeaderClock {
     border-title-style: bold;
     border: $primary 70% panel;
     color: $primary;
-    text-align: center;
+    text-align: left;
     min-height: 20;
     padding: 1 2;
     height: 20;
@@ -170,30 +188,61 @@ HeaderClock {
 /* ====================================================== */
 
 SplashScreen {
-    padding: 0 5;
+    padding: 1 2;
     scrollbar-size: 0 0;
+}
+
+#welcome_dialog {
     border: solid $primary;
+    padding: 1 2;
 }
 
-#splash_logo_container {
-    align-horizontal: center;
+#welcome_body {
     height: auto;
-    margin-bottom: 4;
 }
 
-#splash_logo {
-    width: auto;
-    padding-left: 3;
+#welcome_left {
+    width: 40%;
+    padding: 1 2;
 }
 
-#banner {
+#welcome_right {
+    width: 60%;
+    padding: 1 2;
+    border-left: solid $primary 40%;
+}
+
+#welcome_title,
+#welcome_tips_title,
+#welcome_recent_title {
     color: $primary;
+    text-style: bold;
+    height: 1;
 }
 
-#login_text {
-    color: $primary;
-    height: auto;
-    padding-bottom: 2;
+#welcome_logo {
+    padding: 1 0 1 2;
+}
+
+#welcome_meta {
+    color: $foreground 80%;
+    padding: 1 0 0 0;
+}
+
+#welcome_tips,
+#welcome_recent {
+    color: $foreground 70%;
+    padding: 0 0 1 0;
+}
+
+#welcome_prompt {
+    padding: 1 2 0 2;
+    color: $foreground;
+}
+
+#welcome_cta {
+    padding: 0 2 1 2;
+    color: $foreground 70%;
 }
 
 

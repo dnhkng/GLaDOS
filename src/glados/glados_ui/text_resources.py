@@ -35,6 +35,24 @@ help_text = (
     "If you need help accessing the system, please refer to your User Handbook."
 )
 
+welcome_tips = (
+    "- /help for command list\n"
+    "- /status for system status\n"
+    "- /observe to view event stream\n"
+    "- Type a message and press Enter"
+)
+
+shortcuts_text = (
+    "Shortcuts\n"
+    "\n"
+    "/       focus command input\n"
+    "?       shortcuts\n"
+    "q       quit\n"
+    "Esc     close dialogs\n"
+    "Up/Down select command\n"
+    "Tab     complete command"
+)
+
 
 # Why yes, since you ask, someone *did* bother to transcrbe this:
 # https://www.reddit.com/r/Portal/comments/5n3bn2/portal_computer_screens_mystery_text/
