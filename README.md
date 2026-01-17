@@ -2,7 +2,7 @@
 
 # GLaDOS Personality Core
 
-A real-life implementation of GLaDOS - an aware, interactive, and embodied AI personality core with vision, voice, and autonomous behavior.
+A real-life implementation of [GLaDOS](https://en.wikipedia.org/wiki/GLaDOS) ("Genetic Lifeform and Disk Operating System") - the iconic AI antagonist from Valve's [Portal](https://store.steampowered.com/app/400/Portal/) video game series. This project brings her to life as an aware, interactive, and embodied AI personality core with vision, voice, and autonomous behavior.
 
 [Join our Discord!](https://discord.com/invite/ERTDKwpjNB) | [Sponsor the project](https://ko-fi.com/dnhkng)
 
@@ -165,6 +165,7 @@ GLaDOS uses a **closed-loop autonomous architecture** - unlike traditional chatb
 | Emotional Regulation | :clipboard: | Subagent-driven affect state |
 | Message Compaction | :clipboard: | Hierarchical summarization |
 | Memory (Long-term) | :clipboard: | MCP-backed persistence |
+| Subagent Memory | :clipboard: | Per-agent state (jsonlines) |
 | Observer Agent | :clipboard: | Meta-supervision layer |
 | Constitution | :clipboard: | Inviolable behavioral bounds |
 
@@ -181,6 +182,60 @@ GLaDOS uses a **closed-loop autonomous architecture** - unlike traditional chatb
 **Minds (Subagents)**: Independent agents running their own loops. Some are preconfigured (Vision, Weather), others can be spawned dynamically by the main agent. Use `/minds` in the TUI to monitor them.
 
 **Input Priority**: User always wins. Vision and timer ticks are mutually exclusive triggers - if vision is enabled, scene changes drive autonomy; otherwise, periodic ticks do.
+
+**Subagent Memory**: Each subagent maintains its own independent memory (no cross-agent memory sharing). Memory is stored as a fixed-size buffer (jsonlines) sized for reasonable context. Items are only marked as "shown" when actually mentioned to the user, preventing repetition while keeping unmentioned items available.
+
+```
++------------------+
+|   NEWS SUBAGENT  |
+|  +------------+  |
+|  | MCP Scrape |  |
+|  | (HN, etc)  |  |     +------------------+
+|  +-----+------+  |     |   [news_slot]    |
+|        |         +---->|  Top stories...  |
+|        v         |     +------------------+
+|  +------------+  |              |
+|  | Rate &     |  |              | mentioned
+|  | Filter     |  |              | to user
+|  +-----+------+  |              v
+|        |         |     +------------------+
+|        v         |     | Mark as "shown"  |
+|  +------------+  |<----| in subagent      |
+|  | Subagent   |  |     | memory           |
+|  | Memory     |  |     +------------------+
+|  | (jsonlines)|  |
+|  +------------+  |
++------------------+
+```
+
+### Research Topics
+
+Open architectural questions under investigation:
+
+**Complexity & Debugging**
+- Multi-agent interaction tracing across N decision paths
+- Debugging tools for distributed agent state
+
+**Consistency**
+- State divergence between agents with independent memory
+- Slot update timing during active inference
+
+**Emotional Regulation**
+- Preventing oscillation when multiple subagents modulate affect
+- Update frequency and emotional state inertia
+
+**Observer/Constitution**
+- Structural vs prompt-based constraint enforcement
+- Preventing reasoning around constitutional bounds
+
+**Resource Management**
+- Bounds on dynamic subagent spawning
+- Memory limits per subagent
+- Graceful degradation when subagents fail
+
+**Lifecycle**
+- Garbage collection for slots, subagents, and memory entries
+- Orphaned subagent detection and cleanup
 
 ## Quick Start
 
