@@ -1,17 +1,109 @@
 # MCP Integration
 
-This project supports Model Context Protocol (MCP) servers. MCP tools are namespaced as `mcp.<server>.<tool>`.
+GLaDOS supports Model Context Protocol (MCP) servers for extensible tool access. MCP tools are namespaced as `mcp.<server>.<tool>`.
 
-## Demo Server (slow_clap)
-Start the demo MCP server with stdio:
+## Architecture
+
+MCP forms the **Tool Layer** at the bottom of the GLaDOS architecture:
 
 ```
++------------------+
+|   Main Agent     |
++--------+---------+
+         |
+         | tool calls
+         v
++--------+---------+
+|   Tool Executor  |
++--------+---------+
+         |
+         v
++--------+----------------------------+
+|           MCP Tool Layer            |
+|  +--------+  +--------+  +--------+ |
+|  | Local  |  | Remote |  | Custom | |
+|  | Servers|  | Servers|  | Servers| |
+|  +--------+  +--------+  +--------+ |
++-------------------------------------+
+```
+
+Both the main agent and subagents can invoke MCP tools. Tools are discovered at startup and registered with the LLM.
+
+## How MCP Servers Work
+
+1. **Startup**: GLaDOS launches configured MCP servers as subprocesses
+2. **Discovery**: Each server reports its available tools via the MCP protocol
+3. **Namespacing**: Tools are prefixed with `mcp.<server_name>.` to avoid conflicts
+4. **Invocation**: When the LLM calls a tool, GLaDOS routes it to the appropriate server
+5. **Response**: The server executes the tool and returns results to the LLM
+
+### Transport Types
+
+| Transport | Use Case | Configuration |
+|-----------|----------|---------------|
+| `stdio` | Local servers | `command` + `args` |
+| `http` | Remote servers | `url` + optional `token` |
+| `sse` | Server-sent events | `url` + optional `token` |
+
+## Local System Servers
+
+GLaDOS ships with lightweight local MCP servers for system monitoring:
+
+```yaml
+mcp_servers:
+  - name: "system_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.system_info_server"]
+
+  - name: "time_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.time_info_server"]
+
+  - name: "disk_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.disk_info_server"]
+
+  - name: "network_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.network_info_server"]
+
+  - name: "process_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.process_info_server"]
+
+  - name: "power_info"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.power_info_server"]
+```
+
+### Available Tools
+
+| Server | Tools | Description |
+|--------|-------|-------------|
+| `system_info` | `cpu_load`, `memory_usage`, `temperatures`, `system_overview` | System metrics |
+| `time_info` | `now_iso`, `uptime_seconds`, `boot_time` | Time information |
+| `disk_info` | `disk_usage`, `mounts` | Storage status |
+| `network_info` | `host_info`, `interfaces` | Network details |
+| `process_info` | `process_count`, `top_memory` | Process monitoring |
+| `power_info` | `batteries` | Battery status |
+
+## Demo Server
+
+Test MCP integration with the included demo server:
+
+```bash
 python -m glados.mcp.slow_clap_server
 ```
 
-Configure it in `configs/glados_config.yaml`:
+Configure in `glados_config.yaml`:
 
-```
+```yaml
 mcp_servers:
   - name: "slow_clap_demo"
     transport: "stdio"
@@ -19,68 +111,168 @@ mcp_servers:
     args: ["-m", "glados.mcp.slow_clap_server"]
 ```
 
-## Local System MCP Servers
-The project ships with several lightweight local MCP servers (stdio transport).
-Enable any of these in `configs/glados_config.yaml` as needed:
+The LLM can then call `mcp.slow_clap_demo.slow_clap(claps=3)` to get "clap clap clap".
 
+## Creating Custom MCP Servers
+
+### Basic Template
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+# Create server with a unique name
+mcp = FastMCP("my_custom_server")
+
+
+@mcp.tool()
+def my_tool(param: str) -> str:
+    """Description shown to the LLM."""
+    return f"Result: {param}"
+
+
+@mcp.tool()
+def another_tool(count: int = 1) -> str:
+    """Another tool with a default parameter."""
+    return "done " * count
+
+
+def main() -> None:
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
 ```
+
+### Registration
+
+Add to `glados_config.yaml`:
+
+```yaml
+mcp_servers:
+  - name: "my_custom"
+    transport: "stdio"
+    command: "python"
+    args: ["path/to/my_server.py"]
+```
+
+Tools will be available as:
+- `mcp.my_custom.my_tool`
+- `mcp.my_custom.another_tool`
+
+### Best Practices
+
+1. **Return JSON**: For complex data, return JSON strings
+2. **Handle errors**: Return error objects rather than raising exceptions
+3. **Docstrings**: Write clear docstrings - these are shown to the LLM
+4. **Type hints**: Use type hints for parameters - they inform the LLM
+
+## Remote Servers
+
+### Home Assistant
+
+```yaml
+mcp_servers:
+  - name: "home_assistant"
+    transport: "http"
+    url: "http://homeassistant.local:8123/mcp"
+    token: "YOUR_LONG_LIVED_TOKEN"
+```
+
+### With Headers
+
+```yaml
+mcp_servers:
+  - name: "custom_api"
+    transport: "http"
+    url: "https://api.example.com/mcp"
+    headers:
+      Authorization: "Bearer YOUR_TOKEN"
+      X-Custom-Header: "value"
+```
+
+## Tool Filtering
+
+Control which tools are exposed to the LLM:
+
+### Allow List
+
+Only expose specific tools:
+
+```yaml
+mcp_servers:
+  - name: "home_assistant"
+    transport: "http"
+    url: "http://homeassistant.local:8123/mcp"
+    token: "YOUR_TOKEN"
+    allowed_tools:
+      - "light.*"        # All light tools
+      - "climate.set_*"  # Climate setters only
+```
+
+### Block List
+
+Hide specific tools:
+
+```yaml
 mcp_servers:
   - name: "system_info"
     transport: "stdio"
     command: "python"
     args: ["-m", "glados.mcp.system_info_server"]
-  - name: "time_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.time_info_server"]
-  - name: "disk_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.disk_info_server"]
-  - name: "network_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.network_info_server"]
-  - name: "process_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.process_info_server"]
-  - name: "power_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.power_info_server"]
+    blocked_tools:
+      - "temperatures"   # Hide temperature tool
 ```
 
-Available tools (summary):
-- `system_info`: `cpu_load`, `memory_usage`, `temperatures`, `system_overview`
-- `time_info`: `now_iso`, `uptime_seconds`, `boot_time`
-- `disk_info`: `disk_usage`, `mounts`
-- `network_info`: `host_info`, `interfaces`
-- `process_info`: `process_count`, `top_memory`
-- `power_info`: `batteries`
+Patterns support `*` wildcards.
 
-## Home Assistant
-If Home Assistant runs on another machine, use HTTP or SSE transport:
+## MCP Resources
 
-```
+MCP servers can provide **resources** - contextual data injected into the LLM context.
+
+```yaml
 mcp_servers:
   - name: "home_assistant"
     transport: "http"
     url: "http://homeassistant.local:8123/mcp"
-    token: "YOUR_LONG_LIVED_TOKEN"
-```
-
-You can optionally limit MCP tools using `allowed_tools` or `blocked_tools` patterns.
-
-To add MCP resources as context messages:
-
-```
-mcp_servers:
-  - name: "home_assistant"
-    transport: "http"
-    url: "http://homeassistant.local:8123/mcp"
-    token: "YOUR_LONG_LIVED_TOKEN"
+    token: "YOUR_TOKEN"
     context_resources:
       - "ha://config"
-    resource_ttl_s: 300
+      - "ha://states/light.*"
+    resource_ttl_s: 300    # Cache for 5 minutes
 ```
+
+Resources are refreshed at the specified TTL and included as system messages.
+
+## Configuration Reference
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | string | required | Server identifier (used in namespacing) |
+| `transport` | string | `"stdio"` | `"stdio"`, `"http"`, or `"sse"` |
+| `command` | string | null | Command to run (stdio transport) |
+| `args` | list | `[]` | Command arguments (stdio transport) |
+| `env` | dict | null | Environment variables for subprocess |
+| `url` | string | null | Server URL (http/sse transport) |
+| `headers` | dict | null | HTTP headers |
+| `token` | string | null | Authentication token (added as Bearer) |
+| `allowed_tools` | list | null | Tool allow patterns (null = all) |
+| `blocked_tools` | list | null | Tool block patterns |
+| `context_resources` | list | `[]` | Resource URIs to inject as context |
+| `resource_ttl_s` | float | `300.0` | Resource cache TTL in seconds |
+
+## Planned: Memory MCP
+
+Long-term memory for GLaDOS will be implemented as an MCP server:
+
+- Vector store for semantic search
+- Fact extraction and storage
+- Daily/weekly/monthly summaries
+- Episodic memory retrieval
+
+This keeps memory modular and replaceable with different backends.
+
+## See Also
+
+- [README](./README.md) - Full architecture diagram
+- [autonomy.md](./autonomy.md) - How autonomy uses MCP tools
