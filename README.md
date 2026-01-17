@@ -76,8 +76,8 @@ GLaDOS uses a **closed-loop autonomous architecture** - unlike traditional chatb
 |  |   System    |  |  Emotional  |  |    Slots    |  |   Conversation    |   |
 |  |   Prompt    |  |    State    |  |   Context   |  |   History         |   |
 |  +-------------+  +-------------+  +-------------+  |   (n-token window)|   |
-|                                                      |   Older -> compact|   |
-|                                                      |   -> facts/memory |   |
+|                                                     |   Older -> compact|   |
+|                                                     |   -> facts/memory |   |
 |  Inputs: user speech/text | vision trigger | tick   +-------------------+   |
 |  Outputs: speak | tool use (MCP) | spawn/modify subagents                   |
 +-------------------------------+---------------------------------------------+
@@ -97,7 +97,7 @@ GLaDOS uses a **closed-loop autonomous architecture** - unlike traditional chatb
 |  |  VLM inference  |  |  API polling    |  |  Device states  |              |
 |  |  Scene descrip. |  |  Forecast data  |  |  Entity changes |              |
 |  |  Change detect  |  |  Alerts         |  |  Automations    |              |
-|  |  ------------->  |  |        |        |  |        |        |              |
+|  |  ------------>  |  |        |        |  |        |        |              |
 |  |  triggers main  |  |        v        |  |        v        |              |
 |  |   [vis_slot]    |  |  [weather_slot] |  |    [ha_slot]    |              |
 |  +-----------------+  +-----------------+  +-----------------+              |
@@ -134,7 +134,7 @@ GLaDOS uses a **closed-loop autonomous architecture** - unlike traditional chatb
                          |  -------------------------- |
                          |  SGLang + Radix KV Cache    |
                          |  -------------------------- |
-                         |  Slot 0: Main Agent (dedicated) |
+                         |  Slot 0: Main Agent (single)|
                          |  Slots 1-N: Subagent pool   |
                          +-----------------------------+
                                         |
