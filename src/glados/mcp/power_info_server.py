@@ -4,7 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+import logging
+
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+logger.remove()
+logging.getLogger().setLevel(logging.CRITICAL)
 
 mcp = FastMCP("power_info")
 

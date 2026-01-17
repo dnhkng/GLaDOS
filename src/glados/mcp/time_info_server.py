@@ -5,7 +5,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import logging
+
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+logger.remove()
+logging.getLogger().setLevel(logging.CRITICAL)
 
 mcp = FastMCP("time_info")
 

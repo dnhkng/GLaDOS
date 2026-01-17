@@ -61,7 +61,11 @@ class AutonomyLoop:
             if self._should_skip():
                 continue
 
-            if isinstance(event, TimeTickEvent) and self._pending_autonomy():
+            if (
+                isinstance(event, TimeTickEvent)
+                and self._config.coalesce_ticks
+                and self._pending_autonomy()
+            ):
                 continue
 
             prompt = self._build_prompt(event)

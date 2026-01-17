@@ -722,6 +722,9 @@ class Glados:
         self.processing_active_event.set()
         return True
 
+    def autonomy_inflight(self) -> int:
+        return self._autonomy_inflight.value()
+
     def handle_command(self, command: str) -> str:
         text = command.strip()
         if not text:
@@ -769,7 +772,7 @@ class Glados:
             CommandSpec(
                 name="tts",
                 description="Control TTS output",
-                usage="/tts on|off|toggle",
+                usage="/tts on|off",
                 handler=self._cmd_tts,
             )
         )
@@ -804,7 +807,7 @@ class Glados:
             CommandSpec(
                 name="asr",
                 description="Control ASR input",
-                usage="/asr on|off|toggle",
+                usage="/asr on|off",
                 handler=self._cmd_asr,
             )
         )
@@ -833,6 +836,22 @@ class Glados:
                 usage="/observe",
                 handler=self._cmd_observe,
                 aliases=("observability",),
+            )
+        )
+        register(
+            CommandSpec(
+                name="mcp",
+                description="Show MCP server status",
+                usage="/mcp status",
+                handler=self._cmd_mcp,
+            )
+        )
+        register(
+            CommandSpec(
+                name="autonomy",
+                description="Manage autonomy settings",
+                usage="/autonomy on|off | /autonomy debounce on|off",
+                handler=self._cmd_autonomy,
             )
         )
         register(
@@ -912,10 +931,7 @@ class Glados:
         if arg in {"off", "mute"}:
             self.set_asr_muted(True)
             return "ASR muted."
-        if arg in {"toggle", "swap"}:
-            muted = self.toggle_asr_muted()
-            return f"ASR {'muted' if muted else 'unmuted'}."
-        return "Usage: /asr on|off|toggle"
+        return "Usage: /asr on|off"
 
     def _cmd_tts(self, args: list[str]) -> str:
         if not args:
@@ -927,10 +943,7 @@ class Glados:
         if arg in {"off", "mute"}:
             self.set_tts_muted(True)
             return "TTS muted."
-        if arg in {"toggle", "swap"}:
-            muted = self.toggle_tts_muted()
-            return f"TTS {'muted' if muted else 'unmuted'}."
-        return "Usage: /tts on|off|toggle"
+        return "Usage: /tts on|off"
 
     def _cmd_mute_asr(self, _args: list[str]) -> str:
         self.set_asr_muted(True)
@@ -985,12 +998,51 @@ class Glados:
         snapshot = self.vision_state.snapshot()
         return snapshot or "Vision has no snapshot yet."
 
+    def _cmd_mcp(self, args: list[str]) -> str:
+        if not self.mcp_manager:
+            return "MCP is disabled."
+        if args and args[0].lower() not in {"status", "list"}:
+            return "Usage: /mcp status"
+        lines = ["MCP servers:"]
+        for entry in self.mcp_manager.status_snapshot():
+            status = "connected" if entry["connected"] else "offline"
+            tools = entry.get("tools", 0)
+            resources = entry.get("resources", 0)
+            lines.append(f"- {entry['name']}: {status}, tools={tools}, resources={resources}")
+        return "\n".join(lines)
+
+    def _cmd_autonomy(self, args: list[str]) -> str:
+        if not args:
+            return (
+                f"Autonomy enabled={self.autonomy_config.enabled}, "
+                f"parallel_calls={self.autonomy_config.autonomy_parallel_calls}, "
+                f"coalesce_ticks={self.autonomy_config.coalesce_ticks}"
+            )
+        head = args[0].lower()
+        if head in {"on", "off", "true", "false", "enable", "enabled", "disable", "disabled"}:
+            enabled = head in {"on", "true", "enable", "enabled"}
+            self.autonomy_config.enabled = enabled
+            return f"Autonomy {'enabled' if enabled else 'disabled'}."
+        if head not in {"coalesce", "debounce"}:
+            return "Usage: /autonomy on|off | /autonomy debounce on|off"
+        if len(args) == 1:
+            return f"Autonomy coalesce_ticks={self.autonomy_config.coalesce_ticks}"
+        value = args[1].lower()
+        if value in {"on", "true", "enable", "enabled"}:
+            self.autonomy_config.coalesce_ticks = True
+            return "Autonomy tick coalescing enabled."
+        if value in {"off", "false", "disable", "disabled"}:
+            self.autonomy_config.coalesce_ticks = False
+            return "Autonomy tick coalescing disabled."
+        return "Usage: /autonomy on|off | /autonomy debounce on|off"
+
     def _cmd_config(self, _args: list[str]) -> str:
         jobs_enabled = bool(self.autonomy_config.jobs.enabled) if self.autonomy_config else False
         return (
             f"input_mode={self.input_mode}, "
             f"autonomy.enabled={self.autonomy_config.enabled}, "
             f"autonomy.jobs.enabled={jobs_enabled}, "
+            f"autonomy.coalesce_ticks={self.autonomy_config.coalesce_ticks}, "
             f"vision.enabled={self.vision_config is not None}"
         )
 

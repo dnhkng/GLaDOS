@@ -141,6 +141,31 @@ class MCPManager:
             future.cancel()
             raise MCPError(str(exc)) from exc
 
+    def status_snapshot(self) -> list[dict[str, Any]]:
+        with self._tool_lock:
+            tools = list(self._tool_registry.values())
+        with self._resource_lock:
+            resource_counts: dict[str, int] = {}
+            for (server_name, _uri) in self._resource_cache.keys():
+                resource_counts[server_name] = resource_counts.get(server_name, 0) + 1
+        connected = set(self._sessions.keys())
+        tool_counts: dict[str, int] = {}
+        for entry in tools:
+            tool_counts[entry.server] = tool_counts.get(entry.server, 0) + 1
+        entries: list[dict[str, Any]] = []
+        for server in self._servers.values():
+            entries.append(
+                {
+                    "name": server.name,
+                    "connected": server.name in connected,
+                    "tools": tool_counts.get(server.name, 0),
+                    "resources": resource_counts.get(server.name, 0),
+                    "context_resources": len(server.context_resources or []),
+                }
+            )
+        entries.sort(key=lambda item: item["name"])
+        return entries
+
     def _run_loop(self) -> None:
         if self._loop is not None:
             return

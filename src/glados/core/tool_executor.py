@@ -260,6 +260,8 @@ class ToolExecutor:
         try:
             if "_enqueued_at" not in item:
                 item = {**item, "_enqueued_at": time.time(), "_lane": lane}
+            if item.get("role") == "tool" and "_allow_tools" not in item:
+                item = {**item, "_allow_tools": False}
             target_queue.put_nowait(item)
         except queue.Full:
             logger.warning("ToolExecutor: dropped tool output because LLM queue is full.")

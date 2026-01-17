@@ -81,7 +81,7 @@ class SpeechPlayer:
 
                 if tts_muted:
                     if audio_msg.text:
-                        logger.success(f"Assistant: {audio_msg.text}")
+                        logger.info(f"Assistant: {audio_msg.text}")
                         if self._interaction_state:
                             self._interaction_state.mark_assistant()
                         if self._observability_bus:

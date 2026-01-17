@@ -5,7 +5,13 @@ import socket
 from pathlib import Path
 from typing import Any
 
+import logging
+
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+logger.remove()
+logging.getLogger().setLevel(logging.CRITICAL)
 
 mcp = FastMCP("network_info")
 

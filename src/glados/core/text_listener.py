@@ -68,7 +68,7 @@ class TextListener:
                 text = line.strip()
                 if not text:
                     continue
-                logger.success(f"Text input: '{text}'")
+                logger.info(f"Text input: '{text}'")
                 if text.startswith("/") and self._command_handler:
                     response = self._command_handler(text)
                     logger.success("Command: {} -> {}", text, response)

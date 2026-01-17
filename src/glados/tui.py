@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import math
 from datetime import datetime
 from pathlib import Path
+import re
 import sys
 from typing import ClassVar, cast, Iterable
 from urllib.parse import urlparse
@@ -31,6 +32,21 @@ class Printer(RichLog):
     """A subclass of textual's RichLog which captures and displays all print calls."""
 
     can_focus = False
+    _ignored_prefixes = (
+        "Last login:",
+        "Welcome to Ubuntu",
+        " * Documentation:",
+        " * Management:",
+        " * Support:",
+        "Expanded Security Maintenance",
+        "To see these additional updates run:",
+        "Learn more about enabling ESM Apps",
+        "Your user’s .npmrc file",
+        "Run `nvm use --delete-prefix",
+        "(base)",
+        "Assistant:",
+        "Text input:",
+    )
 
     def on_mount(self) -> None:
         self.wrap = True
@@ -39,6 +55,17 @@ class Printer(RichLog):
 
     def on_print(self, event: events.Print) -> None:
         if (text := event.text) != "\n":
+            stripped = text.strip()
+            cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", stripped)
+            if any(cleaned.startswith(prefix) for prefix in self._ignored_prefixes):
+                return
+            if (
+                "Last login:" in cleaned
+                or "Welcome to Ubuntu" in cleaned
+                or " | Assistant:" in cleaned
+                or " | Text input:" in cleaned
+            ):
+                return
             self.write(text.rstrip().replace("DEBUG", "[red]DEBUG[/]"))
 
 
@@ -196,8 +223,9 @@ class StatusPanel(Static):
         vision = "ON" if engine.vision_config is not None else "OFF"
         asr = "MUTED" if engine.asr_muted_event.is_set() else "ACTIVE"
         tts = "MUTED" if engine.tts_muted_event.is_set() else "ACTIVE"
+        input_mode = app.display_input_mode() or engine.input_mode
         lines = [
-            f"Input: {engine.input_mode}",
+            f"Input: {input_mode}",
             f"ASR: {asr}",
             f"TTS: {tts}",
             f"Speaking: {speaking}",
@@ -208,6 +236,87 @@ class StatusPanel(Static):
             f"VAD: {vad_text}",
             f"Volume: {bar} {rms_db:5.1f} dB",
         ]
+        self.update("\n".join(lines))
+
+
+class QueuePanel(Static):
+    can_focus = False
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.markup = True
+
+    @staticmethod
+    def _format_wait(value: float | None) -> str:
+        if value is None:
+            return "-"
+        return f"{value * 1000:.0f}ms"
+
+    def render_queue(self, app: "GladosUI") -> None:
+        engine = app.glados_engine_instance
+        if not engine:
+            self.update("Queues: starting...")
+            return
+        priority_depth = engine.llm_queue_priority.qsize()
+        autonomy_depth = engine.llm_queue_autonomy.qsize()
+        priority_metrics = app.queue_metrics.get("priority", {})
+        autonomy_metrics = app.queue_metrics.get("autonomy", {})
+        priority_wait = self._format_wait(priority_metrics.get("wait_s"))
+        autonomy_wait = self._format_wait(autonomy_metrics.get("wait_s"))
+        lines = [
+            f"Priority: {priority_depth} queued  wait {priority_wait}",
+            f"Autonomy: {autonomy_depth} queued  wait {autonomy_wait}",
+        ]
+        self.update("\n".join(lines))
+
+
+class AutonomyPanel(Static):
+    can_focus = False
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.markup = True
+
+    def render_autonomy(self, app: "GladosUI") -> None:
+        engine = app.glados_engine_instance
+        if not engine or not engine.autonomy_config:
+            self.update("Autonomy: unavailable")
+            return
+        enabled = "[green]ON[/]" if engine.autonomy_config.enabled else "[red]OFF[/]"
+        coalesce = "ON" if engine.autonomy_config.coalesce_ticks else "OFF"
+        workers = engine.autonomy_config.autonomy_parallel_calls if engine.autonomy_config.enabled else 0
+        inflight = engine.autonomy_inflight()
+        queue_depth = engine.llm_queue_autonomy.qsize()
+        jobs = "ON" if engine.autonomy_config.jobs.enabled else "OFF"
+        lines = [
+            f"Enabled: {enabled}",
+            f"Workers: {workers}  In-flight: {inflight}",
+            f"Queue: {queue_depth}  Jobs: {jobs}",
+            f"Coalesce ticks: {coalesce}",
+        ]
+        self.update("\n".join(lines))
+
+
+class MCPPanel(Static):
+    can_focus = False
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.markup = True
+
+    def render_mcp(self, app: "GladosUI") -> None:
+        engine = app.glados_engine_instance
+        if not engine or not engine.mcp_manager:
+            self.update("MCP: disabled")
+            return
+        entries = engine.mcp_manager.status_snapshot()
+        if not entries:
+            self.update("MCP: no servers")
+            return
+        lines = []
+        for entry in entries[:6]:
+            status = "[green]online[/]" if entry["connected"] else "[red]offline[/]"
+            lines.append(f"{entry['name']}: {status}  tools={entry['tools']}")
         self.update("\n".join(lines))
 
 
@@ -234,11 +343,15 @@ class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
 
     try:
-        with open(Path("src/glados/glados_ui/images/logo.ansi"), encoding="utf-8") as f:
+        with open(Path("src/glados/glados_ui/images/splash.ansi"), encoding="utf-8") as f:
             WELCOME_ANSI = Text.from_ansi(f.read(), no_wrap=True, end="")
     except FileNotFoundError:
         logger.error("Logo ANSI art file not found. Using placeholder.")
         WELCOME_ANSI = Text.from_markup("[bold red]Logo ANSI Art Missing[/bold red]")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._ready = False
 
     def compose(self) -> ComposeResult:
         """
@@ -261,13 +374,24 @@ class SplashScreen(Screen[None]):
                     yield Label("Recent activity", id="welcome_recent_title")
                     yield Static("No recent activity", id="welcome_recent")
         yield Static('Try "/help" or ask a question.', id="welcome_prompt")
-        yield Static("Press any key to start.", id="welcome_cta")
+        yield Static("Initializing systems...", id="welcome_cta")
 
     def on_mount(self) -> None:
         dialog = self.query_one("#welcome_dialog", Container)
         dialog.border_title = GladosUI.TITLE
         dialog.border_title_align = "center"
         self._load_welcome_meta()
+        app = cast(GladosUI, self.app)
+        if app.glados_engine_instance is not None:
+            self.set_ready()
+
+    def set_ready(self) -> None:
+        self._ready = True
+        try:
+            cta = self.query_one("#welcome_cta", Static)
+        except NoMatches:
+            return
+        cta.update("Press any key to start.")
 
     def _load_welcome_meta(self) -> None:
         app = cast(GladosUI, self.app)
@@ -302,8 +426,7 @@ class SplashScreen(Screen[None]):
             event (events.Key): The key event that was triggered.
         """
         app = cast(GladosUI, self.app)  # mypy gets confused about app's type
-        if event.key == "question_mark":
-            app.action_help()
+        if not self._ready:
             return
         if app.glados_engine_instance:
             app.glados_engine_instance.play_announcement()
@@ -322,22 +445,105 @@ class HelpScreen(ModalScreen[None]):
     TITLE = "Shortcuts"
 
     def compose(self) -> ComposeResult:
-        """
-        Compose the shortcuts screen layout using a static text block.
-
-        This method generates the visual composition of the help screen, wrapping the shortcuts
-        text in a Container for easy scanning.
-
-        Returns:
-            ComposeResult: A generator yielding the composed help screen container.
-        """
-        yield Container(Static(shortcuts_text, id="help_text"), id="help_dialog")
+        yield Container(VerticalScroll(Static("", id="help_text")), id="help_dialog")
 
     def on_mount(self) -> None:
         dialog = self.query_one("#help_dialog")
         dialog.border_title = self.TITLE
         # Consistent use of explicit closing tag for blink
         dialog.border_subtitle = "Press Esc to close"
+        self._render_help()
+
+    def _render_help(self) -> None:
+        app = cast(GladosUI, self.app)
+        engine = app.glados_engine_instance
+        lines = ["Shortcuts", "", "/       focus command input", "Esc     close dialogs", ""]
+        if engine:
+            lines.append("Commands")
+            for spec in engine.command_specs():
+                usage = spec.usage
+                lines.append(f"{usage:<28} {spec.description}")
+        lines.append("/context                 Show autonomy slot context")
+        lines.append("/messages                Show dialog history")
+        lines.append("/theme                    Switch TUI theme")
+        lines.append("/observe                  Open observability screen")
+        self.query_one("#help_text", Static).update("\n".join(lines))
+
+
+class ContextScreen(ModalScreen[None]):
+    """Display autonomy slot context."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    TITLE = "Context Slots"
+
+    def compose(self) -> ComposeResult:
+        yield Container(VerticalScroll(Static("", id="context_text")), id="context_dialog")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#context_dialog")
+        dialog.border_title = self.TITLE
+        dialog.border_title_align = "center"
+        dialog.border_subtitle = "Press Esc to close"
+        self._render_context()
+
+    def _render_context(self) -> None:
+        app = cast(GladosUI, self.app)
+        engine = app.glados_engine_instance
+        if not engine or not engine.autonomy_slots:
+            content = "No slots available."
+        else:
+            slots = engine.autonomy_slots.list_slots()
+            if not slots:
+                content = "No slots available."
+            else:
+                lines = []
+                for slot in slots:
+                    summary = slot.summary.strip()
+                    summary_text = f" - {summary}" if summary else ""
+                    lines.append(f"- {slot.title}: {slot.status}{summary_text}")
+                content = "\n".join(lines)
+        self.query_one("#context_text", Static).update(content)
+
+
+class MessagesScreen(ModalScreen[None]):
+    """Display dialog history as a scrollable list."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    TITLE = "Dialog Messages"
+
+    def compose(self) -> ComposeResult:
+        yield Container(VerticalScroll(Static("", id="messages_text")), id="messages_dialog")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#messages_dialog")
+        dialog.border_title = self.TITLE
+        dialog.border_title_align = "center"
+        dialog.border_subtitle = "Press Esc to close"
+        self._render_messages()
+
+    def _render_messages(self) -> None:
+        app = cast(GladosUI, self.app)
+        engine = app.glados_engine_instance
+        if not engine:
+            content = "Dialog unavailable."
+        else:
+            events = engine.observability_bus.snapshot(limit=500)
+            lines: list[str] = []
+            for event in events:
+                if event.kind == "user_input" and event.source in {"asr", "text"}:
+                    timestamp = datetime.fromtimestamp(event.timestamp).strftime("%H:%M:%S")
+                    lines.append(f"[{timestamp}] You: {event.message}")
+                elif event.source == "tts" and event.kind == "play":
+                    timestamp = datetime.fromtimestamp(event.timestamp).strftime("%H:%M:%S")
+                    lines.append(f"[{timestamp}] GLaDOS: {event.message}")
+            content = "\n".join(lines) if lines else "No dialog yet."
+        self.query_one("#messages_text", Static).update(content)
 
 
 class ThemePickerScreen(ModalScreen[None]):
@@ -372,6 +578,47 @@ class ThemePickerScreen(ModalScreen[None]):
         selected = prompt.plain if hasattr(prompt, "plain") else str(prompt)
         app._apply_theme(selected)
         app.notify(f"Theme set to {selected}.", title="Theme", timeout=3)
+        self.dismiss()
+
+
+class OnOffPickerScreen(ModalScreen[None]):
+    """Picker for on/off command options."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    def __init__(self, command: str) -> None:
+        super().__init__()
+        self._command = command
+
+    def compose(self) -> ComposeResult:
+        with Container(id="toggle_dialog"):
+            yield Label("Select mode", id="toggle_title")
+            yield OptionList(id="toggle_list")
+            yield Static("Enter to select • Esc to cancel", id="toggle_hint")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#toggle_dialog")
+        dialog.border_title = self._command
+        dialog.border_title_align = "center"
+        option_list = self.query_one("#toggle_list", OptionList)
+        option_list.clear_options()
+        option_list.add_options(["on", "off"])
+        option_list.highlighted = 0
+
+    def on_option_list_option_selected(self, message: OptionList.OptionSelected) -> None:
+        app = cast(GladosUI, self.app)
+        prompt = message.option.prompt
+        choice = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+        if not app.glados_engine_instance:
+            app.notify("Engine not ready.", severity="warning")
+            self.dismiss()
+            return
+        command = f"{self._command} {choice}"
+        response = app.glados_engine_instance.handle_command(command)
+        logger.success("TUI command: {} -> {}", command, response)
+        app.notify(response, title="Command", timeout=4)
         self.dismiss()
 
 
@@ -431,7 +678,29 @@ class ObservabilityScreen(ModalScreen[None]):
             return
         slots = engine.autonomy_slots.list_slots() if engine.autonomy_slots else []
         minds = engine.mind_registry.snapshot() if engine.mind_registry else []
-        self._status.update(f"slots: {len(slots)} | minds: {len(minds)}")
+        priority_q = engine.llm_queue_priority.qsize()
+        autonomy_q = engine.llm_queue_autonomy.qsize()
+        inflight = engine.autonomy_inflight()
+        coalesce = "ON" if engine.autonomy_config.coalesce_ticks else "OFF"
+        if engine.mcp_manager:
+            snapshot = engine.mcp_manager.status_snapshot()
+            connected = sum(1 for entry in snapshot if entry["connected"])
+            total = len(snapshot)
+        else:
+            connected = 0
+            total = 0
+        self._status.update(
+            " | ".join(
+                [
+                    f"slots: {len(slots)}",
+                    f"minds: {len(minds)}",
+                    f"queue p:{priority_q} a:{autonomy_q}",
+                    f"inflight: {inflight}",
+                    f"mcp: {connected}/{total}",
+                    f"coalesce: {coalesce}",
+                ]
+            )
+        )
 
     def _write_event(self, event: ObservabilityEvent) -> None:
         timestamp = datetime.fromtimestamp(event.timestamp).strftime("%H:%M:%S")
@@ -462,18 +731,9 @@ class ObservabilityScreen(ModalScreen[None]):
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
 
-    DEFAULT_TIPS = "Enter to send\n/ for commands, ? for shortcuts"
+    DEFAULT_TIPS = "Enter to send\n/ for commands"
 
-    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        Binding(key="q", action="quit", description="Quit"),
-        Binding(
-            key="question_mark",
-            action="help",
-            description="Help",
-            key_display="?",
-        ),
-        Binding(key="slash", action="command", description="Command", key_display="/"),
-    ]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = []
     CSS_PATH = "glados_ui/glados.tcss"
 
     COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
@@ -528,9 +788,13 @@ class GladosUI(App[None]):
     instantiation_worker: Worker[None] | None = None
     _dialog_log: DialogLog | None = None
     _status_panel: StatusPanel | None = None
+    _queue_panel: QueuePanel | None = None
+    _autonomy_panel: AutonomyPanel | None = None
+    _mcp_panel: MCPPanel | None = None
     _tips_panel: Static | None = None
     _command_palette: OptionList | None = None
     _command_matches: list[tuple[str, str]] = []
+    _queue_metrics: dict[str, dict[str, float | int | None]]
     _config_path: Path
     _input_mode_override: str | None
     _tts_enabled_override: bool | None
@@ -554,6 +818,7 @@ class GladosUI(App[None]):
         self._asr_muted_override = asr_muted
         self._theme_override = theme
         self._active_theme = None
+        self._queue_metrics = {}
 
     def compose(self) -> ComposeResult:
         """
@@ -586,6 +851,12 @@ class GladosUI(App[None]):
                 with Vertical(id="right_panel"):
                     yield Label("Status", id="status_title")
                     yield StatusPanel(id="status_panel")
+                    yield Label("Autonomy", id="autonomy_title")
+                    yield AutonomyPanel(id="autonomy_panel")
+                    yield Label("Queues", id="queue_title")
+                    yield QueuePanel(id="queue_panel")
+                    yield Label("MCP", id="mcp_title")
+                    yield MCPPanel(id="mcp_panel")
                     yield Label("Hints", id="tips_title")
                     yield Static(self.DEFAULT_TIPS, id="tips_panel")
 
@@ -645,9 +916,9 @@ class GladosUI(App[None]):
         """
         # Display the splash screen for a few moments
         self.push_screen(SplashScreen())
-        self.notify("Loading AI engine...", title="GLaDOS", timeout=6)
         self._bind_panels()
         self.set_interval(0.3, self._refresh_panels)
+        self.focus_command_input()
 
     def on_unmount(self) -> None:
         """
@@ -671,9 +942,26 @@ class GladosUI(App[None]):
         variables.update(theme_vars)
         return variables
 
+    def display_input_mode(self) -> str | None:
+        if not self._input_mode_override:
+            return None
+        if self._input_mode_override == "both":
+            return "text+audio (TUI)"
+        if self._input_mode_override == "text":
+            return "text (TUI)"
+        return self._input_mode_override
+
     def action_help(self) -> None:
         """Someone pressed the help key!."""
         self.push_screen(HelpScreen(id="help_screen"))
+
+    def action_context(self) -> None:
+        """Open the context slots screen."""
+        self.push_screen(ContextScreen(id="context_screen"))
+
+    def action_messages(self) -> None:
+        """Open the dialog messages screen."""
+        self.push_screen(MessagesScreen(id="messages_screen"))
 
     def action_theme_picker(self) -> None:
         """Open the theme picker modal."""
@@ -685,7 +973,12 @@ class GladosUI(App[None]):
 
     def action_command(self) -> None:
         """Focus the command input."""
-        command_input = self.query_one("#command_input", Input)
+        if not self._bind_panels():
+            return
+        matches = self.query("#command_input")
+        if not matches:
+            return
+        command_input = matches.first()
         if not command_input.value:
             command_input.value = "/"
             self._update_command_hints(command_input.value)
@@ -697,6 +990,8 @@ class GladosUI(App[None]):
 
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         yield SystemCommand("Choose color scheme", "Switch the TUI theme", self.action_theme_picker)
+        yield SystemCommand("Context slots", "Show autonomy slot context", self.action_context)
+        yield SystemCommand("Dialog messages", "Show dialog history", self.action_messages)
         yield SystemCommand("Observability", "Open the observability screen", self.action_observability)
         yield SystemCommand("Quit", "Quit the application", self.action_quit)
 
@@ -709,12 +1004,15 @@ class GladosUI(App[None]):
 
         if message.state == WorkerState.SUCCESS:
             self.notify("AI Engine operational", title="GLaDOS", timeout=2)
+            if isinstance(self.screen, SplashScreen):
+                self.screen.dismiss()
             try:
                 command_input = self.query_one("#command_input", Input)
             except NoMatches:
                 command_input = None
             if command_input is not None:
                 self._update_command_hints(command_input.value)
+            self.focus_command_input()
         elif message.state == WorkerState.ERROR:
             self.notify("Instantiation failed!", severity="error")
 
@@ -729,14 +1027,23 @@ class GladosUI(App[None]):
             return
         if command.startswith("/") and self._palette_visible() and " " not in command:
             selected = self._selected_command()
-            if selected and command != selected:
-                event.input.value = f"{selected} "
-                event.input.cursor_position = len(event.input.value)
-                self._update_command_hints(event.input.value)
-                return
+            if selected:
+                command = selected
         event.input.value = ""
         self._update_command_hints("")
         if command.startswith("/"):
+            parts = command.lstrip("/").split()
+            if parts:
+                cmd_name = parts[0].casefold()
+                toggle_targets = self._onoff_command_targets()
+                joined = " ".join(parts).casefold()
+                target = toggle_targets.get(cmd_name)
+                if target and (len(parts) == 1 or joined == target):
+                    self.push_screen(OnOffPickerScreen(f"/{target}"))
+                    return
+            if command in {"/help", "/?"}:
+                self.action_help()
+                return
             if command in {"/quit", "/exit"}:
                 if self.glados_engine_instance:
                     self.glados_engine_instance.handle_command(command)
@@ -744,6 +1051,12 @@ class GladosUI(App[None]):
                 return
             if command in {"/observe", "/observability"}:
                 self.action_observability()
+                return
+            if command in {"/context", "/slots"}:
+                self.action_context()
+                return
+            if command == "/messages":
+                self.action_messages()
                 return
             if command.startswith("/theme"):
                 parts = command.split()
@@ -781,15 +1094,20 @@ class GladosUI(App[None]):
                 self._move_command_palette(1)
                 event.stop()
                 return
-            if event.key == "tab":
-                if self._complete_command_input(add_space=True):
-                    event.stop()
-                return
             if event.key == "escape":
+                try:
+                    command_input = self.query_one("#command_input", Input)
+                except NoMatches:
+                    command_input = None
+                if command_input is not None:
+                    command_input.value = ""
                 self._hide_command_palette()
+                self._update_command_hints("")
                 event.stop()
                 return
         if event.key != "/":
+            return
+        if not self._bind_panels():
             return
         if isinstance(self.focused, Input) and self.focused.id == "command_input":
             return
@@ -804,12 +1122,38 @@ class GladosUI(App[None]):
             return
         events = engine.observability_bus.snapshot(limit=200)
         self._dialog_log.refresh_from_bus(events)
+        self._update_queue_metrics(events)
         self._status_panel.render_status(self)
+        if self._queue_panel:
+            self._queue_panel.render_queue(self)
+        if self._autonomy_panel:
+            self._autonomy_panel.render_autonomy(self)
+        if self._mcp_panel:
+            self._mcp_panel.render_mcp(self)
+
+    @property
+    def queue_metrics(self) -> dict[str, dict[str, float | int | None]]:
+        return self._queue_metrics
+
+    def _update_queue_metrics(self, events: list[ObservabilityEvent]) -> None:
+        for event in events:
+            if event.source != "llm" or event.kind != "queue":
+                continue
+            lane = str(event.meta.get("lane", ""))
+            if not lane:
+                continue
+            self._queue_metrics[lane] = {
+                "wait_s": event.meta.get("wait_s"),
+                "queue_depth": event.meta.get("queue_depth"),
+            }
 
     def _bind_panels(self) -> bool:
         if (
             self._dialog_log is not None
             and self._status_panel is not None
+            and self._queue_panel is not None
+            and self._autonomy_panel is not None
+            and self._mcp_panel is not None
             and self._tips_panel is not None
             and self._command_palette is not None
         ):
@@ -817,6 +1161,9 @@ class GladosUI(App[None]):
         try:
             self._dialog_log = self.query_one("#dialog_log", DialogLog)
             self._status_panel = self.query_one("#status_panel", StatusPanel)
+            self._queue_panel = self.query_one("#queue_panel", QueuePanel)
+            self._autonomy_panel = self.query_one("#autonomy_panel", AutonomyPanel)
+            self._mcp_panel = self.query_one("#mcp_panel", MCPPanel)
             self._tips_panel = self.query_one("#tips_panel", Static)
             self._command_palette = self.query_one("#command_palette", OptionList)
             return True
@@ -838,8 +1185,11 @@ class GladosUI(App[None]):
                 names.append(f"/{spec.name}")
                 for alias in spec.aliases:
                     names.append(f"/{alias}")
-        names.extend(["/observe", "/quit", "/theme"])
-        return names
+                usage = spec.usage or ""
+                if "debounce on|off" in usage and spec.name == "autonomy":
+                    names.append("/autonomy debounce")
+        names.extend(["/observe", "/context", "/messages", "/quit", "/theme"])
+        return list(dict.fromkeys(names))
 
     def _command_entries(self) -> list[tuple[str, str]]:
         engine = self.glados_engine_instance
@@ -848,14 +1198,40 @@ class GladosUI(App[None]):
             for spec in engine.command_specs():
                 label = f"/{spec.name}"
                 entries.append((label, spec.description))
+                usage = spec.usage or ""
+                if "debounce on|off" in usage and spec.name == "autonomy":
+                    entries.append(("/autonomy debounce", "Toggle autonomy tick debouncing"))
         entries.extend(
             [
                 ("/observe", "Open observability screen"),
+                ("/context", "Show autonomy slot context"),
+                ("/messages", "Show dialog history"),
                 ("/quit", "Quit GLaDOS"),
                 ("/theme", "Switch TUI theme"),
             ]
         )
-        return entries
+        unique: dict[str, str] = {}
+        for label, desc in entries:
+            if label not in unique:
+                unique[label] = desc
+        return list(unique.items())
+
+    def _onoff_command_targets(self) -> dict[str, str]:
+        engine = self.glados_engine_instance
+        targets: dict[str, str] = {}
+        if not engine:
+            return targets
+        for spec in engine.command_specs():
+            usage = spec.usage.lstrip("/").strip()
+            if "on|off" not in usage:
+                continue
+            prefix = usage.split("on|off", 1)[0].strip()
+            if not prefix:
+                continue
+            targets[spec.name.casefold()] = prefix
+            for alias in spec.aliases:
+                targets[alias.casefold()] = prefix
+        return targets
 
     def _update_command_hints(self, value: str) -> None:
         if not self._bind_panels():
@@ -879,7 +1255,7 @@ class GladosUI(App[None]):
             self._hide_command_palette()
             return
         self._show_command_palette(matches)
-        self._tips_panel.update("Up/Down to select, Tab to complete, Enter to run.")
+        self._tips_panel.update("Up/Down to select, Enter to run, Esc to clear.")
 
     def _resolve_theme(self) -> str:
         if self._theme_override:
@@ -1005,7 +1381,11 @@ class GladosUI(App[None]):
         glados_config = GladosConfig.from_yaml(str(config_path))
         updates: dict[str, object] = {}
         if self._input_mode_override:
-            updates["input_mode"] = self._input_mode_override
+            if self._input_mode_override in {"text", "both"}:
+                # Avoid stdin contention between Textual and TextListener.
+                updates["input_mode"] = "audio"
+            else:
+                updates["input_mode"] = self._input_mode_override
         if self._tts_enabled_override is not None:
             updates["tts_enabled"] = self._tts_enabled_override
         if self._asr_muted_override is not None:

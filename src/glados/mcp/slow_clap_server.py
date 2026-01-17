@@ -1,4 +1,10 @@
+import logging
+
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+logger.remove()
+logging.getLogger().setLevel(logging.CRITICAL)
 
 mcp = FastMCP("slow_clap_demo")
 

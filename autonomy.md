@@ -28,3 +28,11 @@ autonomy:
 
 If vision is enabled, the loop is triggered by scene changes.
 Jobs are optional and run in the background to populate task slots.
+
+## Coalescing ticks
+When `autonomy.coalesce_ticks` is enabled, the loop will skip or merge
+new ticks if the previous autonomy request is still in flight. This prevents
+the autonomy queue from growing under slow models and keeps latency low.
+
+- `true`: collapse overlapping ticks into one (recommended).
+- `false`: enqueue every tick (can build backlog if the model is slow).

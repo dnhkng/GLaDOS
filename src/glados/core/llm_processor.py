@@ -7,6 +7,8 @@ import re
 import threading
 import time
 from typing import Any, ClassVar
+from urllib.parse import urlparse
+import uuid
 
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
@@ -68,12 +70,74 @@ class LanguageModelProcessor:
         self._conversation_lock = conversation_lock
         self._lane = lane
         self._inflight_counter = inflight_counter
+        self._ollama_mode = self._is_ollama_endpoint()
 
         self.prompt_headers = {"Content-Type": "application/json"}
         if api_key:
             self.prompt_headers["Authorization"] = f"Bearer {api_key}"
         if extra_headers:
             self.prompt_headers.update(extra_headers)
+
+    def _is_ollama_endpoint(self) -> bool:
+        try:
+            parsed = urlparse(str(self.completion_url))
+        except Exception:
+            return False
+        path = (parsed.path or "").rstrip("/")
+        return path.endswith("/api/chat")
+
+    @staticmethod
+    def _sanitize_messages_for_ollama(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        allowed_keys = {"role", "content", "name", "tool_calls", "tool_call_id", "images", "function_call"}
+        sanitized: list[dict[str, Any]] = []
+        for message in messages:
+            cleaned = {key: value for key, value in message.items() if key in allowed_keys}
+            tool_calls = cleaned.get("tool_calls")
+            if isinstance(tool_calls, list):
+                normalized_calls: list[dict[str, Any]] = []
+                for tool_call in tool_calls:
+                    if not isinstance(tool_call, dict):
+                        continue
+                    function = tool_call.get("function", {}) if isinstance(tool_call.get("function"), dict) else {}
+                    arguments = function.get("arguments")
+                    if isinstance(arguments, str):
+                        try:
+                            function["arguments"] = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            function["arguments"] = {}
+                    tool_call["function"] = function
+                    normalized_calls.append(tool_call)
+                cleaned["tool_calls"] = normalized_calls
+            sanitized.append(cleaned)
+        return sanitized
+
+    @staticmethod
+    def _sanitize_messages_for_openai(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        allowed_keys = {"role", "content", "name", "tool_calls", "tool_call_id"}
+        sanitized: list[dict[str, Any]] = []
+        for message in messages:
+            cleaned = {key: value for key, value in message.items() if key in allowed_keys}
+            tool_calls = cleaned.get("tool_calls")
+            if isinstance(tool_calls, list):
+                normalized_calls: list[dict[str, Any]] = []
+                for tool_call in tool_calls:
+                    if not isinstance(tool_call, dict):
+                        continue
+                    function = tool_call.get("function", {}) if isinstance(tool_call.get("function"), dict) else {}
+                    arguments = function.get("arguments")
+                    if not isinstance(arguments, str):
+                        function["arguments"] = json.dumps(arguments or {})
+                    tool_call_id = tool_call.get("id") or ""
+                    normalized_calls.append(
+                        {
+                            "id": tool_call_id,
+                            "type": tool_call.get("type", "function"),
+                            "function": function,
+                        }
+                    )
+                cleaned["tool_calls"] = normalized_calls
+            sanitized.append(cleaned)
+        return sanitized
 
     def _clean_raw_bytes(self, line: bytes) -> dict[str, str] | None:
         """
@@ -230,6 +294,41 @@ class LanguageModelProcessor:
                 continue
             tool_call["function"]["name"] = self._normalize_tool_name(tool_name, tool_names)
 
+    @staticmethod
+    def _filter_tools_for_message(tools: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
+        text = content.casefold()
+        wants_system = any(
+            keyword in text
+            for keyword in (
+                "system",
+                "status",
+                "cpu",
+                "memory",
+                "ram",
+                "disk",
+                "storage",
+                "network",
+                "ip",
+                "uptime",
+                "temperature",
+                "temp",
+                "process",
+                "battery",
+                "power",
+                "load",
+            )
+        )
+        wants_clap = "clap" in text
+        filtered: list[dict[str, Any]] = []
+        for tool in tools:
+            name = tool.get("function", {}).get("name", "")
+            if name == "slow clap" and not wants_clap:
+                continue
+            if name.startswith("mcp.") and not wants_system:
+                continue
+            filtered.append(tool)
+        return filtered
+
     def _process_tool_call(
         self,
         tool_calls: list[dict[str, Any]],
@@ -243,6 +342,10 @@ class LanguageModelProcessor:
             tool_calls: List of tool calls to be run.
         """
         self._normalize_tool_calls(tool_calls, tool_names)
+        for tool_call in tool_calls:
+            tool_call.setdefault("type", "function")
+            if not tool_call.get("id"):
+                tool_call["id"] = f"toolcall_{uuid.uuid4().hex}"
         if self._conversation_lock:
             with self._conversation_lock:
                 self.conversation_history.append(
@@ -412,60 +515,108 @@ class LanguageModelProcessor:
                 else:
                     self.conversation_history.append(llm_message)
 
-                tools = self._build_tools(autonomy_mode)
+                allow_tools = bool(llm_input.get("_allow_tools", True))
+                tools = self._build_tools(autonomy_mode) if allow_tools else []
+                if tools and not autonomy_mode and llm_message.get("role") == "user":
+                    content = str(llm_message.get("content", ""))
+                    tools = self._filter_tools_for_message(tools, content)
                 tool_names = {
                     tool.get("function", {}).get("name", "")
                     for tool in tools
                     if tool.get("function", {}).get("name")
                 }
+                base_messages = self._build_messages(autonomy_mode)
                 data = {
                     "model": self.model_name,
                     "stream": True,
-                    "messages": self._build_messages(autonomy_mode),
-                    "tools": tools,
                     # Add other parameters like temperature, max_tokens if needed from config
                 }
+                if allow_tools and tools:
+                    data["tools"] = tools
 
                 tool_calls_buffer: list[dict[str, Any]] = []
                 sentence_buffer: list[str] = []
                 try:
-                    with requests.post(
-                        str(self.completion_url),
-                        headers=self.prompt_headers,
-                        json=data,
-                        stream=True,
-                        timeout=30,  # Add a timeout for the request itself
-                    ) as response:
-                        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-                        logger.debug("LLM Processor: Request to LLM successful, processing stream...")
-                        for line in response.iter_lines():
-                            if not self.processing_active_event.is_set() or self.shutdown_event.is_set():
-                                logger.info("LLM Processor: Interruption or shutdown detected during LLM stream.")
-                                break  # Stop processing stream
+                    http_error_detail: tuple[str | int, str] | None = None
+                    request_urls = [str(self.completion_url)]
+                    if self._ollama_mode:
+                        fallback_url = str(self.completion_url).replace("/api/chat", "/v1/chat/completions")
+                        if fallback_url != request_urls[0]:
+                            request_urls.append(fallback_url)
 
-                            if line:
-                                cleaned_line_data = self._clean_raw_bytes(line)
-                                if cleaned_line_data:
-                                    chunk = self._process_chunk(cleaned_line_data)
-                                    if chunk:
-                                        if isinstance(chunk, list):
-                                            self._process_tool_chunks(tool_calls_buffer, chunk)
-                                        elif not autonomy_mode:
-                                            sentence_buffer.append(chunk)
-                                            if chunk.strip() in self.PUNCTUATION_SET and (
-                                                len(sentence_buffer) < 2 or not sentence_buffer[-2].strip().isdigit()
-                                            ):
-                                                self._process_sentence_for_tts(sentence_buffer)
-                                                sentence_buffer = []
-                                    elif cleaned_line_data.get("done_marker"):
-                                        break
-                                    elif cleaned_line_data.get("done") and cleaned_line_data.get("response") == "":
-                                        break
+                    for attempt, request_url in enumerate(request_urls):
+                        if request_url.endswith("/v1/chat/completions"):
+                            data["messages"] = self._sanitize_messages_for_openai(base_messages)
+                        elif self._ollama_mode:
+                            data["messages"] = self._sanitize_messages_for_ollama(base_messages)
+                        else:
+                            data["messages"] = self._sanitize_messages_for_openai(base_messages)
+                        try:
+                            with requests.post(
+                                request_url,
+                                headers=self.prompt_headers,
+                                json=data,
+                                stream=True,
+                                timeout=30,  # Add a timeout for the request itself
+                            ) as response:
+                                if response.status_code >= 400:
+                                    response_text = response.text.strip()
+                                    http_error_detail = (response.status_code, response_text)
+                                    logger.error(
+                                        "LLM Processor: HTTP error {} from LLM service: {}",
+                                        response.status_code,
+                                        response_text or response.reason,
+                                    )
+                                    logger.error(
+                                        "LLM Processor: LLM payload (truncated): {}",
+                                        json.dumps(data)[:1200],
+                                    )
+                                    response.raise_for_status()
+                                logger.debug("LLM Processor: Request to LLM successful, processing stream...")
+                                for line in response.iter_lines():
+                                    if not self.processing_active_event.is_set() or self.shutdown_event.is_set():
+                                        logger.info("LLM Processor: Interruption or shutdown detected during LLM stream.")
+                                        break  # Stop processing stream
 
-                        if self.processing_active_event.is_set() and tool_calls_buffer:
-                            self._process_tool_call(tool_calls_buffer, autonomy_mode, tool_names)
-                        elif self.processing_active_event.is_set() and sentence_buffer:
-                            self._process_sentence_for_tts(sentence_buffer)
+                                    if line:
+                                        cleaned_line_data = self._clean_raw_bytes(line)
+                                        if cleaned_line_data:
+                                            chunk = self._process_chunk(cleaned_line_data)
+                                            if chunk:
+                                                if isinstance(chunk, list):
+                                                    self._process_tool_chunks(tool_calls_buffer, chunk)
+                                                elif not autonomy_mode:
+                                                    sentence_buffer.append(chunk)
+                                                    if chunk.strip() in self.PUNCTUATION_SET and (
+                                                        len(sentence_buffer) < 2
+                                                        or not sentence_buffer[-2].strip().isdigit()
+                                                    ):
+                                                        self._process_sentence_for_tts(sentence_buffer)
+                                                        sentence_buffer = []
+                                            elif cleaned_line_data.get("done_marker"):
+                                                break
+                                            elif cleaned_line_data.get("done") and cleaned_line_data.get("response") == "":
+                                                break
+
+                                if self.processing_active_event.is_set() and tool_calls_buffer:
+                                    self._process_tool_call(tool_calls_buffer, autonomy_mode, tool_names)
+                                elif self.processing_active_event.is_set() and sentence_buffer:
+                                    self._process_sentence_for_tts(sentence_buffer)
+                            break
+                        except requests.exceptions.HTTPError as e:
+                            response = getattr(e, "response", None)
+                            status_code = response.status_code if response is not None else "unknown"
+                            response_text = ""
+                            if response is not None:
+                                response_text = response.text.strip()
+                            http_error_detail = (status_code, response_text or str(e))
+                            if attempt < len(request_urls) - 1:
+                                logger.warning(
+                                    "LLM Processor: Retrying with fallback endpoint {}",
+                                    request_urls[attempt + 1],
+                                )
+                                continue
+                            raise
 
                 except requests.exceptions.ConnectionError as e:
                     logger.error(f"LLM Processor: Connection error to LLM service: {e}")
@@ -476,13 +627,22 @@ class LanguageModelProcessor:
                     logger.error(f"LLM Processor: Request to LLM timed out: {e}")
                     self.tts_input_queue.put("My brain seems to be taking too long to respond. It might be overloaded.")
                 except requests.exceptions.HTTPError as e:
-                    status_code = (
-                        e.response.status_code
-                        if hasattr(e, "response") and hasattr(e.response, "status_code")
-                        else "unknown"
-                    )
-                    logger.error(f"LLM Processor: HTTP error {status_code} from LLM service: {e}")
-                    self.tts_input_queue.put(f"I received an error from my thinking module. HTTP status {status_code}.")
+                    if http_error_detail:
+                        status_code, detail = http_error_detail
+                        logger.error(f"LLM Processor: HTTP error {status_code} from LLM service: {detail}")
+                        self.tts_input_queue.put(
+                            f"I received an error from my thinking module. HTTP status {status_code}."
+                        )
+                    else:
+                        status_code = (
+                            e.response.status_code
+                            if hasattr(e, "response") and hasattr(e.response, "status_code")
+                            else "unknown"
+                        )
+                        logger.error(f"LLM Processor: HTTP error {status_code} from LLM service: {e}")
+                        self.tts_input_queue.put(
+                            f"I received an error from my thinking module. HTTP status {status_code}."
+                        )
                 except requests.exceptions.RequestException as e:
                     logger.error(f"LLM Processor: Request to LLM failed: {e}")
                     self.tts_input_queue.put("Sorry, I encountered an error trying to reach my brain.")
