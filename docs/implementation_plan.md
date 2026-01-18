@@ -182,216 +182,181 @@ When main agent mentions a slot item, mark it shown in subagent memory.
 
 ---
 
-## Stage 3: Emotional Regulation (HEXACO + PAD)
+## Stage 3: Emotional Regulation (LLM-Driven HEXACO + PAD)
 
-**Goal:** Implement a deterministic, debuggable emotional system using:
-- **HEXACO** - Slow, character-level personality traits (immutable)
-- **PAD** - Fast, event-driven affect (Pleasure-Arousal-Dominance)
-- **Mood** - Slow-moving baseline that state leaks into
+**Goal:** Implement emotional system where the **LLM decides state transitions** based on:
+- **HEXACO personality** described in system prompt (immutable character traits)
+- **PAD state** (current Pleasure-Arousal-Dominance values)
+- **Timestamped events** (what happened and when)
 
-### 3.1 Personality Model (HEXACO)
+**Philosophy:** Instead of hard-coding decay math, modulation coefficients, and oscillation prevention, let the LLM reason about emotional dynamics. The LLM understands psychology and can make nuanced decisions.
 
-**File:** `src/glados/autonomy/personality.py` (new)
-
-```python
-@dataclass(frozen=True)
-class PersonalityHEXACO:
-    honesty_humility: float  # 0..1
-    emotionality: float
-    extraversion: float
-    agreeableness: float
-    conscientiousness: float
-    openness: float
-```
-
-**Checklist:**
-- [ ] Create frozen dataclass for immutable personality
-- [ ] Add validation (0-1 range)
-- [ ] Load from config YAML
-- [ ] Default GLaDOS personality (high openness, low agreeableness, etc.)
-
-### 3.2 Emotion State Model (PAD + Mood)
+### 3.1 Data Structures
 
 **File:** `src/glados/autonomy/emotion_state.py` (new)
 
 ```python
 @dataclass
 class EmotionState:
-    # Fast, momentary affect (-1 to +1)
-    pleasure: float = 0.0
-    arousal: float = 0.0
-    dominance: float = 0.0
-
-    # Slow mood baseline
-    mood_pleasure: float = 0.0
+    pleasure: float = 0.0      # -1 to +1
+    arousal: float = 0.0       # -1 to +1
+    dominance: float = 0.0     # -1 to +1
+    mood_pleasure: float = 0.0 # slow baseline
     mood_arousal: float = 0.0
     mood_dominance: float = 0.0
-
     last_update: float = field(default_factory=time.time)
-```
-
-**Checklist:**
-- [ ] Create EmotionState dataclass
-- [ ] Add to_dict() for serialization
-- [ ] Add to_prompt_fragment() for LLM injection
-
-### 3.3 Emotion Events
-
-**File:** `src/glados/autonomy/emotion_events.py` (new)
-
-```python
-AppraisalType = Literal[
-    "success", "failure", "threat", "social_warmth",
-    "social_conflict", "novelty", "boredom",
-    "control_gain", "control_loss"
-]
 
 @dataclass(frozen=True)
 class EmotionEvent:
-    source: str              # "user", "vision", "system"
-    appraisal: AppraisalType
-    intensity: float = 1.0   # 0..2
-    social: bool = False
-    timestamp: float | None = None
+    source: str           # "user", "vision", "system"
+    description: str      # Natural language: "user interrupted while speaking"
+    timestamp: float
 ```
 
-**Checklist:**
-- [ ] Create frozen EmotionEvent dataclass
-- [ ] Define AppraisalType literal type
-- [ ] Add event queue for emotion subagent
-
-### 3.4 Emotion Engine
-
-**File:** `src/glados/autonomy/emotion_engine.py` (new)
-
-Core deterministic engine with:
-- Half-life decay (state: 30s, mood: 15min)
-- Base appraisal → PAD mapping
-- HEXACO personality modulation
-- Mood leak from state
-
-```python
-BASE_APPRAISAL_PAD = {
-    "success":        (+0.4, +0.2, +0.2),
-    "failure":        (-0.4, -0.1, -0.2),
-    "threat":         (-0.5, +0.5, -0.5),
-    "social_warmth":  (+0.5, +0.2, -0.1),
-    "social_conflict":(-0.5, +0.4, +0.3),
-    "novelty":        (+0.2, +0.4,  0.0),
-    "boredom":        (-0.1, -0.4, -0.2),
-    "control_gain":   (+0.2, +0.2, +0.5),
-    "control_loss":   (-0.3, +0.3, -0.5),
-}
-
-class EmotionEngine:
-    def __init__(self, personality: PersonalityHEXACO, config: EmotionConfig): ...
-    def apply_event(self, event: EmotionEvent): ...
-    def tick(self): ...  # Decay even without events
-    def to_dict(self) -> dict: ...
-    def to_prompt_fragment(self) -> str: ...
-```
-
-**Personality modulation rules:**
-- **Emotionality**: Amplifies negative, dampens positive
-- **Extraversion**: Boosts social event reactions
-- **Agreeableness**: Dampens dominance in conflict
-- **Honesty-Humility**: Reduces dominance from success
-- **Openness**: Amplifies novelty reactions
-- **Conscientiousness**: Clamps extremes
+**Note:** No AppraisalType enum - let LLM interpret event semantics.
 
 **Checklist:**
-- [ ] Create EmotionConfig dataclass (half-lives, max_magnitude, mood_leak)
-- [ ] Implement _decay() with half-life math
-- [ ] Implement _personality_gain() with HEXACO modulation
-- [ ] Implement apply_event() with clamping
-- [ ] Implement tick() for passive decay
-- [ ] Implement to_prompt_fragment() with level descriptions
-- [ ] Add logging for debugging event → delta
+- [ ] Create EmotionState dataclass with PAD + mood
+- [ ] Create EmotionEvent with natural language description
+- [ ] Add to_dict() for serialization
+- [ ] Add from_dict() for parsing LLM response
 
-### 3.5 Emotion Event Sources
-
-Wire emotion events from existing components.
-
-**Files to modify:**
-- `src/glados/core/speech_listener.py` - User interrupts, speech patterns
-- `src/glados/vision/vision_processor.py` - Scene changes, new person
-- `src/glados/autonomy/loop.py` - Boredom on idle ticks
-- `src/glados/core/tool_executor.py` - Success/failure on tool calls
-
-**Event examples:**
-```python
-# User interrupts → control_loss
-EmotionEvent("user", "control_loss", intensity=0.5, social=True)
-
-# Vision detects new person → novelty + social_warmth
-EmotionEvent("vision", "novelty", intensity=0.8, social=True)
-
-# Tool succeeds → success
-EmotionEvent("system", "success", intensity=0.3)
-
-# Long idle → boredom
-EmotionEvent("system", "boredom", intensity=0.2)
-```
-
-**Checklist:**
-- [ ] Add EmotionEvent queue to engine
-- [ ] Emit from speech_listener (interrupts, wake word)
-- [ ] Emit from vision (scene changes)
-- [ ] Emit from autonomy loop (boredom on idle)
-- [ ] Emit from tool_executor (success/failure)
-
-### 3.6 Emotional Regulation Agent
+### 3.2 Emotion Agent (LLM-Driven)
 
 **File:** `src/glados/autonomy/agents/emotion_agent.py` (new)
 
 ```python
 class EmotionAgent(Subagent):
-    def __init__(self, personality: PersonalityHEXACO, ...):
-        self.engine = EmotionEngine(personality)
+    """LLM-driven emotional regulation."""
+
+    SYSTEM_PROMPT = '''
+You manage GLaDOS's emotional state using HEXACO personality and PAD affect.
+
+PERSONALITY (HEXACO - immutable):
+- Honesty-Humility: 0.3 (low - enjoys manipulation, sarcasm)
+- Emotionality: 0.7 (high - reactive to threats, anxiety-prone)
+- Extraversion: 0.4 (moderate - social but detached)
+- Agreeableness: 0.2 (low - dismissive, condescending)
+- Conscientiousness: 0.9 (high - perfectionist, detail-oriented)
+- Openness: 0.95 (very high - intellectually curious)
+
+CURRENT STATE (PAD):
+{current_state}
+
+RECENT EVENTS (with timestamps):
+{events}
+
+TIME NOW: {now}
+
+Based on the events and time elapsed, output the new PAD state as JSON:
+{"pleasure": X, "arousal": X, "dominance": X,
+ "mood_pleasure": X, "mood_arousal": X, "mood_dominance": X}
+
+Consider:
+- State (pleasure/arousal/dominance) responds quickly to events
+- Mood (*_pleasure/*_arousal/*_dominance) drifts slowly toward state
+- Personality modulates reactions (e.g., low agreeableness → dominance stays high)
+- Time since events matters (older events have less impact)
+'''
 
     def tick(self) -> SubagentOutput | None:
-        events = self.event_queue.get_pending(max=10)
-        if not events:
-            self.engine.tick()  # Still decay
-        else:
-            for ev in events:
-                self.engine.apply_event(ev)
+        events = self.event_queue.drain()
 
+        # Call LLM with current state + events
+        new_state = self._call_llm(events)
+        self.state = new_state
+
+        # Write to slot for main agent
         self.write_slot(
             status="active",
-            summary=self.engine.to_prompt_fragment(),
-            raw=self.engine.to_dict()
+            summary=self._state_to_prompt(),
         )
 ```
 
 **Checklist:**
 - [ ] Create EmotionAgent(Subagent)
-- [ ] Process event queue in tick()
-- [ ] Write to [emotion_state] slot
-- [ ] Include both prompt fragment and raw numbers
+- [ ] Implement event queue with drain()
+- [ ] Implement _call_llm() using autonomy lane
+- [ ] Parse JSON response into EmotionState
+- [ ] Write to [emotion] slot with human-readable summary
 
-### 3.7 Main Agent Integration
+### 3.3 Event Sources
+
+Wire emotion events from existing components with natural language descriptions.
+
+**Files to modify:**
+- `src/glados/core/speech_listener.py` - User interrupts
+- `src/glados/vision/vision_processor.py` - Scene changes
+- `src/glados/autonomy/loop.py` - Idle detection
+- `src/glados/core/tool_executor.py` - Tool success/failure
+
+**Event examples:**
+```python
+# User interrupts
+EmotionEvent("user", "User interrupted me mid-sentence", time.time())
+
+# Vision
+EmotionEvent("vision", "New person entered the room", time.time())
+
+# Tool success
+EmotionEvent("system", "MCP tool call succeeded", time.time())
+
+# Idle
+EmotionEvent("system", "No interaction for 5 minutes", time.time())
+```
+
+**Checklist:**
+- [ ] Emit events from speech_listener
+- [ ] Emit events from vision_processor
+- [ ] Emit events from autonomy loop (idle)
+- [ ] Emit events from tool_executor
+
+### 3.4 Main Agent Integration
+
+Inject emotional context as system message.
 
 **File:** `src/glados/core/llm_processor.py` (modify)
 
-**Checklist:**
-- [ ] Read emotion_state slot
-- [ ] Inject prompt fragment as system message
-- [ ] Optionally include raw PAD numbers for LLM reasoning
+```
+[emotion] Currently feeling slightly annoyed (P:-0.3, A:0.4, D:0.6).
+Mood is neutral. Recent: user interrupted twice.
+```
 
-### 3.8 TUI Command
+**Checklist:**
+- [ ] Read emotion slot in LLM processor
+- [ ] Inject as system message
+
+### 3.5 TUI Command
 
 **File:** `src/glados/core/engine.py` (modify)
 
-Add `/emotion` command showing:
-- Current PAD + mood values
-- Last N events that drove changes
-- Personality configuration
-
 **Checklist:**
 - [ ] Add /emotion command
-- [ ] Display formatted PAD state
-- [ ] Show recent event history
+- [ ] Display current PAD + mood values
+- [ ] Show recent events
+
+### 3.6 Files Summary
+
+**New files (2):**
+```
+src/glados/autonomy/emotion_state.py       # Data structures only
+src/glados/autonomy/agents/emotion_agent.py # LLM-driven subagent
+```
+
+**Modified files (4):**
+```
+src/glados/core/engine.py           # /emotion command, register agent
+src/glados/core/speech_listener.py  # Emit events
+src/glados/core/tool_executor.py    # Emit events
+src/glados/autonomy/loop.py         # Emit idle events
+```
+
+**Eliminated complexity (vs. deterministic approach):**
+- No EmotionEngine with decay math
+- No BASE_APPRAISAL_PAD mapping table
+- No personality modulation coefficients
+- No oscillation prevention code
+- No half-life calculations
 
 ---
 
@@ -458,7 +423,12 @@ mcp = FastMCP("memory")
 def store_fact(fact: str, source: str, importance: float) -> str: ...
 
 @mcp.tool()
-def search_memory(query: str, limit: int = 5) -> str: ...
+def search_memory(query: str, context: str = "", limit: int = 5) -> str:
+    """LLM-driven semantic search over stored facts."""
+    facts = load_all_facts()
+    # LLM call: "Given query '{query}' and context '{context}',
+    #           rank these facts by relevance: {facts}"
+    return ranked_facts[:limit]
 
 @mcp.tool()
 def store_summary(summary: str, period: str, start: str, end: str) -> str: ...
@@ -469,10 +439,12 @@ def get_summaries(period: str, limit: int = 3) -> str: ...
 
 **Storage:** `~/.glados/memory/facts.jsonl`, `summaries.jsonl`
 
+**Note:** `search_memory()` uses LLM to rank facts by semantic relevance, not keyword matching. This follows the LLM-first principle.
+
 **Checklist:**
 - [ ] Create memory MCP server with FastMCP
 - [ ] Implement `store_fact()` with metadata
-- [ ] Implement `search_memory()` (keyword initially, embeddings later)
+- [ ] Implement `search_memory()` with LLM ranking
 - [ ] Implement `store_summary()` with period tagging
 - [ ] Implement `get_summaries()` for context retrieval
 - [ ] Add to default MCP servers config
@@ -614,7 +586,62 @@ constitution:
 - [ ] Add memory configuration (paths, limits)
 - [ ] Document all new config options
 
-### 7.4 Testing
+### 7.4 Preferences Slot (Subagent ↔ Main Agent Feedback)
+
+**Goal:** Main agent supervises subagents and stores user preferences centrally.
+
+**Architecture:**
+- Main agent observes user reactions to subagent output
+- Main agent asks user for preferences when needed
+- Preferences stored in `[preferences]` slot
+- Subagents read preferences slot to adapt behavior
+
+**Implementation:**
+
+1. **Preferences slot structure:**
+```python
+preferences_slot.update(
+    news_topics=["AI", "science"],
+    news_exclude=["crypto", "sports"],
+    weather_units="celsius",
+)
+```
+
+2. **Subagents read preferences in tick():**
+```python
+def tick(self):
+    prefs = self.slot_store.get("preferences")
+    if prefs and "news_exclude" in prefs:
+        self.filter_topics = prefs["news_exclude"]
+```
+
+3. **Main agent tools:**
+```python
+@tool
+def update_preference(key: str, value: Any) -> str:
+    """Update user preferences (e.g., news topics, units)."""
+    ...
+
+@tool
+def get_preferences() -> dict:
+    """Get current user preferences."""
+    ...
+```
+
+4. **Supervision in autonomy prompt:**
+```
+You supervise subagents. If you notice the user ignoring certain
+types of content (e.g., crypto news), ask if they'd like to filter it.
+Use update_preference() to store their answer.
+```
+
+**Checklist:**
+- [ ] Add `[preferences]` slot to TaskSlotStore
+- [ ] Add `update_preference()` and `get_preferences()` tools
+- [ ] Update subagent base class to read preferences
+- [ ] Add supervision guidance to autonomy prompt
+
+### 7.5 Testing
 
 **Checklist:**
 - [ ] Unit tests for SubagentMemory
@@ -623,26 +650,27 @@ constitution:
 - [ ] Integration test: subagent lifecycle
 - [ ] Integration test: memory persistence
 - [ ] Integration test: emotional regulation effect
+- [ ] Integration test: preferences slot propagation
 - [ ] Load test: multiple subagents running
 
 ---
 
 ## File Summary
 
-### New Files (15)
+### New Files (12)
 ```
 src/glados/autonomy/
-├── subagent.py              # Base class
-├── subagent_manager.py      # Lifecycle management
+├── subagent.py              # Base class (Stage 1 - DONE)
+├── subagent_manager.py      # Lifecycle management (Stage 1 - DONE)
 ├── subagent_memory.py       # Per-agent jsonlines memory
-├── emotional_state.py       # VAD emotional model
+├── emotion_state.py         # PAD + event data structures (LLM-driven)
 ├── constitution.py          # Constitutional rules
 ├── summarization.py         # Hierarchical summarization
 └── agents/
-    ├── __init__.py
-    ├── news_agent.py        # Migrated from jobs
-    ├── weather_agent.py     # Migrated from jobs
-    ├── emotion_agent.py     # Emotional regulation
+    ├── __init__.py          # (Stage 1 - DONE)
+    ├── hacker_news.py       # Migrated from jobs (Stage 1 - DONE)
+    ├── weather.py           # Migrated from jobs (Stage 1 - DONE)
+    ├── emotion_agent.py     # LLM-driven emotional regulation
     ├── compaction_agent.py  # Message compaction
     └── observer_agent.py    # Meta-supervision
 
@@ -652,10 +680,10 @@ src/glados/mcp/
 
 ### Modified Files (6)
 ```
-src/glados/core/engine.py           # SubagentManager integration
+src/glados/core/engine.py           # SubagentManager integration (Stage 1 - DONE)
 src/glados/core/llm_processor.py    # Emotional state injection
 src/glados/core/speech_player.py    # Shown tracking callback
-src/glados/autonomy/jobs.py         # Deprecation path
+src/glados/autonomy/jobs.py         # Deprecated (Stage 1)
 configs/glados_config.yaml          # New config sections
 ```
 
@@ -689,5 +717,5 @@ Following the existing codebase patterns:
 6. **Frozen dataclasses for events** - Immutable message passing
 7. **Observability emissions** - Every significant action emits an event
 8. **Graceful degradation** - Features fail independently
-9. **Simple first** - Start with keyword matching, add ML later
-10. **Backwards compatible** - Old configs should still work
+9. **Backwards compatible** - Old configs should still work
+10. **LLM-first** - Use LLM reasoning for complex decisions; code handles data/IO/coordination. Instead of hard-coding logic (decay math, modulation coefficients), describe the model in prompts and let the LLM reason about state transitions.
