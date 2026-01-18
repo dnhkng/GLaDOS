@@ -22,9 +22,9 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
-from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, TaskManager, TaskSlotStore
+from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
+from ..autonomy.agents import HackerNewsSubagent, WeatherSubagent
 from ..autonomy.events import TimeTickEvent
-from ..autonomy.jobs import BackgroundJobScheduler, build_jobs
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..vision import VisionConfig, VisionState
@@ -241,7 +241,7 @@ class Glados:
         self.autonomy_loop: AutonomyLoop | None = None
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
-        self.autonomy_job_runner: BackgroundJobScheduler | None = None
+        self.subagent_manager: SubagentManager | None = None
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
@@ -263,15 +263,13 @@ class Glados:
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
             self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
             if self.autonomy_config.jobs.enabled:
-                jobs = build_jobs(self.autonomy_config.jobs, observability_bus=self.observability_bus)
-                if jobs:
-                    self.autonomy_job_runner = BackgroundJobScheduler(
-                        jobs=jobs,
-                        task_manager=self.autonomy_tasks,
-                        shutdown_event=self.shutdown_event,
-                        observability_bus=self.observability_bus,
-                        poll_interval_s=self.autonomy_config.jobs.poll_interval_s,
-                    )
+                self.subagent_manager = SubagentManager(
+                    slot_store=self.autonomy_slots,
+                    mind_registry=self.mind_registry,
+                    observability_bus=self.observability_bus,
+                    shutdown_event=self.shutdown_event,
+                )
+                self._register_subagents()
 
         if self.vision_config:
             # Add instructions to system prompt to correctly handle [vision] marked messages
@@ -494,8 +492,6 @@ class Glados:
             thread_targets["AutonomyLoop"] = self.autonomy_loop.run
         if self.vision_processor:
             thread_targets["VisionProcessor"] = self.vision_processor.run
-        if self.autonomy_job_runner:
-            thread_targets["BackgroundJobs"] = self.autonomy_job_runner.run
         if self.autonomy_ticker_thread:
             self.component_threads.append(self.autonomy_ticker_thread)
             self.autonomy_ticker_thread.start()
@@ -516,6 +512,61 @@ class Glados:
             thread.start()
             logger.info(f"Orchestrator: {name} thread started.")
             self.mind_registry.update(name, "running", summary="Thread active")
+
+        # Start subagents after other components are running
+        if self.subagent_manager:
+            self.subagent_manager.start_all()
+
+    def _register_subagents(self) -> None:
+        """Register configured subagents with the manager."""
+        if not self.subagent_manager:
+            return
+
+        jobs_config = self.autonomy_config.jobs
+
+        if jobs_config.hacker_news.enabled:
+            hn_config = SubagentConfig(
+                agent_id="hn_top",
+                title="Hacker News",
+                role="news_monitor",
+                loop_interval_s=jobs_config.hacker_news.interval_s,
+                run_on_start=True,
+            )
+            hn_subagent = HackerNewsSubagent(
+                config=hn_config,
+                top_n=jobs_config.hacker_news.top_n,
+                min_score=jobs_config.hacker_news.min_score,
+                slot_store=self.autonomy_slots,
+                mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus,
+                shutdown_event=self.shutdown_event,
+            )
+            self.subagent_manager.register(hn_subagent)
+
+        if jobs_config.weather.enabled:
+            if jobs_config.weather.latitude is None or jobs_config.weather.longitude is None:
+                logger.warning("Weather subagent enabled but latitude/longitude are missing.")
+            else:
+                weather_config = SubagentConfig(
+                    agent_id="weather",
+                    title="Weather",
+                    role="weather_monitor",
+                    loop_interval_s=jobs_config.weather.interval_s,
+                    run_on_start=True,
+                )
+                weather_subagent = WeatherSubagent(
+                    config=weather_config,
+                    latitude=jobs_config.weather.latitude,
+                    longitude=jobs_config.weather.longitude,
+                    timezone=jobs_config.weather.timezone,
+                    temp_change_c=jobs_config.weather.temp_change_c,
+                    wind_alert_kmh=jobs_config.weather.wind_alert_kmh,
+                    slot_store=self.autonomy_slots,
+                    mind_registry=self.mind_registry,
+                    observability_bus=self.observability_bus,
+                    shutdown_event=self.shutdown_event,
+                )
+                self.subagent_manager.register(weather_subagent)
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -647,6 +698,8 @@ class Glados:
                 self.mind_registry.update(component.name, "stopped", summary="Shutdown")
             if self.autonomy_ticker_thread:
                 self.mind_registry.update("AutonomyTicker", "stopped", summary="Shutdown")
+            if self.subagent_manager:
+                self.subagent_manager.shutdown()
             if self.autonomy_tasks:
                 self.autonomy_tasks.shutdown()
             if self.mcp_manager:
@@ -872,6 +925,14 @@ class Glados:
         )
         register(
             CommandSpec(
+                name="agents",
+                description="Show registered subagents",
+                usage="/agents",
+                handler=self._cmd_agents,
+            )
+        )
+        register(
+            CommandSpec(
                 name="vision",
                 description="Show latest vision snapshot",
                 usage="/vision",
@@ -990,6 +1051,21 @@ class Glados:
             lines.append(f"- {mind.title}: {mind.status}{summary_text}")
         if len(minds) > 20:
             lines.append(f"... {len(minds) - 20} more")
+        return "\n".join(lines)
+
+    def _cmd_agents(self, _args: list[str]) -> str:
+        if not self.subagent_manager:
+            return "Subagent manager is not enabled."
+        agents = self.subagent_manager.list_agents()
+        if not agents:
+            return "No subagents registered."
+        lines = ["Subagents:"]
+        for agent in agents[:20]:
+            status = "running" if agent.running else "stopped"
+            tick_info = f"ticks={agent.tick_count}" if agent.tick_count > 0 else "not started"
+            lines.append(f"- {agent.title} ({agent.agent_id}): {status}, {tick_info}")
+        if len(agents) > 20:
+            lines.append(f"... {len(agents) - 20} more")
         return "\n".join(lines)
 
     def _cmd_vision(self, _args: list[str]) -> str:
