@@ -4,12 +4,15 @@ import queue
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from typing import Any
+from typing import Any, Callable
 
 from loguru import logger
 from ..mcp import MCPManager
 from ..observability import ObservabilityBus, trim_message
 from ..tools import all_tools, tool_classes
+
+# Callback signature: (event_type: str, tool_name: str) -> None
+ToolEventCallback = Callable[[str, str], None]
 
 
 class ToolExecutor:
@@ -31,6 +34,7 @@ class ToolExecutor:
         pause_time: float = 0.05,
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
+        on_tool_event: ToolEventCallback | None = None,
     ) -> None:
         self.llm_queue_priority = llm_queue_priority
         self.llm_queue_autonomy = llm_queue_autonomy
@@ -42,6 +46,12 @@ class ToolExecutor:
         self.pause_time = pause_time
         self.mcp_manager = mcp_manager
         self._observability_bus = observability_bus
+        self._on_tool_event = on_tool_event
+
+    def _emit_tool_event(self, event_type: str, tool_name: str) -> None:
+        """Emit a tool event to the callback if registered."""
+        if self._on_tool_event:
+            self._on_tool_event(event_type, tool_name)
 
     def run(self) -> None:
         """
@@ -126,6 +136,7 @@ class ToolExecutor:
                                 meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                             )
                         logger.success("ToolExecutor: finished {}", tool)
+                        self._emit_tool_event("tool_success", tool)
                         self._enqueue(
                             llm_queue,
                             {
@@ -139,6 +150,7 @@ class ToolExecutor:
                         )
                     except Exception as e:
                         tool_error = f"error: MCP tool '{tool}' failed - {e}"
+                        self._emit_tool_event("tool_failure", tool)
                         logger.error(f"ToolExecutor: {tool_error}")
                         if self._observability_bus:
                             self._observability_bus.emit(
@@ -179,8 +191,10 @@ class ToolExecutor:
                                     meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                                 )
                             logger.success("ToolExecutor: finished {}", tool)
+                            self._emit_tool_event("tool_success", tool)
                         except FuturesTimeoutError:
                             timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
+                            self._emit_tool_event("tool_timeout", tool)
                             logger.error(f"ToolExecutor: {timeout_error}")
                             if self._observability_bus:
                                 self._observability_bus.emit(

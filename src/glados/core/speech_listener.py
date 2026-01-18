@@ -16,10 +16,15 @@ from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 
+from typing import Callable
+
 from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
 from .audio_state import AudioState
 from ..observability import ObservabilityBus, trim_message
+
+# Callback signature: (event_type: str) -> None
+InterruptCallback = Callable[[str], None]
 
 
 class SpeechListener:
@@ -52,6 +57,7 @@ class SpeechListener:
         observability_bus: ObservabilityBus | None = None,
         asr_muted_event: threading.Event | None = None,
         audio_state: AudioState | None = None,
+        on_interrupt: InterruptCallback | None = None,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -89,6 +95,7 @@ class SpeechListener:
         self._observability_bus = observability_bus
         self._asr_muted_event = asr_muted_event
         self._audio_state = audio_state
+        self._on_interrupt = on_interrupt
 
     def run(self) -> None:
         """
@@ -178,10 +185,16 @@ class SpeechListener:
                 logger.debug(f"Detected voice activity but interruptibility is disabled: {self.interruptible=}, {self.currently_speaking_event.is_set()=}")
                 return
 
+            # Check if this is an interrupt (user speaking while GLaDOS was speaking)
+            was_speaking = self.currently_speaking_event.is_set()
+
             self.audio_io.stop_speaking()
             self.processing_active_event.clear()
             self._samples = list(self._buffer)  # Clean conversion
             self._recording_started = True
+
+            if was_speaking and self._on_interrupt:
+                self._on_interrupt("user_interrupt")
 
     def _process_activated_audio(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
