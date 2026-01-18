@@ -15,6 +15,7 @@ from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
 from ..autonomy import ConstitutionalState, TaskSlotStore
 from .context import ContextBuilder
+from .conversation_store import ConversationStore
 from .store import Store
 from .llm_tracking import InFlightCounter
 from ..mcp import MCPManager
@@ -48,7 +49,7 @@ class LanguageModelProcessor:
         llm_input_queue: queue.Queue[dict[str, Any]],
         tool_calls_queue: queue.Queue[dict[str, Any]],
         tts_input_queue: queue.Queue[str],
-        conversation_history: list[dict[str, Any]],  # Shared
+        conversation_store: ConversationStore,
         completion_url: HttpUrl,
         model_name: str,  # Renamed from 'model' to avoid conflict
         api_key: str | None,
@@ -64,14 +65,13 @@ class LanguageModelProcessor:
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
         extra_headers: dict[str, str] | None = None,
-        conversation_lock: threading.Lock | None = None,
         lane: str = "priority",
         inflight_counter: InFlightCounter | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
         self.tool_calls_queue = tool_calls_queue
         self.tts_input_queue = tts_input_queue
-        self.conversation_history = conversation_history
+        self._conversation_store = conversation_store
         self.completion_url = completion_url
         self.model_name = model_name
         self.api_key = api_key
@@ -86,7 +86,6 @@ class LanguageModelProcessor:
         self.autonomy_system_prompt = autonomy_system_prompt
         self.mcp_manager = mcp_manager
         self._observability_bus = observability_bus
-        self._conversation_lock = conversation_lock
         self._lane = lane
         self._inflight_counter = inflight_counter
         self._ollama_mode = self._is_ollama_endpoint()
@@ -365,15 +364,9 @@ class LanguageModelProcessor:
             tool_call.setdefault("type", "function")
             if not tool_call.get("id"):
                 tool_call["id"] = f"toolcall_{uuid.uuid4().hex}"
-        if self._conversation_lock:
-            with self._conversation_lock:
-                self.conversation_history.append(
-                    {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
-                )
-        else:
-            self.conversation_history.append(
-                {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
-            )
+        self._conversation_store.append(
+            {"role": "assistant", "index": 0, "tool_calls": tool_calls, "finish_reason": "tool_calls"}
+        )
         tool_labels = [call.get("function", {}).get("name", "unknown") for call in tool_calls]
         tool_label_text = ", ".join(tool_labels)
         suffix = " (autonomy)" if autonomy_mode else ""
@@ -562,11 +555,7 @@ class LanguageModelProcessor:
 
     def _build_messages(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting context from registered sources."""
-        if self._conversation_lock:
-            with self._conversation_lock:
-                messages = list(self.conversation_history)
-        else:
-            messages = list(self.conversation_history)
+        messages = self._conversation_store.snapshot()
         extra_messages: list[dict[str, Any]] = []
 
         if autonomy_mode and self.autonomy_system_prompt:
@@ -691,11 +680,7 @@ class LanguageModelProcessor:
                     inflight_guard = True
                 else:
                     inflight_guard = False
-                if self._conversation_lock:
-                    with self._conversation_lock:
-                        self.conversation_history.append(llm_message)
-                else:
-                    self.conversation_history.append(llm_message)
+                self._conversation_store.append(llm_message)
 
                 allow_tools = bool(llm_input.get("_allow_tools", True))
                 tools = self._build_tools(autonomy_mode) if allow_tools else []

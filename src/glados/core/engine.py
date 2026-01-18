@@ -35,8 +35,10 @@ from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
 from .context import ContextBuilder
 from .audio_state import AudioState
+from .conversation_store import ConversationStore
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
+from .shutdown import ShutdownOrchestrator, ShutdownPriority
 from .store import Store, format_preferences
 from .llm_tracking import InFlightCounter
 from .speech_listener import SpeechListener
@@ -237,7 +239,7 @@ class Glados:
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
         self.mcp_servers = mcp_servers or []
-        self._messages: list[dict[str, Any]] = list(personality_preprompt)
+        self._conversation_store = ConversationStore(initial_messages=list(personality_preprompt))
         self.vision_config = vision_config
         self.autonomy_config = autonomy_config or AutonomyConfig()
         self.vision_state: VisionState | None = VisionState() if self.vision_config else None
@@ -276,6 +278,13 @@ class Glados:
         self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
         self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
+
+        # Initialize shutdown orchestrator for graceful shutdown
+        self._shutdown_orchestrator = ShutdownOrchestrator(
+            shutdown_event=self.shutdown_event,
+            global_timeout=30.0,
+            phase_timeout=10.0,
+        )
         if self.autonomy_config.enabled:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
@@ -293,12 +302,22 @@ class Glados:
 
         if self.vision_config:
             # Add instructions to system prompt to correctly handle [vision] marked messages
-            for message in self._messages:
+            messages = self._conversation_store.snapshot()
+            vision_prompt_added = False
+            for i, message in enumerate(messages):
                 if message.get("role") == "system" and isinstance(message.get("content"), str):
-                    message["content"] = f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"
+                    self._conversation_store.modify_message(
+                        i,
+                        {"content": f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"}
+                    )
+                    vision_prompt_added = True
                     break
-            else:
-                self._messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING})
+            if not vision_prompt_added:
+                # Prepend a new system message with vision handling instructions
+                current_messages = self._conversation_store.snapshot()
+                self._conversation_store.replace_all(
+                    [{"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING}] + current_messages
+                )
 
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
@@ -308,7 +327,6 @@ class Glados:
         self._asr_model.transcribe_file(resource_path("data/0.wav"))
 
         # Initialize queues for inter-thread communication
-        self._conversation_lock = threading.Lock()
         self._autonomy_inflight = InFlightCounter()
         self.llm_queue_priority: queue.Queue[dict[str, Any]] = queue.Queue()
         autonomy_queue_max = self.autonomy_config.autonomy_queue_max
@@ -370,7 +388,7 @@ class Glados:
             llm_input_queue=self.llm_queue_priority,
             tool_calls_queue=self.tool_calls_queue,
             tts_input_queue=self.tts_queue,
-            conversation_history=self._messages,  # Shared, to be refactored
+            conversation_store=self._conversation_store,
             completion_url=self.completion_url,
             model_name=self.llm_model,
             api_key=self.api_key,
@@ -386,7 +404,6 @@ class Glados:
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
             extra_headers=llm_headers,
-            conversation_lock=self._conversation_lock,
             lane="priority",
         )
         self.autonomy_llm_processors: list[LanguageModelProcessor] = []
@@ -399,7 +416,7 @@ class Glados:
                     llm_input_queue=self.llm_queue_autonomy,
                     tool_calls_queue=self.tool_calls_queue,
                     tts_input_queue=self.tts_queue,
-                    conversation_history=self._messages,
+                    conversation_store=self._conversation_store,
                     completion_url=self.completion_url,
                     model_name=self.llm_model,
                     api_key=self.api_key,
@@ -415,7 +432,6 @@ class Glados:
                     mcp_manager=self.mcp_manager,
                     observability_bus=self.observability_bus,
                     extra_headers=llm_headers,
-                    conversation_lock=self._conversation_lock,
                     lane="autonomy",
                     inflight_counter=self._autonomy_inflight,
                 )
@@ -456,7 +472,7 @@ class Glados:
         self.speech_player = SpeechPlayer(
             audio_io=self.audio_io,
             audio_output_queue=self.audio_queue,
-            conversation_history=self._messages,  # Shared, to be refactored
+            conversation_store=self._conversation_store,
             tts_sample_rate=self._tts.sample_rate,
             shutdown_event=self.shutdown_event,
             currently_speaking_event=self.currently_speaking_event,
@@ -465,7 +481,6 @@ class Glados:
             tts_muted_event=self.tts_muted_event,
             interaction_state=self.interaction_state,
             observability_bus=self.observability_bus,
-            conversation_lock=self._conversation_lock,
         )
 
         self.vision_processor = None
@@ -506,25 +521,78 @@ class Glados:
                     daemon=True,
                 )
 
-        thread_targets = {
-            "LLMProcessor": self.llm_processor.run,
-            "ToolExecutor": self.tool_executor.run,
-            "TTSSynthesizer": self.tts_synthesizer.run,
-            "AudioPlayer": self.speech_player.run,
+        # Define thread configurations with daemon settings and shutdown priorities
+        # daemon=True: Can be killed without waiting (pure input, stateless)
+        # daemon=False: Must be joined (has in-flight state to preserve)
+        thread_configs: dict[str, tuple[Any, bool, ShutdownPriority, queue.Queue | None]] = {
+            "LLMProcessor": (
+                self.llm_processor.run,
+                False,  # Has in-flight conversation updates
+                ShutdownPriority.PROCESSING,
+                self.llm_queue_priority,
+            ),
+            "ToolExecutor": (
+                self.tool_executor.run,
+                False,  # Tool results need to be recorded
+                ShutdownPriority.PROCESSING,
+                self.tool_calls_queue,
+            ),
+            "TTSSynthesizer": (
+                self.tts_synthesizer.run,
+                False,  # Pending TTS to complete
+                ShutdownPriority.OUTPUT,
+                self.tts_queue,
+            ),
+            "AudioPlayer": (
+                self.speech_player.run,
+                False,  # Audio playing needs to finish
+                ShutdownPriority.OUTPUT,
+                self.audio_queue,
+            ),
         }
         for index, processor in enumerate(self.autonomy_llm_processors, start=1):
-            thread_targets[f"LLMProcessorAutonomy-{index}"] = processor.run
+            thread_configs[f"LLMProcessorAutonomy-{index}"] = (
+                processor.run,
+                False,  # Has in-flight conversation updates
+                ShutdownPriority.PROCESSING,
+                self.llm_queue_autonomy,
+            )
         if self.speech_listener:
-            thread_targets["SpeechListener"] = self.speech_listener.run
+            thread_configs["SpeechListener"] = (
+                self.speech_listener.run,
+                True,  # Pure input, no state
+                ShutdownPriority.INPUT,
+                None,
+            )
         if self.text_listener:
-            thread_targets["TextListener"] = self.text_listener.run
+            thread_configs["TextListener"] = (
+                self.text_listener.run,
+                True,  # Pure input, no state
+                ShutdownPriority.INPUT,
+                None,
+            )
         if self.autonomy_loop:
-            thread_targets["AutonomyLoop"] = self.autonomy_loop.run
+            thread_configs["AutonomyLoop"] = (
+                self.autonomy_loop.run,
+                True,  # Can safely abandon
+                ShutdownPriority.BACKGROUND,
+                None,
+            )
         if self.vision_processor:
-            thread_targets["VisionProcessor"] = self.vision_processor.run
+            thread_configs["VisionProcessor"] = (
+                self.vision_processor.run,
+                True,  # Can safely abandon
+                ShutdownPriority.BACKGROUND,
+                self.vision_request_queue,
+            )
         if self.autonomy_ticker_thread:
             self.component_threads.append(self.autonomy_ticker_thread)
             self.autonomy_ticker_thread.start()
+            self._shutdown_orchestrator.register(
+                "AutonomyTicker",
+                self.autonomy_ticker_thread,
+                priority=ShutdownPriority.BACKGROUND,
+            )
             logger.info("Orchestrator: AutonomyTicker thread started.")
             self.mind_registry.register(
                 "AutonomyTicker",
@@ -533,14 +601,20 @@ class Glados:
                 summary="Periodic autonomy ticks",
             )
 
-        for name in thread_targets:
+        for name in thread_configs:
             self.mind_registry.register(name, title=name, status="starting", summary="Initializing")
 
-        for name, target_func in thread_targets.items():
-            thread = threading.Thread(target=target_func, name=name, daemon=True)
+        for name, (target_func, daemon, priority, component_queue) in thread_configs.items():
+            thread = threading.Thread(target=target_func, name=name, daemon=daemon)
             self.component_threads.append(thread)
             thread.start()
-            logger.info(f"Orchestrator: {name} thread started.")
+            self._shutdown_orchestrator.register(
+                name,
+                thread,
+                queue=component_queue,
+                priority=priority,
+            )
+            logger.info(f"Orchestrator: {name} thread started (daemon={daemon}).")
             self.mind_registry.update(name, "running", summary="Thread active")
 
         # Start subagents after other components are running
@@ -637,10 +711,9 @@ class Glados:
         compaction_agent = CompactionAgent(
             config=compaction_config,
             llm_config=llm_config,
-            conversation_history=self._messages,
-            conversation_lock=self._conversation_lock,
-            token_threshold=8000,
-            preserve_recent=10,
+            conversation_store=self._conversation_store,
+            token_threshold=self.autonomy_config.tokens.token_threshold,
+            preserve_recent=self.autonomy_config.tokens.preserve_recent_messages,
             slot_store=self.autonomy_slots,
             mind_registry=self.mind_registry,
             observability_bus=self.observability_bus,
@@ -659,8 +732,7 @@ class Glados:
         observer_agent = ObserverAgent(
             config=observer_config,
             llm_config=llm_config,
-            conversation_history=self._messages,
-            conversation_lock=self._conversation_lock,
+            conversation_store=self._conversation_store,
             constitutional_state=self.constitutional_state,
             sample_count=10,
             min_samples_for_analysis=5,
@@ -697,9 +769,9 @@ class Glados:
         Retrieve the current list of conversation messages.
 
         Returns:
-            list[dict[str, Any]]: A list of message dictionaries representing the conversation history.
+            list[dict[str, Any]]: A snapshot of message dictionaries representing the conversation history.
         """
-        return self._messages
+        return self._conversation_store.snapshot()
 
     @classmethod
     def from_config(cls, config: GladosConfig) -> "Glados":
@@ -792,22 +864,46 @@ class Glados:
                         self.audio_io.stop_speaking()
                         self.currently_speaking_event.clear()
                         break
-            self.shutdown_event.set()
-            # Give threads a moment to notice the shutdown event
-            time.sleep(self.PAUSE_TIME)
         finally:
-            logger.info("Listen event loop is stopping/exiting.")
-            for component in self.component_threads:
-                self.mind_registry.update(component.name, "stopped", summary="Shutdown")
-            if self.autonomy_ticker_thread:
-                self.mind_registry.update("AutonomyTicker", "stopped", summary="Shutdown")
-            if self.subagent_manager:
-                self.subagent_manager.shutdown()
-            if self.autonomy_tasks:
-                self.autonomy_tasks.shutdown()
-            if self.mcp_manager:
-                self.mcp_manager.shutdown()
-            sys.exit(0)
+            self._graceful_shutdown()
+
+    def _graceful_shutdown(self) -> None:
+        """Perform graceful shutdown of all components."""
+        logger.info("Beginning graceful shutdown...")
+
+        # Stop subagents first (they may be using shared resources)
+        if self.subagent_manager:
+            logger.debug("Shutting down subagent manager...")
+            self.subagent_manager.shutdown(timeout=5.0)
+
+        # Stop task manager
+        if self.autonomy_tasks:
+            logger.debug("Shutting down task manager...")
+            self.autonomy_tasks.shutdown(wait=True)
+
+        # Use orchestrator for coordinated thread shutdown
+        results = self._shutdown_orchestrator.initiate_shutdown()
+
+        # Update mind registry for all components
+        for component in self.component_threads:
+            self.mind_registry.update(component.name, "stopped", summary="Shutdown")
+        if self.autonomy_ticker_thread:
+            self.mind_registry.update("AutonomyTicker", "stopped", summary="Shutdown")
+
+        # Stop MCP manager last (other components may need it during shutdown)
+        if self.mcp_manager:
+            logger.debug("Shutting down MCP manager...")
+            self.mcp_manager.shutdown()
+
+        # Log any failed shutdowns
+        failed = [r for r in results if not r.success]
+        if failed:
+            logger.warning(
+                "Some components did not shut down cleanly: {}",
+                [r.component for r in failed],
+            )
+
+        logger.info("Graceful shutdown complete.")
 
     def set_asr_muted(self, muted: bool) -> None:
         if muted:
@@ -1254,8 +1350,7 @@ class Glados:
         return "\n".join(lines)
 
     def _cmd_context(self, _args: list[str]) -> str:
-        with self._conversation_lock:
-            messages = list(self._messages)
+        messages = self._conversation_store.snapshot()
         token_count = estimate_tokens(messages)
         msg_count = len(messages)
         system_count = sum(1 for m in messages if m.get("role") == "system")

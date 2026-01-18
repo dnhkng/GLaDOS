@@ -123,14 +123,44 @@ class SubagentManager:
             except Exception as exc:
                 logger.error("Failed to start subagent %s: %s", agent_id, exc)
 
-    def stop_all(self, timeout: float = 5.0) -> None:
-        """Stop all running subagents."""
+    def stop_all(self, timeout: float = 5.0, global_timeout: bool = True) -> None:
+        """
+        Stop all running subagents.
+
+        Args:
+            timeout: Timeout per subagent (if global_timeout=False) or
+                    total timeout for all subagents (if global_timeout=True).
+            global_timeout: If True, timeout is the total time for all subagents.
+                           If False, each subagent gets the full timeout.
+        """
+        import time
+
         with self._lock:
             agent_ids = list(self._agents.keys())
 
+        if not agent_ids:
+            return
+
+        if global_timeout:
+            per_agent_timeout = timeout / len(agent_ids)
+            deadline = time.time() + timeout
+        else:
+            per_agent_timeout = timeout
+            deadline = None
+
         for agent_id in agent_ids:
+            # Adjust timeout based on remaining time
+            if deadline is not None:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    logger.warning("Global timeout reached, abandoning remaining subagents")
+                    break
+                current_timeout = min(per_agent_timeout, remaining)
+            else:
+                current_timeout = per_agent_timeout
+
             try:
-                self.stop(agent_id, timeout=timeout)
+                self.stop(agent_id, timeout=current_timeout)
             except Exception as exc:
                 logger.error("Failed to stop subagent %s: %s", agent_id, exc)
 

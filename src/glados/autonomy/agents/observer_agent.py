@@ -8,15 +8,17 @@ adjustments within constitutional bounds.
 from __future__ import annotations
 
 import json
-import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from ..constitution import Constitution, ConstitutionalState, PromptModifier
+from ..constitution import ConstitutionalState, PromptModifier
 from ..llm_client import LLMConfig, llm_call
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
+
+if TYPE_CHECKING:
+    from ...core.conversation_store import ConversationStore
 
 
 OBSERVER_SYSTEM_PROMPT = """You are an observer agent monitoring GLaDOS's behavior.
@@ -58,8 +60,7 @@ class ObserverAgent(Subagent):
         self,
         config: SubagentConfig,
         llm_config: LLMConfig | None = None,
-        conversation_history: list[dict[str, Any]] | None = None,
-        conversation_lock: threading.Lock | None = None,
+        conversation_store: "ConversationStore | None" = None,
         constitutional_state: ConstitutionalState | None = None,
         sample_count: int = 10,
         min_samples_for_analysis: int = 5,
@@ -71,16 +72,14 @@ class ObserverAgent(Subagent):
         Args:
             config: Subagent configuration.
             llm_config: LLM configuration for analysis calls.
-            conversation_history: Shared conversation history to analyze.
-            conversation_lock: Lock for thread-safe history access.
+            conversation_store: Thread-safe conversation store to analyze.
             constitutional_state: Shared constitutional state to modify.
             sample_count: Number of recent messages to analyze.
             min_samples_for_analysis: Minimum messages needed before analyzing.
         """
         super().__init__(config, **kwargs)
         self._llm_config = llm_config
-        self._conversation_history = conversation_history or []
-        self._conversation_lock = conversation_lock or threading.Lock()
+        self._conversation_store = conversation_store
         self._constitutional_state = constitutional_state or ConstitutionalState()
         self._sample_count = sample_count
         self._min_samples = min_samples_for_analysis
@@ -100,9 +99,15 @@ class ObserverAgent(Subagent):
                 notify_user=False,
             )
 
+        if not self._conversation_store:
+            return SubagentOutput(
+                status="idle",
+                summary="No conversation store configured",
+                notify_user=False,
+            )
+
         # Get recent messages
-        with self._conversation_lock:
-            messages = list(self._conversation_history)
+        messages = self._conversation_store.snapshot()
 
         # Extract assistant messages for analysis
         assistant_messages = [

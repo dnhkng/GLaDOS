@@ -7,31 +7,34 @@ the LLM-first principle (complex reasoning in prompts, not code).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from .llm_client import LLMConfig, llm_call
+from .token_estimator import TokenEstimator, get_default_estimator
+
+if TYPE_CHECKING:
+    pass
 
 
-def estimate_tokens(messages: list[dict[str, Any]]) -> int:
+def estimate_tokens(
+    messages: list[dict[str, Any]],
+    estimator: TokenEstimator | None = None,
+) -> int:
     """
     Estimate token count for messages.
 
-    Uses simple word-based estimation (4 chars per token average).
-    For production, consider tiktoken for accuracy.
+    Args:
+        messages: List of message dicts to estimate tokens for.
+        estimator: Optional token estimator. Uses default if not provided.
+
+    Returns:
+        Estimated token count.
     """
-    total_chars = 0
-    for msg in messages:
-        content = msg.get("content", "")
-        if isinstance(content, str):
-            total_chars += len(content)
-        elif isinstance(content, list):
-            # Handle multi-part messages
-            for part in content:
-                if isinstance(part, dict) and "text" in part:
-                    total_chars += len(part["text"])
-    return total_chars // 4
+    if estimator is None:
+        estimator = get_default_estimator()
+    return estimator.estimate(messages)
 
 
 def summarize_messages(

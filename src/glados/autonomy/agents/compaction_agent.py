@@ -7,14 +7,16 @@ approaching token limits. Uses LLM to summarize and extract facts.
 
 from __future__ import annotations
 
-import threading
-from typing import Any
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from ..llm_client import LLMConfig
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 from ..summarization import estimate_tokens, extract_facts, summarize_messages
+
+if TYPE_CHECKING:
+    from ...core.conversation_store import ConversationStore
 
 
 class CompactionAgent(Subagent):
@@ -29,8 +31,7 @@ class CompactionAgent(Subagent):
         self,
         config: SubagentConfig,
         llm_config: LLMConfig | None = None,
-        conversation_history: list[dict[str, Any]] | None = None,
-        conversation_lock: threading.Lock | None = None,
+        conversation_store: "ConversationStore | None" = None,
         token_threshold: int = 8000,
         preserve_recent: int = 10,
         **kwargs,
@@ -41,15 +42,13 @@ class CompactionAgent(Subagent):
         Args:
             config: Subagent configuration.
             llm_config: LLM configuration for summarization calls.
-            conversation_history: Shared conversation history to compact.
-            conversation_lock: Lock for thread-safe history access.
+            conversation_store: Thread-safe conversation store to compact.
             token_threshold: Start compacting when tokens exceed this.
             preserve_recent: Number of recent messages to keep uncompacted.
         """
         super().__init__(config, **kwargs)
         self._llm_config = llm_config
-        self._conversation_history = conversation_history or []
-        self._conversation_lock = conversation_lock or threading.Lock()
+        self._conversation_store = conversation_store
         self._token_threshold = token_threshold
         self._preserve_recent = preserve_recent
         self._last_compaction_size = 0
@@ -63,8 +62,14 @@ class CompactionAgent(Subagent):
                 notify_user=False,
             )
 
-        with self._conversation_lock:
-            messages = list(self._conversation_history)
+        if not self._conversation_store:
+            return SubagentOutput(
+                status="idle",
+                summary="No conversation store configured",
+                notify_user=False,
+            )
+
+        messages = self._conversation_store.snapshot()
 
         token_count = estimate_tokens(messages)
 
@@ -124,28 +129,27 @@ class CompactionAgent(Subagent):
         # Build the replacement summary message
         summary_content = f"[summary] Previous conversation summary: {summary}"
 
-        # Apply changes to conversation history
-        with self._conversation_lock:
-            # Create new history without compacted messages
-            new_history = []
-            summary_inserted = False
+        # Apply changes to conversation history atomically
+        # Get fresh snapshot for building new history to minimize race window
+        current_messages = self._conversation_store.snapshot()
+        new_history = []
+        summary_inserted = False
 
-            for i, msg in enumerate(self._conversation_history):
-                if i in indices_to_compact:
-                    # Insert summary at first compacted position
-                    if not summary_inserted:
-                        new_history.append({
-                            "role": "system",
-                            "content": summary_content,
-                        })
-                        summary_inserted = True
-                    # Skip the compacted message
-                    continue
-                new_history.append(msg)
+        for i, msg in enumerate(current_messages):
+            if i in indices_to_compact:
+                # Insert summary at first compacted position
+                if not summary_inserted:
+                    new_history.append({
+                        "role": "system",
+                        "content": summary_content,
+                    })
+                    summary_inserted = True
+                # Skip the compacted message
+                continue
+            new_history.append(msg)
 
-            # Replace history in-place
-            self._conversation_history.clear()
-            self._conversation_history.extend(new_history)
+        # Atomically replace entire history
+        self._conversation_store.replace_all(new_history)
 
         new_token_count = estimate_tokens(new_history)
         self._last_compaction_size = len(indices_to_compact)

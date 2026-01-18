@@ -41,8 +41,31 @@ class TaskManager:
         with self._lock:
             self._executor.submit(self._run_task, slot_id, title, runner, notify_user)
 
-    def shutdown(self) -> None:
-        self._executor.shutdown(wait=False, cancel_futures=True)
+    def shutdown(self, wait: bool = False, timeout: float | None = None) -> None:
+        """
+        Shutdown the task manager.
+
+        Args:
+            wait: If True, wait for pending tasks to complete.
+            timeout: Maximum time to wait if wait=True (None = no limit).
+        """
+        if wait and timeout is not None:
+            # Use a separate thread to enforce timeout
+            import threading
+
+            shutdown_complete = threading.Event()
+
+            def shutdown_worker() -> None:
+                self._executor.shutdown(wait=True, cancel_futures=False)
+                shutdown_complete.set()
+
+            worker = threading.Thread(target=shutdown_worker, daemon=True)
+            worker.start()
+            shutdown_complete.wait(timeout=timeout)
+            if not shutdown_complete.is_set():
+                logger.warning("Task manager shutdown timed out after {}s", timeout)
+        else:
+            self._executor.shutdown(wait=wait, cancel_futures=not wait)
 
     def _run_task(
         self,

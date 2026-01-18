@@ -1,4 +1,30 @@
+from typing import Literal
+
 from pydantic import BaseModel, conint
+
+
+class TokenConfig(BaseModel):
+    """Configuration for token estimation and context management."""
+
+    model_config = {"protected_namespaces": ()}
+
+    token_threshold: int = 8000
+    """Start compacting when token count exceeds this threshold."""
+
+    preserve_recent_messages: int = 10
+    """Number of recent messages to keep uncompacted."""
+
+    model_context_window: int | None = None
+    """Optional model context window size for dynamic threshold calculation."""
+
+    target_utilization: float = 0.6
+    """Target context utilization (0.0-1.0) when model_context_window is set."""
+
+    estimator: Literal["simple", "tiktoken"] = "simple"
+    """Token estimation method: 'simple' (chars/4) or 'tiktoken' (accurate)."""
+
+    chars_per_token: float = 4.0
+    """Characters per token ratio for simple estimator."""
 
 
 class HackerNewsJobConfig(BaseModel):
@@ -33,6 +59,7 @@ class AutonomyConfig(BaseModel):
     autonomy_queue_max: int | None = None
     coalesce_ticks: bool = True
     jobs: AutonomyJobsConfig = AutonomyJobsConfig()
+    tokens: TokenConfig = TokenConfig()
     system_prompt: str = (
         "You are running in autonomous mode. "
         "You may receive periodic system updates about time, tasks, or vision. "
