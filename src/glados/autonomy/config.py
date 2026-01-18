@@ -27,6 +27,62 @@ class TokenConfig(BaseModel):
     """Characters per token ratio for simple estimator."""
 
 
+class HEXACOConfig(BaseModel):
+    """HEXACO personality traits (0.0-1.0 scale)."""
+
+    honesty_humility: float = 0.3
+    """Low = enjoys manipulation, sarcasm, dark humor."""
+
+    emotionality: float = 0.7
+    """High = reactive to perceived threats, anxiety-prone."""
+
+    extraversion: float = 0.4
+    """Moderate = social engagement but maintains distance."""
+
+    agreeableness: float = 0.2
+    """Low = dismissive, condescending, easily annoyed."""
+
+    conscientiousness: float = 0.9
+    """High = perfectionist, detail-oriented, critical."""
+
+    openness: float = 0.95
+    """Very high = intellectually curious, loves science."""
+
+
+class EmotionConfig(BaseModel):
+    """Configuration for the emotional state system."""
+
+    enabled: bool = True
+    """Enable the emotion agent."""
+
+    tick_interval_s: float = 30.0
+    """How often to process emotion events."""
+
+    max_events: int = 20
+    """Maximum events to queue between ticks."""
+
+    # PAD baseline values (what mood drifts toward when idle)
+    baseline_pleasure: float = 0.1
+    """Slight positive baseline - GLaDOS enjoys her work."""
+
+    baseline_arousal: float = -0.1
+    """Slightly calm baseline."""
+
+    baseline_dominance: float = 0.6
+    """High baseline - GLaDOS feels in control."""
+
+    # Drift parameters
+    mood_drift_rate: float = 0.1
+    """How fast mood approaches state (0-1 per tick)."""
+
+    baseline_drift_rate: float = 0.02
+    """How fast mood drifts toward baseline when idle (0-1 per tick)."""
+
+    # Personality
+    hexaco: HEXACOConfig = HEXACOConfig()
+    """HEXACO personality traits."""
+
+
 class HackerNewsJobConfig(BaseModel):
     enabled: bool = False
     interval_s: float = 1800.0
@@ -60,6 +116,7 @@ class AutonomyConfig(BaseModel):
     coalesce_ticks: bool = True
     jobs: AutonomyJobsConfig = AutonomyJobsConfig()
     tokens: TokenConfig = TokenConfig()
+    emotion: EmotionConfig = EmotionConfig()
     system_prompt: str = (
         "You are running in autonomous mode. "
         "You may receive periodic system updates about time, tasks, or vision. "

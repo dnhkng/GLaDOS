@@ -7,8 +7,12 @@ must respect when proposing changes to the main agent's behavior.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .emotion_state import EmotionState
 
 
 @dataclass
@@ -207,3 +211,110 @@ class ConstitutionalState:
             },
             "history_count": len(self.modifier_history),
         }
+
+
+@dataclass
+class EmotionConstitutionBridge:
+    """
+    Maps emotional state to constitutional modifiers.
+
+    Translates PAD (Pleasure-Arousal-Dominance) values into behavioral
+    adjustments within constitutional bounds.
+    """
+
+    # Default values when emotion doesn't suggest changes
+    default_snark: float = 0.6
+    default_proactivity: float = 0.5
+    default_verbosity: float = 0.5
+
+    # Thresholds for triggering adjustments
+    pleasure_threshold: float = -0.3
+    arousal_threshold: float = 0.3
+    dominance_threshold: float = -0.3
+
+    # Adjustment magnitudes
+    snark_adjustment: float = 0.15
+    proactivity_adjustment: float = 0.1
+    verbosity_adjustment: float = 0.1
+
+    def compute_modifiers(
+        self,
+        emotion: "EmotionState",
+        constitution: Constitution,
+    ) -> list[PromptModifier]:
+        """
+        Compute constitutional modifiers based on emotional state.
+
+        Maps:
+        - Low pleasure → increased snark (GLaDOS gets snippy when unhappy)
+        - High arousal → increased proactivity (more alert = more talkative)
+        - Low dominance → decreased verbosity (uncertain = more terse)
+
+        Args:
+            emotion: Current emotional state
+            constitution: Constitution for validation
+
+        Returns:
+            List of validated modifiers to apply
+        """
+        modifiers = []
+        now = time.time()
+
+        # Low pleasure → more snark
+        if emotion.pleasure < self.pleasure_threshold:
+            snark = min(1.0, self.default_snark + self.snark_adjustment)
+            if constitution.validate_modification("snark_level", snark):
+                modifiers.append(PromptModifier(
+                    field_name="snark_level",
+                    value=snark,
+                    reason=f"Low pleasure ({emotion.pleasure:.2f}) increasing snark",
+                    applied_at=now,
+                ))
+
+        # High arousal → more proactive
+        if emotion.arousal > self.arousal_threshold:
+            proactivity = min(1.0, self.default_proactivity + self.proactivity_adjustment)
+            if constitution.validate_modification("proactivity", proactivity):
+                modifiers.append(PromptModifier(
+                    field_name="proactivity",
+                    value=proactivity,
+                    reason=f"High arousal ({emotion.arousal:.2f}) increasing proactivity",
+                    applied_at=now,
+                ))
+
+        # Low dominance → less verbose (more uncertain)
+        if emotion.dominance < self.dominance_threshold:
+            verbosity = max(0.0, self.default_verbosity - self.verbosity_adjustment)
+            if constitution.validate_modification("verbosity", verbosity):
+                modifiers.append(PromptModifier(
+                    field_name="verbosity",
+                    value=verbosity,
+                    reason=f"Low dominance ({emotion.dominance:.2f}) reducing verbosity",
+                    applied_at=now,
+                ))
+
+        return modifiers
+
+    def apply_emotion_modifiers(
+        self,
+        emotion: "EmotionState",
+        state: ConstitutionalState,
+    ) -> list[str]:
+        """
+        Compute and apply emotion-based modifiers to constitutional state.
+
+        Args:
+            emotion: Current emotional state
+            state: Constitutional state to modify
+
+        Returns:
+            List of field names that were modified
+        """
+        modifiers = self.compute_modifiers(emotion, state.constitution)
+        applied = []
+
+        for modifier in modifiers:
+            if state.apply_modifier(modifier):
+                applied.append(modifier.field_name)
+
+        return applied

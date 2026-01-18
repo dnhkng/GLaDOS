@@ -682,16 +682,18 @@ class Glados:
                 self.subagent_manager.register(weather_subagent)
 
         # Emotion agent - always registered, core to GLaDOS personality
-        emotion_config = SubagentConfig(
+        emotion_cfg = self.autonomy_config.emotion
+        emotion_subagent_config = SubagentConfig(
             agent_id="emotion",
             title="Emotional State",
             role="emotional_regulation",
-            loop_interval_s=30.0,  # Update emotion every 30s
+            loop_interval_s=emotion_cfg.tick_interval_s,
             run_on_start=True,
         )
         emotion_agent = EmotionAgent(
-            config=emotion_config,
+            config=emotion_subagent_config,
             llm_config=llm_config,
+            emotion_config=emotion_cfg,
             slot_store=self.autonomy_slots,
             mind_registry=self.mind_registry,
             observability_bus=self.observability_bus,
@@ -699,6 +701,9 @@ class Glados:
         )
         self.subagent_manager.register(emotion_agent)
         self._emotion_agent = emotion_agent  # Keep reference for event pushing
+        # Wire emotion agent to autonomy loop for vision events
+        if self.autonomy_config.enabled and hasattr(self, "autonomy_loop"):
+            self.autonomy_loop.set_emotion_agent(emotion_agent)
 
         # Compaction agent - monitors conversation size and compacts when needed
         compaction_config = SubagentConfig(
