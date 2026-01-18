@@ -22,15 +22,18 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
-from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
-from ..autonomy.agents import EmotionAgent, HackerNewsSubagent, WeatherSubagent
+from ..autonomy import AutonomyConfig, AutonomyLoop, ConstitutionalState, EventBus, InteractionState, PreferencesStore, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
+from ..autonomy.agents import CompactionAgent, EmotionAgent, HackerNewsSubagent, ObserverAgent, WeatherSubagent
+from ..autonomy.emotion_state import EmotionEvent
 from ..autonomy.events import TimeTickEvent
 from ..autonomy.llm_client import LLMConfig
+from ..autonomy.summarization import estimate_tokens
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
+from .context import ContextBuilder
 from .audio_state import AudioState
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
@@ -244,6 +247,7 @@ class Glados:
         self.autonomy_tasks: TaskManager | None = None
         self.subagent_manager: SubagentManager | None = None
         self._emotion_agent: EmotionAgent | None = None
+        self.constitutional_state = ConstitutionalState()
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
@@ -255,6 +259,14 @@ class Glados:
             self.tts_muted_event.set()
         self.audio_state = AudioState()
         self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
+        self.preferences_store = PreferencesStore(resource_path("data/preferences.json"))
+
+        # Create unified context builder for LLM context injection
+        self.context_builder = ContextBuilder()
+        self.context_builder.register("preferences", self.preferences_store.as_prompt, priority=10)
+        self.context_builder.register("knowledge", lambda: self._format_knowledge(), priority=5)
+        self.context_builder.register("constitution", self.constitutional_state.get_modifiers_prompt, priority=3)
+
         self._command_registry, self._command_order = self._build_command_registry()
         # Initialize events for thread synchronization
         self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
@@ -264,6 +276,8 @@ class Glados:
             self.autonomy_event_bus = EventBus()
             self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
             self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
+            # Register slots with context builder
+            self.context_builder.register("slots", lambda: self._format_slots(), priority=8)
             if self.autonomy_config.jobs.enabled:
                 self.subagent_manager = SubagentManager(
                     slot_store=self.autonomy_slots,
@@ -333,6 +347,7 @@ class Glados:
                 observability_bus=self.observability_bus,
                 asr_muted_event=self.asr_muted_event,
                 audio_state=self.audio_state,
+                on_interrupt=lambda _: self._push_emotion_event("user", "User interrupted me mid-sentence"),
             )
         if self.input_mode in {"text", "both"}:
             if self.input_mode == "text":
@@ -360,6 +375,9 @@ class Glados:
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
             slot_store=self.autonomy_slots,
+            preferences_store=self.preferences_store,
+            constitutional_state=self.constitutional_state,
+            context_builder=self.context_builder,
             autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
@@ -386,6 +404,9 @@ class Glados:
                     pause_time=self.PAUSE_TIME,
                     vision_state=self.vision_state,
                     slot_store=self.autonomy_slots,
+                    preferences_store=self.preferences_store,
+                    constitutional_state=self.constitutional_state,
+                    context_builder=self.context_builder,
                     autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
                     mcp_manager=self.mcp_manager,
                     observability_bus=self.observability_bus,
@@ -407,11 +428,13 @@ class Glados:
                 "vision_request_queue": self.vision_request_queue,
                 "vision_tool_timeout": self.tool_timeout,
                 "tts_queue": self.tts_queue,
+                "preferences_store": self.preferences_store,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
+            on_tool_event=self._on_tool_event,
         )
 
         self.tts_synthesizer = TextToSpeechSynthesizer(
@@ -593,6 +616,51 @@ class Glados:
         )
         self.subagent_manager.register(emotion_agent)
         self._emotion_agent = emotion_agent  # Keep reference for event pushing
+
+        # Compaction agent - monitors conversation size and compacts when needed
+        compaction_config = SubagentConfig(
+            agent_id="compaction",
+            title="Message Compaction",
+            role="context_management",
+            loop_interval_s=60.0,  # Check every minute
+            run_on_start=False,  # Wait for conversation to build up
+        )
+        compaction_agent = CompactionAgent(
+            config=compaction_config,
+            llm_config=llm_config,
+            conversation_history=self._messages,
+            conversation_lock=self._conversation_lock,
+            token_threshold=8000,
+            preserve_recent=10,
+            slot_store=self.autonomy_slots,
+            mind_registry=self.mind_registry,
+            observability_bus=self.observability_bus,
+            shutdown_event=self.shutdown_event,
+        )
+        self.subagent_manager.register(compaction_agent)
+
+        # Observer agent - monitors behavior and proposes adjustments
+        observer_config = SubagentConfig(
+            agent_id="observer",
+            title="Behavior Observer",
+            role="meta_supervision",
+            loop_interval_s=120.0,  # Analyze every 2 minutes
+            run_on_start=False,  # Wait for conversation to build up
+        )
+        observer_agent = ObserverAgent(
+            config=observer_config,
+            llm_config=llm_config,
+            conversation_history=self._messages,
+            conversation_lock=self._conversation_lock,
+            constitutional_state=self.constitutional_state,
+            sample_count=10,
+            min_samples_for_analysis=5,
+            slot_store=self.autonomy_slots,
+            mind_registry=self.mind_registry,
+            observability_bus=self.observability_bus,
+            shutdown_event=self.shutdown_event,
+        )
+        self.subagent_manager.register(observer_agent)
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -967,6 +1035,30 @@ class Glados:
         )
         register(
             CommandSpec(
+                name="preferences",
+                description="Show user preferences",
+                usage="/preferences",
+                handler=self._cmd_preferences,
+            )
+        )
+        register(
+            CommandSpec(
+                name="context",
+                description="Show context/token usage",
+                usage="/context",
+                handler=self._cmd_context,
+            )
+        )
+        register(
+            CommandSpec(
+                name="constitution",
+                description="Show constitutional state and modifiers",
+                usage="/constitution",
+                handler=self._cmd_constitution,
+            )
+        )
+        register(
+            CommandSpec(
                 name="vision",
                 description="Show latest vision snapshot",
                 usage="/vision",
@@ -987,6 +1079,14 @@ class Glados:
                 description="Manage local knowledge notes",
                 usage="/knowledge add|list|set|delete|clear",
                 handler=self._cmd_knowledge,
+            )
+        )
+        register(
+            CommandSpec(
+                name="memory",
+                description="Show long-term memory stats",
+                usage="/memory",
+                handler=self._cmd_memory,
             )
         )
         return registry, order
@@ -1102,6 +1202,21 @@ class Glados:
             lines.append(f"... {len(agents) - 20} more")
         return "\n".join(lines)
 
+    def _push_emotion_event(self, source: str, description: str) -> None:
+        """Push an event to the emotion agent if it's running."""
+        if self._emotion_agent:
+            event = EmotionEvent(source=source, description=description)
+            self._emotion_agent.push_event(event)
+
+    def _on_tool_event(self, event_type: str, tool_name: str) -> None:
+        """Handle tool events for emotional processing."""
+        if event_type == "tool_success":
+            self._push_emotion_event("system", f"Tool '{tool_name}' completed successfully")
+        elif event_type == "tool_failure":
+            self._push_emotion_event("system", f"Tool '{tool_name}' failed")
+        elif event_type == "tool_timeout":
+            self._push_emotion_event("system", f"Tool '{tool_name}' timed out")
+
     def _cmd_emotion(self, _args: list[str]) -> str:
         if not self._emotion_agent:
             return "Emotion agent is not running."
@@ -1118,6 +1233,60 @@ class Glados:
             "",
             state.to_prompt(),
         ]
+        return "\n".join(lines)
+
+    def _cmd_preferences(self, _args: list[str]) -> str:
+        prefs = self.preferences_store.all()
+        if not prefs:
+            return "No preferences set."
+        lines = ["User Preferences:"]
+        for key, value in prefs.items():
+            lines.append(f"  {key}: {value}")
+        return "\n".join(lines)
+
+    def _cmd_context(self, _args: list[str]) -> str:
+        with self._conversation_lock:
+            messages = list(self._messages)
+        token_count = estimate_tokens(messages)
+        msg_count = len(messages)
+        system_count = sum(1 for m in messages if m.get("role") == "system")
+        user_count = sum(1 for m in messages if m.get("role") == "user")
+        assistant_count = sum(1 for m in messages if m.get("role") == "assistant")
+        summary_count = sum(
+            1 for m in messages
+            if isinstance(m.get("content"), str) and m["content"].startswith("[summary]")
+        )
+        lines = [
+            f"Context Usage:",
+            f"  Estimated tokens: {token_count}",
+            f"  Total messages: {msg_count}",
+            f"    System: {system_count}",
+            f"    User: {user_count}",
+            f"    Assistant: {assistant_count}",
+            f"    Summaries: {summary_count}",
+        ]
+        return "\n".join(lines)
+
+    def _cmd_constitution(self, _args: list[str]) -> str:
+        state = self.constitutional_state
+        lines = ["Constitutional State:"]
+        lines.append("")
+        lines.append("Immutable Rules:")
+        for rule in state.constitution.immutable_rules:
+            lines.append(f"  - {rule}")
+        lines.append("")
+        lines.append("Modifiable Bounds:")
+        for name, (min_val, max_val) in state.constitution.modifiable_bounds.items():
+            lines.append(f"  {name}: {min_val} to {max_val}")
+        lines.append("")
+        if state.active_modifiers:
+            lines.append("Active Modifiers:")
+            for name, modifier in state.active_modifiers.items():
+                lines.append(f"  {name}: {modifier.value} ({modifier.reason})")
+        else:
+            lines.append("Active Modifiers: none")
+        lines.append("")
+        lines.append(f"Modifier History: {len(state.modifier_history)} changes")
         return "\n".join(lines)
 
     def _cmd_vision(self, _args: list[str]) -> str:
@@ -1228,6 +1397,104 @@ class Glados:
             return f"Cleared {removed} knowledge entr{'y' if removed == 1 else 'ies'}."
 
         return "Usage: /knowledge add|list|set|delete|clear"
+
+    def _cmd_memory(self, _args: list[str]) -> str:
+        import json
+        from pathlib import Path
+
+        memory_dir = Path.home() / ".glados" / "memory"
+        facts_file = memory_dir / "facts.jsonl"
+        summaries_file = memory_dir / "summaries.jsonl"
+
+        # Count facts
+        fact_count = 0
+        source_counts: dict[str, int] = {}
+        total_importance = 0.0
+        if facts_file.exists():
+            try:
+                with facts_file.open("r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            fact_count += 1
+                            try:
+                                fact = json.loads(line)
+                                source = fact.get("source", "unknown")
+                                source_counts[source] = source_counts.get(source, 0) + 1
+                                total_importance += fact.get("importance", 0.5)
+                            except json.JSONDecodeError:
+                                pass
+            except OSError:
+                pass
+
+        # Count summaries
+        summary_count = 0
+        period_counts: dict[str, int] = {}
+        if summaries_file.exists():
+            try:
+                with summaries_file.open("r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            summary_count += 1
+                            try:
+                                summary = json.loads(line)
+                                period = summary.get("period", "unknown")
+                                period_counts[period] = period_counts.get(period, 0) + 1
+                            except json.JSONDecodeError:
+                                pass
+            except OSError:
+                pass
+
+        if fact_count == 0 and summary_count == 0:
+            return "Long-term Memory: empty (no facts or summaries stored)"
+
+        avg_importance = total_importance / fact_count if fact_count > 0 else 0.0
+
+        lines = [
+            "Long-term Memory Stats:",
+            f"  Total facts: {fact_count}",
+            f"  Total summaries: {summary_count}",
+        ]
+
+        if source_counts:
+            lines.append("  Facts by source:")
+            for source, count in sorted(source_counts.items()):
+                lines.append(f"    {source}: {count}")
+
+        if period_counts:
+            lines.append("  Summaries by period:")
+            for period, count in sorted(period_counts.items()):
+                lines.append(f"    {period}: {count}")
+
+        lines.append(f"  Average importance: {avg_importance:.2f}")
+        lines.append(f"  Storage: {memory_dir}")
+
+        return "\n".join(lines)
+
+    def _format_knowledge(self) -> str | None:
+        """Format knowledge entries for LLM context."""
+        entries = self.knowledge_store.list_entries()
+        if not entries:
+            return None
+        lines = ["[knowledge]"]
+        for entry in entries:
+            lines.append(f"- #{entry.entry_id}: {entry.text}")
+        return "\n".join(lines)
+
+    def _format_slots(self) -> str | None:
+        """Format task slots for LLM context."""
+        if not self.autonomy_slots:
+            return None
+        slots = self.autonomy_slots.list_slots()
+        if not slots:
+            return None
+        lines = ["[tasks]"]
+        for slot in slots:
+            summary = slot.summary.strip()
+            summary_text = f" - {summary}" if summary else ""
+            lines.append(f"- {slot.title}: {slot.status}{summary_text}")
+        return "\n".join(lines)
 
     def _run_autonomy_ticker(self) -> None:
         assert self.autonomy_event_bus is not None

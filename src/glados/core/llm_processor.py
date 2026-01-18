@@ -13,7 +13,8 @@ import uuid
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
-from ..autonomy import TaskSlotStore
+from ..autonomy import ConstitutionalState, PreferencesStore, TaskSlotStore
+from .context import ContextBuilder
 from .llm_tracking import InFlightCounter
 from ..mcp import MCPManager
 from ..observability import ObservabilityBus, trim_message
@@ -44,6 +45,9 @@ class LanguageModelProcessor:
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
         slot_store: TaskSlotStore | None = None,
+        preferences_store: PreferencesStore | None = None,
+        constitutional_state: ConstitutionalState | None = None,
+        context_builder: ContextBuilder | None = None,
         autonomy_system_prompt: str | None = None,
         mcp_manager: MCPManager | None = None,
         observability_bus: ObservabilityBus | None = None,
@@ -64,6 +68,9 @@ class LanguageModelProcessor:
         self.pause_time = pause_time
         self.vision_state = vision_state
         self.slot_store = slot_store
+        self.preferences_store = preferences_store
+        self.constitutional_state = constitutional_state
+        self.context_builder = context_builder
         self.autonomy_system_prompt = autonomy_system_prompt
         self.mcp_manager = mcp_manager
         self._observability_bus = observability_bus
@@ -389,7 +396,7 @@ class LanguageModelProcessor:
             self.tts_input_queue.put(sentence)
 
     def _build_messages(self, autonomy_mode: bool) -> list[dict[str, Any]]:
-        """Build the message list for the LLM request, injecting vision context if available."""
+        """Build the message list for the LLM request, injecting context from registered sources."""
         if self._conversation_lock:
             with self._conversation_lock:
                 messages = list(self.conversation_history)
@@ -400,16 +407,32 @@ class LanguageModelProcessor:
         if autonomy_mode and self.autonomy_system_prompt:
             extra_messages.append({"role": "system", "content": self.autonomy_system_prompt})
 
-        if self.slot_store:
-            slot_message = self.slot_store.as_message()
-            if slot_message:
-                extra_messages.append(slot_message)
+        # Use ContextBuilder if available (new pattern)
+        if self.context_builder:
+            extra_messages.extend(self.context_builder.build_system_messages())
+        else:
+            # Fallback to old pattern for backward compatibility
+            if self.slot_store:
+                slot_message = self.slot_store.as_message()
+                if slot_message:
+                    extra_messages.append(slot_message)
+            if self.preferences_store:
+                prefs_prompt = self.preferences_store.as_prompt()
+                if prefs_prompt:
+                    extra_messages.append({"role": "system", "content": prefs_prompt})
+            if self.constitutional_state:
+                modifiers_prompt = self.constitutional_state.get_modifiers_prompt()
+                if modifiers_prompt:
+                    extra_messages.append({"role": "system", "content": modifiers_prompt})
+
+        # MCP context is handled separately (returns list of messages)
         if self.mcp_manager:
             try:
                 extra_messages.extend(self.mcp_manager.get_context_messages(block=False))
             except Exception as e:
                 logger.warning(f"LLM Processor: Failed to load MCP context messages: {e}")
 
+        # Vision context is handled separately (has special formatting)
         if self.vision_state:
             vision_message = self.vision_state.as_message()
             if vision_message:
