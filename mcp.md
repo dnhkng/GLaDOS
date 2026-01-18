@@ -80,6 +80,11 @@ mcp_servers:
     transport: "stdio"
     command: "python"
     args: ["-m", "glados.mcp.power_info_server"]
+
+  - name: "memory"
+    transport: "stdio"
+    command: "python"
+    args: ["-m", "glados.mcp.memory_server"]
 ```
 
 ### Available Tools
@@ -92,6 +97,7 @@ mcp_servers:
 | `network_info` | `host_info`, `interfaces` | Network details |
 | `process_info` | `process_count`, `top_memory` | Process monitoring |
 | `power_info` | `batteries` | Battery status |
+| `memory` | `store_fact`, `search_memory`, `list_facts`, `store_summary`, `get_summaries`, `memory_stats` | Long-term memory |
 
 ## Demo Server
 
