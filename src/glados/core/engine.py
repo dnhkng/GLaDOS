@@ -573,6 +573,13 @@ class Glados:
             )
             self.subagent_manager.register(hn_subagent)
 
+        # Create shared LLM config for subagents
+        llm_config = LLMConfig(
+            url=str(self.completion_url),
+            api_key=self.api_key,
+            model=self.llm_model,
+        )
+
         if jobs_config.weather.enabled:
             if jobs_config.weather.latitude is None or jobs_config.weather.longitude is None:
                 logger.warning("Weather subagent enabled but latitude/longitude are missing.")
@@ -591,6 +598,7 @@ class Glados:
                     timezone=jobs_config.weather.timezone,
                     temp_change_c=jobs_config.weather.temp_change_c,
                     wind_alert_kmh=jobs_config.weather.wind_alert_kmh,
+                    llm_config=llm_config,
                     slot_store=self.autonomy_slots,
                     mind_registry=self.mind_registry,
                     observability_bus=self.observability_bus,
@@ -599,11 +607,6 @@ class Glados:
                 self.subagent_manager.register(weather_subagent)
 
         # Emotion agent - always registered, core to GLaDOS personality
-        llm_config = LLMConfig(
-            url=str(self.completion_url),
-            api_key=self.api_key,
-            model=self.llm_model,
-        )
         emotion_config = SubagentConfig(
             agent_id="emotion",
             title="Emotional State",

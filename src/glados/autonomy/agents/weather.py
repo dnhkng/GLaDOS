@@ -9,6 +9,7 @@ from __future__ import annotations
 import httpx
 from loguru import logger
 
+from ...core.llm_decision import LLMConfig, LLMDecisionError, UrgencyDecision, llm_decide_sync
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 WEATHER_CODES: dict[int, str] = {
@@ -54,6 +55,7 @@ class WeatherSubagent(Subagent):
         timezone: str = "auto",
         temp_change_c: float = 4.0,
         wind_alert_kmh: float = 40.0,
+        llm_config: LLMConfig | None = None,
         **kwargs,
     ) -> None:
         super().__init__(config, **kwargs)
@@ -62,6 +64,7 @@ class WeatherSubagent(Subagent):
         self._timezone = timezone
         self._temp_change_c = temp_change_c
         self._wind_alert_kmh = wind_alert_kmh
+        self._llm_config = llm_config
         self._last_temp: float | None = None
         self._last_code: int | None = None
 
@@ -90,26 +93,42 @@ class WeatherSubagent(Subagent):
         condition = WEATHER_CODES.get(code, f"code {code}")
         summary = f"{condition}, {temp:.1f}C, wind {wind:.0f}km/h"
 
-        notify_user = False
-        importance = 0.2
-        alerts = []
+        # Use LLM to evaluate weather urgency if config available
+        alerts: list[str] = []
+        if self._llm_config:
+            try:
+                temp_change_info = ""
+                if self._last_temp is not None:
+                    change = temp - self._last_temp
+                    temp_change_info = f", temperature changed {change:+.1f}C since last check"
 
-        if code in SEVERE_WEATHER_CODES:
-            notify_user = True
-            importance = max(importance, 0.8)
-            alerts.append(f"Severe weather: {condition}")
-
-        if wind >= self._wind_alert_kmh:
-            notify_user = True
-            importance = max(importance, 0.7)
-            alerts.append(f"High winds: {wind:.0f} km/h")
-
-        if self._last_temp is not None and abs(temp - self._last_temp) >= self._temp_change_c:
-            notify_user = True
-            importance = max(importance, 0.6)
-            change = temp - self._last_temp
-            direction = "risen" if change > 0 else "dropped"
-            alerts.append(f"Temperature {direction} {abs(change):.1f}C")
+                decision = llm_decide_sync(
+                    prompt="Evaluate this weather for user notification: {weather}",
+                    context={
+                        "weather": (
+                            f"Condition: {condition}, Temperature: {temp:.1f}C, "
+                            f"Wind: {wind:.0f}km/h, Humidity: {humidity:.0f}%{temp_change_info}"
+                        ),
+                    },
+                    schema=UrgencyDecision,
+                    config=self._llm_config,
+                    system_prompt=(
+                        "You evaluate weather conditions for a voice assistant. "
+                        "Notify users about: severe weather (thunderstorms, violent rain, hail), "
+                        "high winds (40+ km/h), or significant temperature changes (4+ degrees). "
+                        "Set importance 0.0-1.0 based on urgency. Be concise in your reason."
+                    ),
+                )
+                notify_user = decision.notify_user
+                importance = decision.importance
+                if decision.reason:
+                    alerts.append(decision.reason)
+            except LLMDecisionError as e:
+                logger.warning("WeatherSubagent: LLM decision failed, using fallback: %s", e)
+                notify_user, importance, alerts = self._fallback_heuristics(code, condition, wind, temp)
+        else:
+            # No LLM config - use fallback heuristics
+            notify_user, importance, alerts = self._fallback_heuristics(code, condition, wind, temp)
 
         self._last_temp = temp
         self._last_code = code
@@ -214,3 +233,30 @@ class WeatherSubagent(Subagent):
         except Exception as exc:
             logger.warning("WeatherSubagent: failed to fetch weather: %s", exc)
             return None
+
+    def _fallback_heuristics(
+        self, code: int, condition: str, wind: float, temp: float
+    ) -> tuple[bool, float, list[str]]:
+        """Fallback heuristics when LLM is unavailable."""
+        notify_user = False
+        importance = 0.2
+        alerts: list[str] = []
+
+        if code in SEVERE_WEATHER_CODES:
+            notify_user = True
+            importance = max(importance, 0.8)
+            alerts.append(f"Severe weather: {condition}")
+
+        if wind >= self._wind_alert_kmh:
+            notify_user = True
+            importance = max(importance, 0.7)
+            alerts.append(f"High winds: {wind:.0f} km/h")
+
+        if self._last_temp is not None and abs(temp - self._last_temp) >= self._temp_change_c:
+            notify_user = True
+            importance = max(importance, 0.6)
+            change = temp - self._last_temp
+            direction = "risen" if change > 0 else "dropped"
+            alerts.append(f"Temperature {direction} {abs(change):.1f}C")
+
+        return notify_user, importance, alerts
