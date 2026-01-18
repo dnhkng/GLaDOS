@@ -5,6 +5,7 @@ from .loop import AutonomyLoop
 from .slots import TaskSlotStore
 from .subagent import Subagent, SubagentConfig, SubagentOutput
 from .subagent_manager import SubagentManager, SubagentStatus
+from .subagent_memory import MemoryEntry, SubagentMemory
 from .task_manager import TaskManager, TaskResult
 
 __all__ = [
@@ -14,9 +15,11 @@ __all__ = [
     "EventBus",
     "HackerNewsJobConfig",
     "InteractionState",
+    "MemoryEntry",
     "Subagent",
     "SubagentConfig",
     "SubagentManager",
+    "SubagentMemory",
     "SubagentOutput",
     "SubagentStatus",
     "TaskManager",

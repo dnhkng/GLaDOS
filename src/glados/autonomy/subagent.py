@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from .subagent_memory import SubagentMemory
+
 if TYPE_CHECKING:
     from .slots import TaskSlotStore
     from ..observability import MindRegistry, ObservabilityBus
@@ -71,6 +73,10 @@ class Subagent(ABC):
         self._thread: threading.Thread | None = None
         self._last_tick: float = 0.0
         self._tick_count: int = 0
+        self._memory = SubagentMemory(
+            agent_id=config.agent_id,
+            max_entries=config.memory_max_entries,
+        )
 
     @property
     def agent_id(self) -> str:
@@ -87,6 +93,11 @@ class Subagent(ABC):
     @property
     def is_running(self) -> bool:
         return self._running
+
+    @property
+    def memory(self) -> SubagentMemory:
+        """Access this subagent's persistent memory."""
+        return self._memory
 
     @abstractmethod
     def tick(self) -> SubagentOutput | None:
