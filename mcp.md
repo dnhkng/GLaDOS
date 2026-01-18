@@ -267,16 +267,35 @@ Resources are refreshed at the specified TTL and included as system messages.
 | `context_resources` | list | `[]` | Resource URIs to inject as context |
 | `resource_ttl_s` | float | `300.0` | Resource cache TTL in seconds |
 
-## Planned: Memory MCP
+## Memory MCP Server
 
-Long-term memory for GLaDOS will be implemented as an MCP server:
+Long-term memory is enabled by default. The memory server provides:
 
-- Vector store for semantic search
-- Fact extraction and storage
-- Daily/weekly/monthly summaries
-- Episodic memory retrieval
+- **Fact storage** with source tracking and importance levels
+- **Keyword-based search** with importance boost and recency decay
+- **Conversation summaries** (session/daily/weekly)
+- **Automatic fact extraction** via CompactionAgent during context compaction
 
-This keeps memory modular and replaceable with different backends.
+### Memory Tools
+
+| Tool | Description |
+|------|-------------|
+| `store_fact` | Store a fact with source and importance (0.0-1.0) |
+| `search_memory` | Search facts by keyword (LLM handles semantic interpretation) |
+| `list_facts` | List facts filtered by minimum importance |
+| `store_summary` | Store a conversation summary with time period |
+| `get_summaries` | Retrieve summaries by period |
+| `memory_stats` | Get statistics about stored memories |
+
+### Storage
+
+All memory data is stored in `~/.glados/memory/`:
+- `facts.jsonl` - Stored facts
+- `summaries.jsonl` - Conversation summaries
+
+### Philosophy
+
+The memory system follows the "LLM-first" principle: search is simple keyword matching, and the main agent handles semantic interpretation of results. This keeps infrastructure lightweight while leveraging the LLM's understanding capabilities.
 
 ## See Also
 

@@ -45,6 +45,10 @@ Glados:
       transport: "stdio"
       command: "python"
       args: ["-m", "glados.mcp.system_info_server"]
+    - name: "memory"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.memory_server"]
     # - name: "time_info"
     #   transport: "stdio"
     #   command: "python"

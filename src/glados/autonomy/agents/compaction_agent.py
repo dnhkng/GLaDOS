@@ -14,6 +14,7 @@ from loguru import logger
 from ..llm_client import LLMConfig
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 from ..summarization import estimate_tokens, extract_facts, summarize_messages
+from ...mcp.memory_server import Fact, _save_fact
 
 if TYPE_CHECKING:
     from ...core.conversation_store import ConversationStore
@@ -166,10 +167,15 @@ class CompactionAgent(Subagent):
             },
         )
 
-        # Store facts if we have them (will be handled by memory system in Stage 5)
+        # Store facts in long-term memory
         if facts:
-            logger.info("CompactionAgent: extracted {} facts", len(facts))
-            for fact in facts:
-                self.memory.set(f"fact_{hash(fact) % 10000}", fact)
+            logger.info("CompactionAgent: storing {} facts in long-term memory", len(facts))
+            for fact_text in facts:
+                fact = Fact(
+                    content=fact_text,
+                    source="conversation",
+                    importance=0.6,  # Medium importance for auto-extracted facts
+                )
+                _save_fact(fact)
 
         return result
