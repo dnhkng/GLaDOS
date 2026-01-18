@@ -37,10 +37,22 @@ class SubagentConfig:
 
 @dataclass
 class SubagentOutput:
-    """Output from a subagent tick."""
+    """Output from a subagent tick.
+
+    Attributes:
+        status: Current status (e.g., "done", "update", "error", "idle")
+        summary: Short text for context injection (~20 tokens)
+        report: Full detailed report, available on-demand via get_report tool
+        notify_user: Whether this update should notify the user
+        importance: Priority signal 0.0-1.0
+        confidence: Confidence score 0.0-1.0
+        next_run: Seconds until next scheduled run
+        raw: Arbitrary data for internal use
+    """
 
     status: str
     summary: str
+    report: str | None = None
     notify_user: bool = True
     importance: float | None = None
     confidence: float | None = None
@@ -210,6 +222,7 @@ class Subagent(ABC):
             self.write_slot(
                 status=output.status,
                 summary=output.summary,
+                report=output.report,
                 notify_user=output.notify_user,
                 importance=output.importance,
                 confidence=output.confidence,
@@ -220,6 +233,7 @@ class Subagent(ABC):
         self,
         status: str,
         summary: str,
+        report: str | None = None,
         notify_user: bool = True,
         importance: float | None = None,
         confidence: float | None = None,
@@ -231,6 +245,7 @@ class Subagent(ABC):
             title=self._config.title,
             status=status,
             summary=summary,
+            report=report,
             notify_user=notify_user,
             importance=importance,
             confidence=confidence,

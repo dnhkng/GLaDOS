@@ -18,6 +18,7 @@ class TaskSlot:
     importance: float | None = None
     confidence: float | None = None
     next_run: float | None = None
+    report: str | None = None  # Full detailed report, available on-demand
 
 
 class TaskSlotStore:
@@ -32,6 +33,7 @@ class TaskSlotStore:
         title: str,
         status: str,
         summary: str,
+        report: str | None = None,
         notify_user: bool = True,
         updated_at: float | None = None,
         importance: float | None = None,
@@ -49,6 +51,8 @@ class TaskSlotStore:
                     confidence = existing.confidence
                 if next_run is None:
                     next_run = existing.next_run
+                if report is None:
+                    report = existing.report
             slot = TaskSlot(
                 slot_id=slot_id,
                 title=title,
@@ -59,6 +63,7 @@ class TaskSlotStore:
                 importance=importance,
                 confidence=confidence,
                 next_run=next_run,
+                report=report,
             )
             self._slots[slot_id] = slot
         if existing is None or existing.status != status or existing.summary != summary:
@@ -82,6 +87,11 @@ class TaskSlotStore:
         with self._lock:
             return list(self._slots.values())
 
+    def get_slot(self, slot_id: str) -> TaskSlot | None:
+        """Get a specific slot by ID."""
+        with self._lock:
+            return self._slots.get(slot_id)
+
     def as_message(self) -> dict[str, str] | None:
         slots = self.list_slots()
         if not slots:
@@ -98,5 +108,6 @@ class TaskSlotStore:
             if slot.next_run is not None:
                 meta_parts.append(f"next_run={slot.next_run:.0f}")
             meta_text = f" ({', '.join(meta_parts)})" if meta_parts else ""
-            lines.append(f"- {slot.title}: {slot.status}{summary_text}{meta_text}")
+            report_hint = " [report available]" if slot.report else ""
+            lines.append(f"- {slot.title}: {slot.status}{summary_text}{meta_text}{report_hint}")
         return {"role": "system", "content": "\n".join(lines)}

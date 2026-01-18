@@ -429,6 +429,7 @@ class Glados:
                 "vision_tool_timeout": self.tool_timeout,
                 "tts_queue": self.tts_queue,
                 "preferences_store": self.preferences_store,
+                "slot_store": self.autonomy_slots,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
