@@ -2,13 +2,26 @@
 
 # GLaDOS Personality Core
 
-This is GLaDOS from Portal, running on real hardware. She sees, hears, speaks, and judges you accordingly.
+> *"The Enrichment Center reminds you that the Weighted Companion Cube will never threaten to stab you."*
 
-Not a chatbot. She doesn't wait for you to talk to her—she observes, decides when to comment, and maintains opinions about your life choices.
+GLaDOS (Genetic Lifeform and Disk Operating System) is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
+
+This project brings her to life on real hardware. She sees through a camera, hears through a microphone, speaks through a speaker, and judges you accordingly.
 
 [Join our Discord!](https://discord.com/invite/ERTDKwpjNB) | [Sponsor the project](https://ko-fi.com/dnhkng)
 
 https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
+
+## Vision
+
+Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, thinks, and speaks when she has something to say.
+
+**Goals:**
+- **Proactive behavior**: React to events (vision, sound, time) without being prompted
+- **Emotional state**: PAD model (Pleasure-Arousal-Dominance) for reactive mood
+- **Persistent personality**: HEXACO traits provide stable character across sessions
+- **Multi-agent architecture**: Subagents handle research, memory, emotions; main agent stays focused
+- **Real-time conversation**: Optimized latency, natural interruption handling
 
 ## What's New
 
@@ -22,7 +35,11 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 - [x] Train GLaDOS voice
 - [x] Personality that actually sounds like her
 - [x] Vision via VLM
+- [x] Autonomy (proactive behavior)
+- [x] MCP tool system
+- [ ] Emotional state (PAD model)
 - [ ] Long-term memory
+- [ ] Observer agent (behavior adjustment)
 - [ ] 3D-printable enclosure
 - [ ] Animatronics
 
@@ -31,19 +48,11 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 ```mermaid
 flowchart TB
     subgraph Input
-        mic[🎤 Microphone]
+        mic[🎤 Microphone] --> vad[VAD] --> asr[ASR]
+        text[⌨️ Text Input]
         tick[⏱️ Timer]
         cam[📷 Camera]
     end
-
-    subgraph Core["Main Agent"]
-        vad[VAD]
-        asr[ASR]
-        llm[🧠 LLM]
-        tts[TTS]
-    end
-
-    ctx[📋 Context]
 
     subgraph Minds["Subagents"]
         weather[Weather]
@@ -52,20 +61,28 @@ flowchart TB
         memory[Memory]
     end
 
+    ctx[📋 Context]
+
+    subgraph Core["Main Agent"]
+        llm[🧠 LLM]
+        tts[TTS]
+    end
+
     subgraph Output
         speaker[🔊 Speaker]
         images[🖼️ Images]
         motors[⚙️ Animatronics]
     end
 
-    mic --> vad --> asr -->|priority| llm
+    asr -->|priority| llm
+    text -->|priority| llm
     tick --> Minds
     cam --> Minds
     tick -->|autonomy| llm
-    llm --> tts --> speaker
 
     Minds -->|write| ctx
     ctx -->|read| llm
+    llm --> tts --> speaker
     llm <-->|MCP| tools[Tools]
     tools --> images
     tools --> motors
@@ -75,68 +92,190 @@ GLaDOS runs a loop: each tick she reads her slots (weather, news, vision, mood),
 
 **Two lanes**: Your speech jumps the queue (priority lane). The autonomy lane is just the loop running in the background. User always wins.
 
-### Context Structure
-
-What the LLM actually sees:
+<details>
+<summary><strong>Audio Pipeline</strong></summary>
 
 ```mermaid
 flowchart LR
-    sys[System Prompt] --> Slots --> feedback[Message Slots] --> conv[Conversation]
-
-    subgraph Slots
-        weekly[Weekly Memory]
-        daily[Daily Memory]
-        weather[Weather]
-        news[News]
-        emotion[Emotion]
-        vision[Vision]
+    subgraph Capture["Audio Capture"]
+        mic[Microphone<br/>16kHz]
+        vad[Silero VAD<br/>32ms chunks]
+        buffer[Pre-activation<br/>Buffer 800ms]
     end
+
+    subgraph Recognition["Speech Recognition"]
+        detect[Voice Detected<br/>VAD > 0.8]
+        accumulate[Accumulate<br/>Speech]
+        silence[Silence Detection<br/>640ms pause]
+        asr[Parakeet ASR]
+    end
+
+    subgraph Interruption["Interruption Handling"]
+        speaking{Speaking?}
+        stop[Stop Playback]
+        clip[Clip Response]
+    end
+
+    mic --> vad --> buffer
+    buffer --> detect --> accumulate
+    accumulate --> silence --> asr
+    detect --> speaking
+    speaking -->|Yes| stop --> clip
 ```
 
-### Subagents
+- **Microphone** captures at 16kHz mono
+- **Silero VAD** processes 32ms chunks, triggers at probability > 0.8
+- **Pre-activation buffer** preserves 800ms before voice detected
+- **Silence detection** waits 640ms pause before finalizing
+- **Interruption** stops playback and clips the response in conversation history
 
-Independent processes that feed context to the main agent via slots:
+</details>
+
+<details>
+<summary><strong>Thread Architecture</strong></summary>
+
+| Thread | Class | Daemon | Priority | Queue | Purpose |
+|--------|-------|--------|----------|-------|---------|
+| SpeechListener | `SpeechListener` | ✓ | INPUT | — | VAD + ASR |
+| TextListener | `TextListener` | ✓ | INPUT | — | Text input |
+| LLMProcessor | `LanguageModelProcessor` | ✗ | PROCESSING | `llm_queue_priority` | Main LLM |
+| LLMProcessor-Auto-N | `LanguageModelProcessor` | ✗ | PROCESSING | `llm_queue_autonomy` | Autonomy LLM |
+| ToolExecutor | `ToolExecutor` | ✗ | PROCESSING | `tool_calls_queue` | Tool execution |
+| TTSSynthesizer | `TextToSpeechSynthesizer` | ✗ | OUTPUT | `tts_queue` | Voice synthesis |
+| AudioPlayer | `SpeechPlayer` | ✗ | OUTPUT | `audio_queue` | Playback |
+| AutonomyLoop | `AutonomyLoop` | ✓ | BACKGROUND | — | Tick orchestration |
+| VisionProcessor | `VisionProcessor` | ✓ | BACKGROUND | `vision_request_queue` | Vision analysis |
+
+**Daemon threads** can be killed on exit. **Non-daemon threads** must complete gracefully to preserve state (e.g., conversation history).
+
+**Shutdown order**: INPUT → PROCESSING → OUTPUT → BACKGROUND → CLEANUP
+
+</details>
+
+<details>
+<summary><strong>Context Building</strong></summary>
 
 ```mermaid
-flowchart LR
+flowchart TB
+    subgraph Sources["Context Sources"]
+        sys[System Prompt<br/>Personality]
+        slots[Task Slots<br/>Weather, News, etc.]
+        prefs[User Preferences]
+        const[Constitutional<br/>Modifiers]
+        mcp[MCP Resources]
+        vision[Vision State]
+    end
+
+    subgraph Builder["Context Builder"]
+        merge[Priority-Sorted<br/>Merge]
+    end
+
+    subgraph Final["LLM Request"]
+        messages[System Messages]
+        history[Conversation<br/>History]
+        user[User Message]
+    end
+
+    Sources --> merge --> messages
+    messages --> history --> user
+```
+
+What the LLM sees on each request:
+1. **System prompt** with personality
+2. **Task slots** (weather, news, vision state, emotion)
+3. **User preferences** from memory
+4. **Constitutional modifiers** (behavior adjustments from observer)
+5. **MCP resources** (dynamic tool descriptions)
+6. **Conversation history** (compacted when exceeding token threshold)
+
+</details>
+
+<details>
+<summary><strong>Autonomy System</strong></summary>
+
+```mermaid
+flowchart TB
     subgraph Triggers
-        tick[⏱️ Timer]
-        cam[📷 Camera]
+        tick[⏱️ Time Tick]
+        vision[📷 Vision Event]
+        task[📋 Task Update]
     end
 
-    subgraph Subagent["Subagent (e.g. Weather)"]
-        loop[Run Loop]
-        decide[LLM Decision]
-        slot[Write Slot]
+    subgraph Loop["Autonomy Loop"]
+        bus[Event Bus]
+        cooldown{Cooldown<br/>Passed?}
+        build[Build Context<br/>from Slots]
+        dispatch[Dispatch to<br/>LLM Queue]
     end
 
-    subgraph Main["Main Agent"]
-        read[Read Slots]
-        respond[Generate Response]
+    subgraph Agents["Subagents"]
+        emotion[Emotion Agent<br/>PAD Model]
+        compact[Compaction Agent<br/>Token Management]
+        observer[Observer Agent<br/>Behavior Adjustment]
+        weather[Weather Agent]
+        news[HN Agent]
     end
 
-    tick -->|OR| loop
-    cam -->|OR| loop
-    loop --> decide --> slot
-    slot -.->|async| read
-    read --> respond
+    Triggers --> bus --> cooldown
+    cooldown -->|Yes| build --> dispatch
+    Agents -->|write| slots[Task Slots]
+    slots -->|read| build
 ```
 
 Each subagent runs its own loop: timer or camera triggers it, it makes an LLM decision, and writes to a slot the main agent reads. Fully async—subagents never block the main conversation.
 
+See [autonomy.md](/autonomy.md) for details.
+
+</details>
+
+<details>
+<summary><strong>Tool Execution</strong></summary>
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Executor as Tool Executor
+    participant MCP as MCP Server
+    participant Native as Native Tool
+
+    LLM->>Executor: tool_call {name, args}
+
+    alt MCP Tool (mcp.*)
+        Executor->>MCP: call_tool(server, tool, args)
+        MCP-->>Executor: result
+    else Native Tool
+        Executor->>Native: run(tool_call_id, args)
+        Native-->>Executor: result
+    end
+
+    Executor->>LLM: {role: tool, content: result}
+```
+
+**Native tools**: `speak`, `do_nothing`, `get_user_preferences`, `set_user_preferences`
+
+**MCP tools**: Prefixed with server name (e.g., `mcp.system_info.get_cpu`). Supports stdio, HTTP, and SSE transports.
+
+See [mcp.md](/mcp.md) for configuration.
+
+</details>
+
 ### Components
 
-| What | Status | Notes |
-|------|--------|-------|
-| Speech recognition | ✅ | NVIDIA Parakeet TDT |
-| Voice synthesis | ✅ | Kokoro (streaming) |
-| Vision | ✅ | FastVLM via ONNX |
-| Autonomy | ✅ | Timer or vision triggers |
-| MCP Tools | ✅ | System, Home Assistant, etc |
-| Interrupt handling | ✅ | Talk over her, she stops |
-| Emotional state | 🔨 | Mood affects responses |
-| Long-term memory | 🔨 | Facts + conversation summaries |
-| Observer agent | 🔨 | Meta-supervision layer |
+| Component | Technology | Purpose | Status |
+|-----------|------------|---------|--------|
+| **Speech Recognition** | Parakeet TDT (ONNX) | Speech-to-text, 16kHz streaming | ✅ |
+| **Voice Activity** | Silero VAD (ONNX) | Detect speech, 32ms chunks | ✅ |
+| **Voice Synthesis** | Kokoro / GLaDOS TTS | Text-to-speech, streaming | ✅ |
+| **Interruption** | VAD + Playback Control | Talk over her, she stops | ✅ |
+| **Vision** | FastVLM (ONNX) | Scene understanding, change detection | ✅ |
+| **LLM** | OpenAI-compatible API | Reasoning, tool use, streaming | ✅ |
+| **Tools** | MCP Protocol | Extensibility, stdio/HTTP/SSE | ✅ |
+| **Autonomy** | Subagent Architecture | Proactive behavior, tick loop | ✅ |
+| **Conversation** | ConversationStore | Thread-safe history | ✅ |
+| **Compaction** | LLM Summarization | Token management | ✅ |
+| **Emotional State** | PAD Model | Reactive mood | 🔨 |
+| **Long-term Memory** | MCP + Subagent | Facts, preferences, summaries | 🔨 |
+| **Observer Agent** | Constitutional AI | Behavior adjustment | 🔨 |
 
 ✅ = Done | 🔨 = In progress
 
