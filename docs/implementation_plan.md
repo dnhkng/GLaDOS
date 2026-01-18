@@ -101,19 +101,22 @@ class SubagentManager:
 
 Convert BackgroundJobScheduler jobs to proper subagents.
 
-**Files to modify:**
-- `src/glados/autonomy/jobs.py` → extract to subagent classes
+**Current state:** HackerNewsSubagent and WeatherSubagent implemented as direct ports.
 
-**New files:**
-- `src/glados/autonomy/agents/news_agent.py`
-- `src/glados/autonomy/agents/weather_agent.py`
+**TODO: Autonomous News Agent**
+The current HackerNewsSubagent is too specific. A truly autonomous news agent should:
+- Discover and select news sources based on user interests
+- Not be hardcoded to a single source (HN)
+- Use LLM to decide what's newsworthy for this user
+- Learn from user feedback via preferences slot
+
+This is a future enhancement - current implementation works as a placeholder.
 
 **Checklist:**
-- [ ] Create `NewsAgent(Subagent)` with HN/Reddit scraping
-- [ ] Create `WeatherAgent(Subagent)` with weather API
-- [ ] Deprecate `BackgroundJobScheduler` (keep for backwards compat)
-- [ ] Update config to use new agent format
-- [ ] Test migration path
+- [x] Create `HackerNewsSubagent` (placeholder - works but too specific)
+- [x] Create `WeatherSubagent`
+- [ ] **Future:** Replace with autonomous `NewsAgent` that discovers sources
+- [ ] Deprecate `BackgroundJobScheduler`
 
 ---
 
