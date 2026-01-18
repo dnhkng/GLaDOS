@@ -24,12 +24,23 @@ from ..vision.vision_state import VisionState
 class LanguageModelProcessor:
     """
     A thread that processes text input for a language model, streaming responses and sending them to TTS.
-    This class is designed to run in a separate thread, continuously checking for new text to process
-    until a shutdown event is set. It handles conversation history, manages streaming responses,
-    and sends synthesized sentences to a TTS queue.
+
+    Supports multiple lanes (priority/autonomy) - instantiate once per lane for parallel inference.
+    Handles streaming with thinking tag extraction for reasoning models.
     """
 
     PUNCTUATION_SET: ClassVar[set[str]] = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
+
+    # Standard thinking tags (GLM-4.7, MiniMax M2.1, DeepSeek, etc.)
+    THINKING_OPEN_TAGS: ClassVar[tuple[str, ...]] = ("<think>", "<thinking>", "<reasoning>")
+    THINKING_CLOSE_TAGS: ClassVar[tuple[str, ...]] = ("</think>", "</thinking>", "</reasoning>")
+
+    # GPT-OSS harmony format channel markers
+    HARMONY_CHANNEL_MARKER: ClassVar[str] = "<|channel|>"
+    HARMONY_ANALYSIS_CHANNELS: ClassVar[tuple[str, ...]] = ("analysis", "commentary")
+    HARMONY_FINAL_CHANNEL: ClassVar[str] = "final"
+    HARMONY_MESSAGE_MARKER: ClassVar[str] = "<|message|>"
+    HARMONY_END_MARKER: ClassVar[str] = "<|end|>"
 
     def __init__(
         self,
@@ -395,6 +406,159 @@ class LanguageModelProcessor:
             logger.info(f"LLM Processor: Sending to TTS queue: '{sentence}'")
             self.tts_input_queue.put(sentence)
 
+    def _extract_thinking(
+        self,
+        chunk: str,
+        in_thinking: bool,
+        thinking_buffer: list[str],
+        harmony_mode: bool = False,
+    ) -> tuple[str, bool, bool]:
+        """
+        Extract thinking tags from streaming chunk, returning only speakable content.
+
+        Supports two formats:
+        1. Standard: <think>...</think> (GLM-4.7, MiniMax M2.1, DeepSeek)
+        2. Harmony: <|channel|>analysis vs <|channel|>final (GPT-OSS-120B)
+
+        Args:
+            chunk: The current text chunk from the stream
+            in_thinking: Whether we're currently inside a thinking block
+            thinking_buffer: Buffer to accumulate thinking content (for logging)
+            harmony_mode: Whether we've detected harmony format
+
+        Returns:
+            Tuple of (speakable_content, still_in_thinking, is_harmony_mode)
+        """
+        # Auto-detect harmony format
+        if not harmony_mode and self.HARMONY_CHANNEL_MARKER in chunk:
+            harmony_mode = True
+
+        if harmony_mode:
+            return self._extract_thinking_harmony(chunk, in_thinking, thinking_buffer)
+
+        return (*self._extract_thinking_standard(chunk, in_thinking, thinking_buffer), False)
+
+    def _extract_thinking_standard(
+        self,
+        chunk: str,
+        in_thinking: bool,
+        thinking_buffer: list[str],
+    ) -> tuple[str, bool]:
+        """Extract thinking using standard <think>...</think> tags."""
+        result: list[str] = []
+        i = 0
+        text = chunk
+
+        while i < len(text):
+            if in_thinking:
+                # Look for closing tag
+                close_idx = -1
+                close_tag = ""
+                for tag in self.THINKING_CLOSE_TAGS:
+                    idx = text.find(tag, i)
+                    if idx != -1 and (close_idx == -1 or idx < close_idx):
+                        close_idx = idx
+                        close_tag = tag
+
+                if close_idx != -1:
+                    # Found closing tag - buffer thinking content, exit thinking mode
+                    thinking_buffer.append(text[i:close_idx])
+                    i = close_idx + len(close_tag)
+                    in_thinking = False
+                    # Log thinking content for debugging
+                    if thinking_buffer:
+                        thinking_content = "".join(thinking_buffer)
+                        if thinking_content.strip():
+                            logger.debug(f"LLM thinking: {thinking_content[:200]}...")
+                        thinking_buffer.clear()
+                else:
+                    # Still in thinking block, buffer everything
+                    thinking_buffer.append(text[i:])
+                    break
+            else:
+                # Look for opening tag
+                open_idx = -1
+                open_tag = ""
+                for tag in self.THINKING_OPEN_TAGS:
+                    idx = text.find(tag, i)
+                    if idx != -1 and (open_idx == -1 or idx < open_idx):
+                        open_idx = idx
+                        open_tag = tag
+
+                if open_idx != -1:
+                    # Found opening tag - emit content before it, enter thinking mode
+                    result.append(text[i:open_idx])
+                    i = open_idx + len(open_tag)
+                    in_thinking = True
+                else:
+                    # No thinking tag, emit everything
+                    result.append(text[i:])
+                    break
+
+        return "".join(result), in_thinking
+
+    def _extract_thinking_harmony(
+        self,
+        chunk: str,
+        in_thinking: bool,
+        thinking_buffer: list[str],
+    ) -> tuple[str, bool, bool]:
+        """
+        Extract thinking using GPT-OSS harmony format.
+
+        Format: <|channel|>analysis<|message|>... for thinking
+                <|channel|>final<|message|>... for output
+        """
+        result: list[str] = []
+        text = chunk
+        i = 0
+
+        while i < len(text):
+            # Look for channel marker
+            channel_idx = text.find(self.HARMONY_CHANNEL_MARKER, i)
+
+            if channel_idx == -1:
+                # No more channel markers
+                if in_thinking:
+                    thinking_buffer.append(text[i:])
+                else:
+                    # Strip harmony end markers from output
+                    content = text[i:].replace(self.HARMONY_END_MARKER, "")
+                    result.append(content)
+                break
+
+            # Found a channel marker - check what type
+            if not in_thinking:
+                # Emit content before the marker
+                result.append(text[i:channel_idx])
+
+            # Find channel name (between <|channel|> and <|message|>)
+            channel_start = channel_idx + len(self.HARMONY_CHANNEL_MARKER)
+            message_idx = text.find(self.HARMONY_MESSAGE_MARKER, channel_start)
+
+            if message_idx == -1:
+                # Incomplete marker, wait for more data
+                if in_thinking:
+                    thinking_buffer.append(text[i:])
+                break
+
+            channel_name = text[channel_start:message_idx].strip().split()[0]  # e.g., "final" or "analysis"
+            i = message_idx + len(self.HARMONY_MESSAGE_MARKER)
+
+            if channel_name == self.HARMONY_FINAL_CHANNEL:
+                # Switch to output mode
+                if in_thinking and thinking_buffer:
+                    thinking_content = "".join(thinking_buffer)
+                    if thinking_content.strip():
+                        logger.debug(f"LLM thinking (harmony): {thinking_content[:200]}...")
+                    thinking_buffer.clear()
+                in_thinking = False
+            elif channel_name in self.HARMONY_ANALYSIS_CHANNELS:
+                # Switch to thinking mode
+                in_thinking = True
+
+        return "".join(result), in_thinking, True
+
     def _build_messages(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Build the message list for the LLM request, injecting context from registered sources."""
         if self._conversation_lock:
@@ -559,6 +723,9 @@ class LanguageModelProcessor:
 
                 tool_calls_buffer: list[dict[str, Any]] = []
                 sentence_buffer: list[str] = []
+                thinking_buffer: list[str] = []
+                in_thinking = False
+                harmony_mode = False
                 try:
                     http_error_detail: tuple[str | int, str] | None = None
                     request_urls = [str(self.completion_url)]
@@ -609,13 +776,18 @@ class LanguageModelProcessor:
                                                 if isinstance(chunk, list):
                                                     self._process_tool_chunks(tool_calls_buffer, chunk)
                                                 elif not autonomy_mode:
-                                                    sentence_buffer.append(chunk)
-                                                    if chunk.strip() in self.PUNCTUATION_SET and (
-                                                        len(sentence_buffer) < 2
-                                                        or not sentence_buffer[-2].strip().isdigit()
-                                                    ):
-                                                        self._process_sentence_for_tts(sentence_buffer)
-                                                        sentence_buffer = []
+                                                    # Extract thinking tags before TTS (auto-detects format)
+                                                    speakable, in_thinking, harmony_mode = self._extract_thinking(
+                                                        chunk, in_thinking, thinking_buffer, harmony_mode
+                                                    )
+                                                    if speakable:
+                                                        sentence_buffer.append(speakable)
+                                                        if speakable.strip() in self.PUNCTUATION_SET and (
+                                                            len(sentence_buffer) < 2
+                                                            or not sentence_buffer[-2].strip().isdigit()
+                                                        ):
+                                                            self._process_sentence_for_tts(sentence_buffer)
+                                                            sentence_buffer = []
                                             elif cleaned_line_data.get("done_marker"):
                                                 break
                                             elif cleaned_line_data.get("done") and cleaned_line_data.get("response") == "":

@@ -80,25 +80,17 @@ GLaDOS runs a loop: each tick she reads her slots (weather, news, vision, mood),
 What the LLM actually sees:
 
 ```mermaid
-flowchart TB
-    subgraph Context["LLM Context"]
-        direction TB
-        sys[System Prompt<br/>Personality + Rules]
+flowchart LR
+    sys[System Prompt] --> Slots --> feedback[Message Slots] --> conv[Conversation]
 
-        subgraph Slots["Slots"]
-            weekly[Weekly Memory]
-            daily[Daily Memory]
-            weather[Weather]
-            news[News]
-            emotion[Emotion]
-            vision[Vision]
-        end
-
-        feedback[Message Slots<br/>Feedback to Subagents]
-        conv[Conversation History]
+    subgraph Slots
+        weekly[Weekly Memory]
+        daily[Daily Memory]
+        weather[Weather]
+        news[News]
+        emotion[Emotion]
+        vision[Vision]
     end
-
-    sys --> Slots --> feedback --> conv
 ```
 
 ### Subagents
