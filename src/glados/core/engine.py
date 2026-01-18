@@ -46,6 +46,7 @@ from .speech_player import SpeechPlayer
 from .text_listener import TextListener
 from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
+from .memory_context import MemoryContext
 
 logger.remove(0)
 logger.add(sys.stderr, level="SUCCESS")
@@ -272,6 +273,10 @@ class Glados:
         self.context_builder.register("preferences", self.preferences_store.as_prompt, priority=10)
         self.context_builder.register("knowledge", lambda: self._format_knowledge(), priority=5)
         self.context_builder.register("constitution", self.constitutional_state.get_modifiers_prompt, priority=3)
+
+        # Register long-term memory for context injection
+        self.memory_context = MemoryContext()
+        self.context_builder.register("memory", self.memory_context.as_prompt, priority=7)
 
         self._command_registry, self._command_order = self._build_command_registry()
         # Initialize events for thread synchronization
