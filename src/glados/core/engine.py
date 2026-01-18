@@ -23,8 +23,9 @@ from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
 from ..autonomy import AutonomyConfig, AutonomyLoop, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
-from ..autonomy.agents import HackerNewsSubagent, WeatherSubagent
+from ..autonomy.agents import EmotionAgent, HackerNewsSubagent, WeatherSubagent
 from ..autonomy.events import TimeTickEvent
+from ..autonomy.llm_client import LLMConfig
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..vision import VisionConfig, VisionState
@@ -242,6 +243,7 @@ class Glados:
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
         self.subagent_manager: SubagentManager | None = None
+        self._emotion_agent: EmotionAgent | None = None
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
         self.interaction_state = InteractionState()
@@ -567,6 +569,30 @@ class Glados:
                     shutdown_event=self.shutdown_event,
                 )
                 self.subagent_manager.register(weather_subagent)
+
+        # Emotion agent - always registered, core to GLaDOS personality
+        llm_config = LLMConfig(
+            url=str(self.completion_url),
+            api_key=self.api_key,
+            model=self.llm_model,
+        )
+        emotion_config = SubagentConfig(
+            agent_id="emotion",
+            title="Emotional State",
+            role="emotional_regulation",
+            loop_interval_s=30.0,  # Update emotion every 30s
+            run_on_start=True,
+        )
+        emotion_agent = EmotionAgent(
+            config=emotion_config,
+            llm_config=llm_config,
+            slot_store=self.autonomy_slots,
+            mind_registry=self.mind_registry,
+            observability_bus=self.observability_bus,
+            shutdown_event=self.shutdown_event,
+        )
+        self.subagent_manager.register(emotion_agent)
+        self._emotion_agent = emotion_agent  # Keep reference for event pushing
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -933,6 +959,14 @@ class Glados:
         )
         register(
             CommandSpec(
+                name="emotion",
+                description="Show current emotional state",
+                usage="/emotion",
+                handler=self._cmd_emotion,
+            )
+        )
+        register(
+            CommandSpec(
                 name="vision",
                 description="Show latest vision snapshot",
                 usage="/vision",
@@ -1066,6 +1100,24 @@ class Glados:
             lines.append(f"- {agent.title} ({agent.agent_id}): {status}, {tick_info}")
         if len(agents) > 20:
             lines.append(f"... {len(agents) - 20} more")
+        return "\n".join(lines)
+
+    def _cmd_emotion(self, _args: list[str]) -> str:
+        if not self._emotion_agent:
+            return "Emotion agent is not running."
+        state = self._emotion_agent.state
+        lines = [
+            "Emotional State:",
+            f"  Pleasure:  {state.pleasure:+.2f}",
+            f"  Arousal:   {state.arousal:+.2f}",
+            f"  Dominance: {state.dominance:+.2f}",
+            "Mood Baseline:",
+            f"  Pleasure:  {state.mood_pleasure:+.2f}",
+            f"  Arousal:   {state.mood_arousal:+.2f}",
+            f"  Dominance: {state.mood_dominance:+.2f}",
+            "",
+            state.to_prompt(),
+        ]
         return "\n".join(lines)
 
     def _cmd_vision(self, _args: list[str]) -> str:
