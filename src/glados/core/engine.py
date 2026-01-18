@@ -554,6 +554,13 @@ class Glados:
 
         jobs_config = self.autonomy_config.jobs
 
+        # Create shared LLM config for subagents
+        llm_config = LLMConfig(
+            url=str(self.completion_url),
+            api_key=self.api_key,
+            model=self.llm_model,
+        )
+
         if jobs_config.hacker_news.enabled:
             hn_config = SubagentConfig(
                 agent_id="hn_top",
@@ -566,19 +573,13 @@ class Glados:
                 config=hn_config,
                 top_n=jobs_config.hacker_news.top_n,
                 min_score=jobs_config.hacker_news.min_score,
+                llm_config=llm_config,
                 slot_store=self.autonomy_slots,
                 mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus,
                 shutdown_event=self.shutdown_event,
             )
             self.subagent_manager.register(hn_subagent)
-
-        # Create shared LLM config for subagents
-        llm_config = LLMConfig(
-            url=str(self.completion_url),
-            api_key=self.api_key,
-            model=self.llm_model,
-        )
 
         if jobs_config.weather.enabled:
             if jobs_config.weather.latitude is None or jobs_config.weather.longitude is None:
