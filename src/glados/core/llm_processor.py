@@ -13,8 +13,9 @@ import uuid
 from loguru import logger
 from pydantic import HttpUrl  # If HttpUrl is used by config
 import requests
-from ..autonomy import ConstitutionalState, PreferencesStore, TaskSlotStore
+from ..autonomy import ConstitutionalState, TaskSlotStore
 from .context import ContextBuilder
+from .store import Store
 from .llm_tracking import InFlightCounter
 from ..mcp import MCPManager
 from ..observability import ObservabilityBus, trim_message
@@ -56,7 +57,7 @@ class LanguageModelProcessor:
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
         slot_store: TaskSlotStore | None = None,
-        preferences_store: PreferencesStore | None = None,
+        preferences_store: Store[Any] | None = None,
         constitutional_state: ConstitutionalState | None = None,
         context_builder: ContextBuilder | None = None,
         autonomy_system_prompt: str | None = None,
@@ -623,12 +624,6 @@ class LanguageModelProcessor:
                 if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
             ]
             tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
-        if not autonomy_mode:
-            tools = [
-                tool
-                for tool in tools
-                if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
-            ]
         if self.mcp_manager:
             try:
                 tools.extend(self.mcp_manager.get_tool_definitions())

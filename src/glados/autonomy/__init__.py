@@ -1,4 +1,5 @@
 from .config import AutonomyConfig, AutonomyJobsConfig, HackerNewsJobConfig, WeatherJobConfig
+from .constitution import Constitution, ConstitutionalState, PromptModifier
 from .event_bus import EventBus
 from .interaction_state import InteractionState
 from .loop import AutonomyLoop
@@ -12,10 +13,13 @@ __all__ = [
     "AutonomyConfig",
     "AutonomyJobsConfig",
     "AutonomyLoop",
+    "Constitution",
+    "ConstitutionalState",
     "EventBus",
     "HackerNewsJobConfig",
     "InteractionState",
     "MemoryEntry",
+    "PromptModifier",
     "Subagent",
     "SubagentConfig",
     "SubagentManager",

@@ -22,7 +22,7 @@ from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
-from ..autonomy import AutonomyConfig, AutonomyLoop, ConstitutionalState, EventBus, InteractionState, PreferencesStore, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
+from ..autonomy import AutonomyConfig, AutonomyLoop, ConstitutionalState, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
 from ..autonomy.agents import CompactionAgent, EmotionAgent, HackerNewsSubagent, ObserverAgent, WeatherSubagent
 from ..autonomy.emotion_state import EmotionEvent
 from ..autonomy.events import TimeTickEvent
@@ -37,6 +37,7 @@ from .context import ContextBuilder
 from .audio_state import AudioState
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
+from .store import Store, format_preferences
 from .llm_tracking import InFlightCounter
 from .speech_listener import SpeechListener
 from .speech_player import SpeechPlayer
@@ -259,7 +260,10 @@ class Glados:
             self.tts_muted_event.set()
         self.audio_state = AudioState()
         self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
-        self.preferences_store = PreferencesStore(resource_path("data/preferences.json"))
+        self.preferences_store = Store[Any](
+            path=resource_path("data/preferences.json"),
+            formatter=format_preferences,
+        )
 
         # Create unified context builder for LLM context injection
         self.context_builder = ContextBuilder()
