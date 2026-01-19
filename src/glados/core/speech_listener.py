@@ -111,7 +111,7 @@ class SpeechListener:
             Exception: Catches and logs general exceptions encountered during the listening loop,
                        without stopping the loop unless `shutdown_event` is set.
         """
-        logger.success("Audio Modules Operational")
+        logger.success("SpeechListener ready")
 
         # Loop forever, but is 'paused' when new samples are not available
         try:

@@ -428,11 +428,9 @@ class SplashScreen(Screen[None]):
         app = cast(GladosUI, self.app)  # mypy gets confused about app's type
         if not self._ready:
             return
-        if app.glados_engine_instance:
-            app.glados_engine_instance.play_announcement()
-            app.start_glados()
-            self.dismiss()
-            app.focus_command_input()
+        # Just dismiss - start_glados() is called by on_worker_state_changed
+        self.dismiss()
+        app.focus_command_input()
 
 
 class HelpScreen(ModalScreen[None]):
@@ -896,12 +894,14 @@ class GladosUI(App[None]):
 
         logger.remove()
         fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
+        fmt_file = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
         self._apply_theme(self._resolve_theme())
 
         self.instantiation_worker = None  # Reset the instantiation worker reference
         self.start_instantiation()
 
         logger.add(print, format=fmt, level="SUCCESS")
+        logger.add("glados_tui.log", format=fmt_file, level="DEBUG", rotation="1 MB")
 
     def on_mount(self) -> None:
         """
@@ -1006,6 +1006,10 @@ class GladosUI(App[None]):
             self.notify("AI Engine operational", title="GLaDOS", timeout=2)
             if isinstance(self.screen, SplashScreen):
                 self.screen.dismiss()
+            # Start the engine's run() method to begin audio listening
+            if self.glados_engine_instance is not None:
+                self.glados_engine_instance.play_announcement()
+                self.start_glados()
             try:
                 command_input = self.query_one("#command_input", Input)
             except NoMatches:
@@ -1014,7 +1018,10 @@ class GladosUI(App[None]):
                 self._update_command_hints(command_input.value)
             self.focus_command_input()
         elif message.state == WorkerState.ERROR:
-            self.notify("Instantiation failed!", severity="error")
+            worker = message.worker
+            error_msg = str(worker.error) if worker.error else "Unknown error"
+            logger.error(f"Worker failed: {error_msg}")
+            self.notify(f"Engine error: {error_msg}", severity="error", timeout=10)
 
         self.instantiation_worker = None  # Clear the worker reference
 

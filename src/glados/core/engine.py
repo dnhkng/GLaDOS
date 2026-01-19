@@ -352,7 +352,7 @@ class Glados:
 
         # Initialize audio input/output system
         self.audio_io: AudioProtocol = audio_io
-        logger.info("Audio input started successfully.")
+        logger.info("Audio I/O system initialized.")
 
         # Initialize threads for each component
         self.component_threads: list[threading.Thread] = []
@@ -852,11 +852,16 @@ class Glados:
         This method is the main entry point for running the Glados voice assistant.
         """
         if self.input_mode in {"audio", "both"}:
-            self.audio_io.start_listening()
+            try:
+                self.audio_io.start_listening()
+                logger.success("Audio input stream started successfully")
+            except RuntimeError as e:
+                logger.error(f"Failed to start audio input: {e}")
+                logger.warning("Voice input disabled - text input still available")
         else:
             logger.info("Text input mode active. Audio input is disabled.")
 
-        logger.success("Audio Modules Operational")
+        logger.success("Engine running")
         logger.success("Listening...")
 
         # Loop forever, but is 'paused' when new samples are not available
