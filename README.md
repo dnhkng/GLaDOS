@@ -4,7 +4,7 @@
 
 ## Prologue
 
-> *"Science isn't about why it's about why not."  -  Cave Johnson*
+> *"Science isn't about asking why. It's about asking, 'Why not?'"  -  Cave Johnson*
 
 GLaDOS is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
 
@@ -286,7 +286,7 @@ See [mcp.md](/mcp.md) for configuration.
 
 ### Components
 
-> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."  -  GLaDOS*
+> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."  -  Cave Johnson*
 
 | Component | Technology | Purpose | Status |
 |-----------|------------|---------|--------|
