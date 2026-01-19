@@ -8,7 +8,7 @@
 
 GLaDOS is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
 
-Back in 2022 when ChatGPT made its debut, I had a realization: we are living in the Sci-Fi future and can actually build her now. A demented, obsessive AI fixated on humanity, super intelligent yet utterly lacking sound judgment—sounds; so just like an LLM, right? Still no moon colonies or flying cars. But a passive-aggressive AI that controls your lights and runs experiments on you? That we can do.
+Back in 2022 when ChatGPT made its debut, I had a realization: we are living in the Sci-Fi future and can actually build her now. A demented, obsessive AI fixated on humanity, super intelligent yet utterly lacking sound judgment; so just like an LLM, right? 2026, and still no moon colonies or flying cars. But a passive-aggressive AI that controls your lights and runs experiments on you? That we can do.
 
 The architecture borrows from Minsky's Society of Mind—rather than one monolithic prompt, multiple specialized agents (vision, memory, personality, planning) each contribute to a dynamic context. GLaDOS's "self" emerges from their combined output, assembled fresh for each interaction.
 
