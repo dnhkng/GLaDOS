@@ -2,9 +2,17 @@
 
 # GLaDOS Personality Core
 
-> *"The Enrichment Center reminds you that the Weighted Companion Cube will never threaten to stab you."*
+## Prologue
+
+> *"Science isn't about why it's about why not."  -  Cave Johnson*
 
 GLaDOS (Genetic Lifeform and Disk Operating System) is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
+
+15 years after the release of Portal, I had the realisation that we have the technology to actually build her, back in ‘22 when ChatGPT made its big debut. A demented, obsessive AI focused on Humanity, both super intelligent and yet utterly lacking sound judgment - sounds just like an LLM, right?
+
+At the same time, Whisper Automatic-Speech-Recognition (ASR) was released, so we had the input side ready, but the output was still missing. In 2023, I built the end-to-end system by training the Speech-to-Text (STT) model and carefully engineering away as much latency as possible. I found that achieving a round-trip latency of under 600 milliseconds was a significant threshold, and going below it was transformative. It goes from feeling stilted to a flowing conversation.
+
+Over the next year or two, I refactored GLaDOS multiple times, replacing all the core code, and the ASR multiple times as better models were released, but the technology I really wanted to add was still missing - Vision, RADAR, Memory, Internet access, and self-agency.  These are now available via MCP’s, tool use, and low-latency tiny VLMs.
 
 This project brings her to life on real hardware. She sees through a camera, hears through a microphone, speaks through a speaker, and judges you accordingly.
 
@@ -13,6 +21,9 @@ This project brings her to life on real hardware. She sees through a camera, hea
 https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 ## Vision
+
+
+> *"We've both said a lot of things that you're going to regret"  -  GLaDOS*
 
 Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, thinks, and speaks when she has something to say.
 
@@ -25,6 +36,9 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 
 ## What's New
 
+- **Emotions**: PAD model for reactive mood + HEXACO traits for persistent personality
+- **Long-term Memory**: Facts, preferences, and conversation summaries persist across sessions
+- **Observer Agent**: Constitutional AI monitors behavior and self-adjusts within bounds
 - **Vision**: FastVLM gives her eyes. [Details](/vision.md) | [Demo](https://www.youtube.com/watch?v=JDd9Rc4toEo)
 - **Autonomy**: She watches, waits, and speaks when she has something to say. [Details](/autonomy.md)
 - **MCP Tools**: Extensible tool system for home automation, system info, etc. [Details](/mcp.md)
@@ -32,18 +46,23 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 
 ## Roadmap
 
+> *"Federal regulations require me to warn you that this next test chamber... is looking pretty good.”  -  GLaDOS*
+
+
 - [x] Train GLaDOS voice
 - [x] Personality that actually sounds like her
 - [x] Vision via VLM
 - [x] Autonomy (proactive behavior)
 - [x] MCP tool system
-- [ ] Emotional state (PAD model)
-- [ ] Long-term memory
-- [ ] Observer agent (behavior adjustment)
+- [x] Emotional state (PAD + HEXACO model)
+- [x] Long-term memory
+- [x] Observer agent (behavior adjustment)
 - [ ] 3D-printable enclosure
 - [ ] Animatronics
 
 ## Architecture
+
+> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."  -  GLaDOS*
 
 ```mermaid
 flowchart TB
@@ -51,10 +70,11 @@ flowchart TB
         mic[🎤 Microphone] --> vad[VAD] --> asr[ASR]
         text[⌨️ Text Input]
         tick[⏱️ Timer]
-        cam[📷 Camera]
+        cam[📷 Camera]--> vlm[VLM]
     end
 
     subgraph Minds["Subagents"]
+        sensors[Sensors]
         weather[Weather]
         emotion[Emotion]
         news[News]
@@ -70,19 +90,20 @@ flowchart TB
 
     subgraph Output
         speaker[🔊 Speaker]
+        logs[Logs]
         images[🖼️ Images]
         motors[⚙️ Animatronics]
     end
 
     asr -->|priority| llm
     text -->|priority| llm
-    tick --> Minds
-    cam --> Minds
+    vlm --> ctx
     tick -->|autonomy| llm
 
     Minds -->|write| ctx
     ctx -->|read| llm
     llm --> tts --> speaker
+    llm --> logs
     llm <-->|MCP| tools[Tools]
     tools --> images
     tools --> motors
@@ -273,13 +294,15 @@ See [mcp.md](/mcp.md) for configuration.
 | **Autonomy** | Subagent Architecture | Proactive behavior, tick loop | ✅ |
 | **Conversation** | ConversationStore | Thread-safe history | ✅ |
 | **Compaction** | LLM Summarization | Token management | ✅ |
-| **Emotional State** | PAD Model | Reactive mood | 🔨 |
-| **Long-term Memory** | MCP + Subagent | Facts, preferences, summaries | 🔨 |
-| **Observer Agent** | Constitutional AI | Behavior adjustment | 🔨 |
+| **Emotional State** | PAD + HEXACO | Reactive mood, persistent personality | ✅ |
+| **Long-term Memory** | MCP + Subagent | Facts, preferences, summaries | ✅ |
+| **Observer Agent** | Constitutional AI | Behavior adjustment | ✅ |
 
 ✅ = Done | 🔨 = In progress
 
 ## Quick Start
+
+> *"Unbelievable. You, [Subject Name Here] must be the pride of [Subject Hometown Here]."  -  GLaDOS*
 
 1. Install [Ollama](https://github.com/ollama/ollama) and grab a model:
    ```bash
@@ -381,6 +404,8 @@ model: "mistral"
 Browse models: [ollama.com/library](https://ollama.com/library)
 
 ### Change the Voice
+> *“I'm speaking in an accent that is beyond her range of hearing.”  -  Wheatley*
+
 
 Kokoro voices in `glados_config.yaml`:
 ```yaml
