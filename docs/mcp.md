@@ -299,5 +299,5 @@ The memory system follows the "LLM-first" principle: search is simple keyword ma
 
 ## See Also
 
-- [README](./README.md) - Full architecture diagram
+- [README](../README.md) - Full architecture diagram
 - [autonomy.md](./autonomy.md) - How autonomy uses MCP tools

@@ -231,6 +231,6 @@ Decide whether to act.
 
 ## See Also
 
-- [README](./README.md) - Full architecture diagram
+- [README](../README.md) - Full architecture diagram
 - [vision.md](./vision.md) - Vision module (triggers autonomy via scene changes)
 - [mcp.md](./mcp.md) - MCP tools available to autonomy

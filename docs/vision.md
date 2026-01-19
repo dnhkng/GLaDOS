@@ -208,7 +208,7 @@ vision:
 
 ## See Also
 
-- [README](./README.md) - Full architecture diagram
+- [README](../README.md) - Full architecture diagram
 - [autonomy.md](./autonomy.md) - How vision triggers the autonomy loop
-- [vision_config.py](./src/glados/vision/vision_config.py) - Configuration source
-- [constants.py](./src/glados/vision/constants.py) - Vision system prompts
+- [vision_config.py](../src/glados/vision/vision_config.py) - Configuration source
+- [constants.py](../src/glados/vision/constants.py) - Vision system prompts
