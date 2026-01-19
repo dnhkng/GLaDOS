@@ -397,7 +397,9 @@ Press `Ctrl+P` to open the command palette. Available commands:
 **Keyboard Shortcuts:**
 - `Ctrl+P` - Command palette
 - `F1` - Help screen
-- `Ctrl+D/L/S/A/Q/M` - Toggle panels
+- `Ctrl+D/L/S/A/U/M` - Toggle panels (Dialog, Logs, Status, Autonomy, Queue, MCP)
+- `Ctrl+I` - Toggle right info panels
+- `Ctrl+R` - Restore all panels
 - `Esc` - Close dialogs
 
 ## Configuration
