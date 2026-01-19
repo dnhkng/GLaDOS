@@ -889,18 +889,14 @@ class GladosUI(App[None]):
             - Line number
             - Log message
         """
-        # Cause logger to print all log text. Printed text can then be  captured
-        # by the main_log widget
-
         logger.remove()
-        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
         fmt_file = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
         self._apply_theme(self._resolve_theme())
 
         self.instantiation_worker = None  # Reset the instantiation worker reference
         self.start_instantiation()
 
-        logger.add(print, format=fmt, level="SUCCESS")
+        # Log to file only - stdout corrupts Textual's terminal
         logger.add("glados_tui.log", format=fmt_file, level="DEBUG", rotation="1 MB")
 
     def on_mount(self) -> None:

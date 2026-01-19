@@ -55,7 +55,7 @@ HeaderClock {
 }
 
 #command_bar {
-    margin: 0 2 1 2;
+    margin: 0 0 1 0;
     min-height: 3;
     height: auto;
     border: solid $primary;

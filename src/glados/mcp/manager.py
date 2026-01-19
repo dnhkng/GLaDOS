@@ -1,5 +1,6 @@
 import asyncio
 import fnmatch
+import subprocess
 import threading
 import time
 from collections.abc import Iterable
@@ -232,7 +233,8 @@ class MCPManager:
             if not config.command:
                 raise MCPError(f"MCP server '{config.name}' requires a command for stdio transport.")
             params = StdioServerParameters(command=config.command, args=config.args, env=config.env)
-            return stdio_client(params)
+            # Suppress subprocess stderr to prevent MCP logs from corrupting TUI
+            return stdio_client(params, errlog=subprocess.DEVNULL)
 
         if not config.url:
             raise MCPError(f"MCP server '{config.name}' requires a URL for {config.transport} transport.")
