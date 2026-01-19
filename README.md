@@ -381,18 +381,24 @@ uv run glados start --input-mode both   # Voice + text
 uv run glados say "The cake is a lie"   # Just TTS
 ```
 
-### TUI Commands
+### TUI Controls
 
-Type `/help` in the TUI. Highlights:
+Press `Ctrl+P` to open the command palette. Available commands:
 
 | Command | What it does |
 |---------|-------------|
-| `/status` | System overview |
-| `/asr on\|off` | Toggle speech recognition |
-| `/slots` | View subagent outputs |
-| `/minds` | Active subagents |
-| `/vision` | Camera status |
-| `/knowledge add\|list` | User facts |
+| Status | System overview |
+| Speech Recognition | Toggle ASR on/off |
+| Text-to-Speech | Toggle TTS on/off |
+| Config | View configuration |
+| Memory | Long-term memory stats |
+| Knowledge | Manage user facts |
+
+**Keyboard Shortcuts:**
+- `Ctrl+P` - Command palette
+- `F1` - Help screen
+- `Ctrl+D/L/S/A/Q/M` - Toggle panels
+- `Esc` - Close dialogs
 
 ## Configuration
 

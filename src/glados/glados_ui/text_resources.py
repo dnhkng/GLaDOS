@@ -19,7 +19,7 @@ login_text = (
     "\n\n"
     "Press any key to initialize."
     "\n"
-    "Type /help for commands."
+    "Ctrl+P for commands."
     "\n\n"
     "B:>"
 )
@@ -36,24 +36,29 @@ help_text = (
 )
 
 welcome_tips = (
-    "- /help for command list\n"
-    "- /status for system status\n"
-    "- /observe to view event stream\n"
-    "- /context for slots\n"
-    "- /messages for dialog log\n"
-    "- /theme aperture|ice|matrix|mono|ember\n"
-    "- Type a message and press Enter"
+    "- Ctrl+P for command palette\n"
+    "- F1 for keyboard shortcuts\n"
+    "- Ctrl+D/L/S/A/U/M toggle panels\n"
+    "- Type a message and press Enter\n"
+    "- Esc to close dialogs"
 )
 
 shortcuts_text = (
     "Shortcuts\n"
     "\n"
-    "/       focus command input\n"
-    "q       quit\n"
-    "Esc     close dialogs\n"
-    "/theme  switch color scheme\n"
-    "Up/Down select command\n"
-    "Enter   run command"
+    "F1      Help (this screen)\n"
+    "^p      Command palette\n"
+    "\n"
+    "^d      Toggle dialog panel\n"
+    "^l      Toggle system logs\n"
+    "^s      Toggle status panel\n"
+    "^a      Toggle autonomy panel\n"
+    "^u      Toggle queue panel\n"
+    "^m      Toggle MCP panel\n"
+    "^i      Toggle info panels (right side)\n"
+    "^r      Restore all panels\n"
+    "\n"
+    "Esc     Close dialogs"
 )
 
 

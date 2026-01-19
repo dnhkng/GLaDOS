@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from functools import partial
 import math
 from datetime import datetime
 from pathlib import Path
@@ -12,11 +13,11 @@ from loguru import logger
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult, SystemCommand
+from textual.command import Provider, Hit, Hits, DiscoveryHit
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
-from textual.suggester import Suggester
 from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Static
 from textual.worker import Worker, WorkerState
 
@@ -24,6 +25,123 @@ from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import shortcuts_text, welcome_tips
 from glados.observability import ObservabilityEvent
 from glados.utils.resources import resource_path
+
+# Command Provider for Textual's built-in command palette
+
+
+class GladosCommands(Provider):
+    """Command provider for GLaDOS TUI command palette."""
+
+    # Commands that duplicate TUI features or are irrelevant in TUI
+    _HIDDEN_COMMANDS = {"help", "observe", "slots"}
+
+    # Display names for commands (command_name -> display_name)
+    _DISPLAY_NAMES: ClassVar[dict[str, str]] = {
+        "tts": "Text-to-Speech",
+        "asr": "Speech Recognition",
+        "mcp": "MCP Servers",
+    }
+
+    @property
+    def _app(self) -> "GladosUI":
+        return cast("GladosUI", self.app)
+
+    def _is_command_available(self, name: str) -> bool:
+        """Check if a command should be shown based on engine state."""
+        engine = self._app.glados_engine_instance
+        if not engine:
+            return False
+        if name in self._HIDDEN_COMMANDS:
+            return False
+        # Hide commands for disabled features
+        if name == "vision" and engine.vision_config is None:
+            return False
+        if name == "mcp" and engine.mcp_manager is None:
+            return False
+        if name == "emotion" and not getattr(engine, "_emotion_agent", None):
+            return False
+        if name == "agents" and not getattr(engine, "subagent_manager", None):
+            return False
+        return True
+
+    def _get_display_name(self, name: str) -> str:
+        """Get display name for a command."""
+        return self._DISPLAY_NAMES.get(name, name.title())
+
+    async def search(self, query: str) -> Hits:
+        """Search for commands matching the query."""
+        matcher = self.matcher(query)
+        app = self._app
+
+        # TUI commands - use partial for reliable binding
+        tui_commands = [
+            ("Theme", "Switch TUI theme", partial(app.action_theme_picker)),
+            ("Context", "Show autonomy slot context", partial(app.action_context)),
+            ("Messages", "Show dialog history", partial(app.action_messages)),
+            ("Observability", "Open observability screen", partial(app.action_observability)),
+            ("Help", "Show keyboard shortcuts", partial(app.action_help)),
+        ]
+
+        for name, desc, callback in tui_commands:
+            if (score := matcher.match(name)) > 0:
+                yield Hit(score, matcher.highlight(name), callback, help=desc)
+
+        # Engine commands (dynamic)
+        if app.glados_engine_instance:
+            for spec in app.glados_engine_instance.command_specs():
+                if not self._is_command_available(spec.name):
+                    continue
+                display_name = self._get_display_name(spec.name)
+                if (score := matcher.match(spec.name)) > 0 or (score := matcher.match(display_name)) > 0:
+                    # Handle special commands
+                    if spec.name == "quit":
+                        callback = partial(app.exit)
+                    elif spec.usage and "on|off" in spec.usage:
+                        callback = partial(app._open_toggle_picker, spec.name)
+                    else:
+                        callback = partial(app._run_engine_command, spec.name)
+                    yield Hit(
+                        score,
+                        matcher.highlight(display_name),
+                        callback,
+                        help=spec.description,
+                    )
+
+    async def discover(self) -> Hits:
+        """Show all commands when palette first opens."""
+        app = self._app
+
+        # TUI commands - use partial for reliable binding
+        tui_commands = [
+            ("Theme", "Switch TUI theme", partial(app.action_theme_picker)),
+            ("Context", "Show autonomy slot context", partial(app.action_context)),
+            ("Messages", "Show dialog history", partial(app.action_messages)),
+            ("Observability", "Open observability screen", partial(app.action_observability)),
+            ("Help", "Show keyboard shortcuts", partial(app.action_help)),
+        ]
+
+        for name, desc, callback in tui_commands:
+            yield DiscoveryHit(name, callback, help=desc)
+
+        # Engine commands (dynamic)
+        if app.glados_engine_instance:
+            for spec in app.glados_engine_instance.command_specs():
+                if not self._is_command_available(spec.name):
+                    continue
+                display_name = self._get_display_name(spec.name)
+                # Handle special commands
+                if spec.name == "quit":
+                    callback = partial(app.exit)
+                elif spec.usage and "on|off" in spec.usage:
+                    callback = partial(app._open_toggle_picker, spec.name)
+                else:
+                    callback = partial(app._run_engine_command, spec.name)
+                yield DiscoveryHit(
+                    display_name,
+                    callback,
+                    help=spec.description,
+                )
+
 
 # Custom Widgets
 
@@ -213,28 +331,19 @@ class StatusPanel(Static):
             return
         snapshot = engine.audio_state.snapshot()
         rms_db = self._rms_to_db(snapshot.rms)
-        level = (rms_db + 60.0) / 60.0
-        bar = self._volume_bar(level)
-        vad_text = "[green]ON[/]" if snapshot.vad_active else "[red]OFF[/]"
-        speaking = "[green]YES[/]" if engine.currently_speaking_event.is_set() else "NO"
-        processing = "[green]YES[/]" if engine.processing_active_event.is_set() else "NO"
+        vad_indicator = "[bold green]●[/]" if snapshot.vad_active else "[dim]○[/]"
+        speaking_indicator = "[bold green]●[/]" if engine.currently_speaking_event.is_set() else "[dim]○[/]"
         autonomy = "ON" if engine.autonomy_config.enabled else "OFF"
         jobs = "ON" if engine.autonomy_config.jobs.enabled else "OFF"
         vision = "ON" if engine.vision_config is not None else "OFF"
         asr = "MUTED" if engine.asr_muted_event.is_set() else "ACTIVE"
         tts = "MUTED" if engine.tts_muted_event.is_set() else "ACTIVE"
-        input_mode = app.display_input_mode() or engine.input_mode
         lines = [
-            f"Input: {input_mode}",
-            f"ASR: {asr}",
-            f"TTS: {tts}",
-            f"Speaking: {speaking}",
-            f"Processing: {processing}",
+            f"ASR: {asr}  TTS: {tts}",
             f"Autonomy: {autonomy}  Jobs: {jobs}",
             f"Vision: {vision}",
-            "",
-            f"VAD: {vad_text}",
-            f"Volume: {bar} {rms_db:5.1f} dB",
+            f"Speaking: {speaking_indicator}",
+            f"Microphone: {vad_indicator} {rms_db:5.1f} dB",
         ]
         self.update("\n".join(lines))
 
@@ -320,24 +429,6 @@ class MCPPanel(Static):
         self.update("\n".join(lines))
 
 
-class CommandSuggester(Suggester):
-    def __init__(self, get_commands: Callable[[], list[str]]) -> None:
-        super().__init__(use_cache=False, case_sensitive=False)
-        self._get_commands = get_commands
-
-    async def get_suggestion(self, value: str) -> str | None:
-        if not value.startswith("/"):
-            return None
-        commands = self._get_commands()
-        if not commands:
-            return None
-        prefix = value.casefold()
-        for command in commands:
-            if command.casefold().startswith(prefix):
-                return command
-        return None
-
-
 # Screens
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
@@ -373,7 +464,7 @@ class SplashScreen(Screen[None]):
                     yield Static(welcome_tips, id="welcome_tips")
                     yield Label("Recent activity", id="welcome_recent_title")
                     yield Static("No recent activity", id="welcome_recent")
-        yield Static('Try "/help" or ask a question.', id="welcome_prompt")
+        yield Static("Press Ctrl+P for commands, or just ask a question.", id="welcome_prompt")
         yield Static("Initializing systems...", id="welcome_cta")
 
     def on_mount(self) -> None:
@@ -453,18 +544,28 @@ class HelpScreen(ModalScreen[None]):
         self._render_help()
 
     def _render_help(self) -> None:
-        app = cast(GladosUI, self.app)
-        engine = app.glados_engine_instance
-        lines = ["Shortcuts", "", "/       focus command input", "Esc     close dialogs", ""]
-        if engine:
-            lines.append("Commands")
-            for spec in engine.command_specs():
-                usage = spec.usage
-                lines.append(f"{usage:<28} {spec.description}")
-        lines.append("/context                 Show autonomy slot context")
-        lines.append("/messages                Show dialog history")
-        lines.append("/theme                    Switch TUI theme")
-        lines.append("/observe                  Open observability screen")
+        lines = [
+            "[bold]Keyboard Shortcuts[/]",
+            "",
+            "F1      Help (this screen)",
+            "^p      Command palette",
+            "",
+            "^d      Toggle dialog panel",
+            "^l      Toggle system logs",
+            "^s      Toggle status panel",
+            "^a      Toggle autonomy panel",
+            "^u      Toggle queue panel",
+            "^m      Toggle MCP panel",
+            "^i      Toggle info panels (right side)",
+            "^r      Restore all panels",
+            "",
+            "Esc     Close dialogs",
+            "",
+            "[bold]Commands[/]",
+            "Use ^p to access all commands including:",
+            "  Theme, Context, Messages, Observability, Help",
+            "  Mute/Unmute ASR/TTS, Reset, Autonomy, etc.",
+        ]
         self.query_one("#help_text", Static).update("\n".join(lines))
 
 
@@ -544,6 +645,28 @@ class MessagesScreen(ModalScreen[None]):
         self.query_one("#messages_text", Static).update(content)
 
 
+class InfoScreen(ModalScreen[None]):
+    """Display command output in a scrollable dialog."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "app.pop_screen", "Close screen")
+    ]
+
+    def __init__(self, title: str, content: str) -> None:
+        super().__init__()
+        self._title = title
+        self._content = content
+
+    def compose(self) -> ComposeResult:
+        yield Container(VerticalScroll(Static(self._content, id="info_text")), id="info_dialog")
+
+    def on_mount(self) -> None:
+        dialog = self.query_one("#info_dialog")
+        dialog.border_title = self._title
+        dialog.border_title_align = "center"
+        dialog.border_subtitle = "Press Esc to close"
+
+
 class ThemePickerScreen(ModalScreen[None]):
     """Theme picker for the command palette and /theme command."""
 
@@ -586,6 +709,12 @@ class OnOffPickerScreen(ModalScreen[None]):
         ("escape", "app.pop_screen", "Close screen")
     ]
 
+    # Display names for toggle commands
+    _DISPLAY_NAMES: ClassVar[dict[str, str]] = {
+        "tts": "Text-to-Speech",
+        "asr": "Speech Recognition",
+    }
+
     def __init__(self, command: str) -> None:
         super().__init__()
         self._command = command
@@ -598,12 +727,28 @@ class OnOffPickerScreen(ModalScreen[None]):
 
     def on_mount(self) -> None:
         dialog = self.query_one("#toggle_dialog")
-        dialog.border_title = self._command
+        dialog.border_title = self._DISPLAY_NAMES.get(self._command, self._command.title())
         dialog.border_title_align = "center"
         option_list = self.query_one("#toggle_list", OptionList)
         option_list.clear_options()
         option_list.add_options(["on", "off"])
-        option_list.highlighted = 0
+        # Highlight current state
+        current_on = self._get_current_state()
+        option_list.highlighted = 0 if current_on else 1
+
+    def _get_current_state(self) -> bool:
+        """Get current state for toggle command (True = on/active)."""
+        app = cast(GladosUI, self.app)
+        engine = app.glados_engine_instance
+        if not engine:
+            return False
+        if self._command == "asr":
+            return not engine.asr_muted_event.is_set()
+        if self._command == "tts":
+            return not engine.tts_muted_event.is_set()
+        if self._command == "autonomy":
+            return engine.autonomy_config.enabled
+        return False
 
     def on_option_list_option_selected(self, message: OptionList.OptionSelected) -> None:
         app = cast(GladosUI, self.app)
@@ -613,7 +758,7 @@ class OnOffPickerScreen(ModalScreen[None]):
             app.notify("Engine not ready.", severity="warning")
             self.dismiss()
             return
-        command = f"{self._command} {choice}"
+        command = f"/{self._command} {choice}"
         response = app.glados_engine_instance.handle_command(command)
         logger.success("TUI command: {} -> {}", command, response)
         app.notify(response, title="Command", timeout=4)
@@ -729,12 +874,12 @@ class ObservabilityScreen(ModalScreen[None]):
 class GladosUI(App[None]):
     """The main app class for the GlaDOS ui."""
 
-    DEFAULT_TIPS = "Enter to send\n/ for commands"
-
-    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = []
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        Binding("tab", "toggle_info_panels", "Toggle info panels", priority=True),
+    ]
     CSS_PATH = "glados_ui/glados.tcss"
+    COMMANDS = {GladosCommands}
 
-    COMMAND_PALETTE_LIMIT: ClassVar[int] = 6
     THEMES: ClassVar[tuple[str, ...]] = ("aperture", "ice", "matrix", "mono", "ember")
     THEME_VARIABLES: ClassVar[dict[str, dict[str, str]]] = {
         "aperture": {
@@ -789,9 +934,6 @@ class GladosUI(App[None]):
     _queue_panel: QueuePanel | None = None
     _autonomy_panel: AutonomyPanel | None = None
     _mcp_panel: MCPPanel | None = None
-    _tips_panel: Static | None = None
-    _command_palette: OptionList | None = None
-    _command_matches: list[tuple[str, str]] = []
     _queue_metrics: dict[str, dict[str, float | int | None]]
     _config_path: Path
     _input_mode_override: str | None
@@ -837,33 +979,29 @@ class GladosUI(App[None]):
         """
         # It would be nice to have the date in the header, but see:
         # https://github.com/Textualize/textual/issues/4666
-        yield Header(show_clock=True)
+        yield Header(show_clock=True, classes="-tall")
 
         with Container(id="body"):
             with Horizontal():
                 with Vertical(id="left_panel"):
-                    yield Label("Dialog", id="dialog_title")
+                    yield Label("[u]D[/u]ialog", id="dialog_title")
                     yield DialogLog(id="dialog_log")
-                    yield Label("System Log", id="system_title")
+                    yield Label("System [u]L[/u]og", id="system_title")
                     yield Printer(id="log_area")
                 with Vertical(id="right_panel"):
-                    yield Label("Status", id="status_title")
+                    yield Label("[u]S[/u]tatus", id="status_title")
                     yield StatusPanel(id="status_panel")
-                    yield Label("Autonomy", id="autonomy_title")
+                    yield Label("[u]A[/u]utonomy", id="autonomy_title")
                     yield AutonomyPanel(id="autonomy_panel")
-                    yield Label("Queues", id="queue_title")
+                    yield Label("Q[u]u[/u]eues", id="queue_title")
                     yield QueuePanel(id="queue_panel")
-                    yield Label("MCP", id="mcp_title")
+                    yield Label("[u]M[/u]CP", id="mcp_title")
                     yield MCPPanel(id="mcp_panel")
-                    yield Label("Hints", id="tips_title")
-                    yield Static(self.DEFAULT_TIPS, id="tips_panel")
 
         with Container(id="command_bar"):
-            yield OptionList(id="command_palette", classes="hidden")
             yield Input(
-                placeholder="Type a message or /command",
+                placeholder="Type a message...",
                 id="command_input",
-                suggester=CommandSuggester(self._command_names),
             )
 
         yield Footer()
@@ -890,14 +1028,14 @@ class GladosUI(App[None]):
             - Log message
         """
         logger.remove()
-        fmt_file = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
         self._apply_theme(self._resolve_theme())
 
         self.instantiation_worker = None  # Reset the instantiation worker reference
         self.start_instantiation()
 
-        # Log to file only - stdout corrupts Textual's terminal
-        logger.add("glados_tui.log", format=fmt_file, level="DEBUG", rotation="1 MB")
+        # Log to TUI via print (captured by Printer widget)
+        fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
+        logger.add(print, format=fmt, level="SUCCESS")
 
     def on_mount(self) -> None:
         """
@@ -947,49 +1085,59 @@ class GladosUI(App[None]):
             return "text (TUI)"
         return self._input_mode_override
 
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        """Filter out duplicate Help command from system commands."""
+        for cmd in super().get_system_commands(screen):
+            # Skip the default help command since we have our own
+            if cmd.title.lower() == "help":
+                continue
+            yield cmd
+
     def action_help(self) -> None:
         """Someone pressed the help key!."""
-        self.push_screen(HelpScreen(id="help_screen"))
+        if not isinstance(self.screen, HelpScreen):
+            self.push_screen(HelpScreen())
 
     def action_context(self) -> None:
         """Open the context slots screen."""
-        self.push_screen(ContextScreen(id="context_screen"))
+        if not isinstance(self.screen, ContextScreen):
+            self.push_screen(ContextScreen())
 
     def action_messages(self) -> None:
         """Open the dialog messages screen."""
-        self.push_screen(MessagesScreen(id="messages_screen"))
+        if not isinstance(self.screen, MessagesScreen):
+            self.push_screen(MessagesScreen())
 
     def action_theme_picker(self) -> None:
         """Open the theme picker modal."""
-        self.push_screen(ThemePickerScreen(id="theme_picker_screen"))
+        if not isinstance(self.screen, ThemePickerScreen):
+            self.push_screen(ThemePickerScreen())
 
     def action_change_theme(self) -> None:
         """Override Textual's default theme picker with our custom themes."""
         self.action_theme_picker()
 
-    def action_command(self) -> None:
-        """Focus the command input."""
-        if not self._bind_panels():
-            return
-        matches = self.query("#command_input")
-        if not matches:
-            return
-        command_input = matches.first()
-        if not command_input.value:
-            command_input.value = "/"
-            self._update_command_hints(command_input.value)
-        command_input.focus()
-
     def action_observability(self) -> None:
         """Open the observability screen."""
-        self.push_screen(ObservabilityScreen(id="observability_screen"))
+        if not isinstance(self.screen, ObservabilityScreen):
+            self.push_screen(ObservabilityScreen())
 
-    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
-        yield SystemCommand("Choose color scheme", "Switch the TUI theme", self.action_theme_picker)
-        yield SystemCommand("Context slots", "Show autonomy slot context", self.action_context)
-        yield SystemCommand("Dialog messages", "Show dialog history", self.action_messages)
-        yield SystemCommand("Observability", "Open the observability screen", self.action_observability)
-        yield SystemCommand("Quit", "Quit the application", self.action_quit)
+    def action_toggle_info_panels(self) -> None:
+        """Toggle the right info panel (Ctrl+I / Tab)."""
+        self._toggle_right_panel()
+
+    def _run_engine_command(self, name: str) -> None:
+        """Execute an engine command and display the result."""
+        if not self.glados_engine_instance:
+            self.notify("Engine not ready.", severity="warning")
+            return
+        response = self.glados_engine_instance.handle_command(f"/{name}")
+        if response:
+            self.push_screen(InfoScreen(name.title(), response))
+
+    def _open_toggle_picker(self, command_name: str) -> None:
+        """Open the on/off picker for a toggle command."""
+        self.push_screen(OnOffPickerScreen(command_name))
 
     # def on_key(self, event: events.Key) -> None:
     #     """Useful for debugging via key presses."""
@@ -1006,12 +1154,6 @@ class GladosUI(App[None]):
             if self.glados_engine_instance is not None:
                 self.glados_engine_instance.play_announcement()
                 self.start_glados()
-            try:
-                command_input = self.query_one("#command_input", Input)
-            except NoMatches:
-                command_input = None
-            if command_input is not None:
-                self._update_command_hints(command_input.value)
             self.focus_command_input()
         elif message.state == WorkerState.ERROR:
             worker = message.worker
@@ -1024,98 +1166,52 @@ class GladosUI(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "command_input":
             return
-        command = event.value.strip()
-        if not command:
-            event.input.value = ""
-            return
-        if command.startswith("/") and self._palette_visible() and " " not in command:
-            selected = self._selected_command()
-            if selected:
-                command = selected
+        text = event.value.strip()
         event.input.value = ""
-        self._update_command_hints("")
-        if command.startswith("/"):
-            parts = command.lstrip("/").split()
-            if parts:
-                cmd_name = parts[0].casefold()
-                toggle_targets = self._onoff_command_targets()
-                joined = " ".join(parts).casefold()
-                target = toggle_targets.get(cmd_name)
-                if target and (len(parts) == 1 or joined == target):
-                    self.push_screen(OnOffPickerScreen(f"/{target}"))
-                    return
-            if command in {"/help", "/?"}:
-                self.action_help()
-                return
-            if command in {"/quit", "/exit"}:
-                if self.glados_engine_instance:
-                    self.glados_engine_instance.handle_command(command)
-                self.exit()
-                return
-            if command in {"/observe", "/observability"}:
-                self.action_observability()
-                return
-            if command in {"/context", "/slots"}:
-                self.action_context()
-                return
-            if command == "/messages":
-                self.action_messages()
-                return
-            if command.startswith("/theme"):
-                parts = command.split()
-                if len(parts) == 1:
-                    self.action_theme_picker()
-                    return
-                theme = self._apply_theme(parts[1])
-                self.notify(f"Theme set to {theme}.", title="Theme", timeout=4)
-                return
-            if not self.glados_engine_instance:
-                self.notify("Engine not ready.", severity="warning")
-                return
-            response = self.glados_engine_instance.handle_command(command)
-            logger.success("TUI command: {} -> {}", command, response)
-            self.notify(response, title="Command", timeout=4)
+        if not text:
             return
         if not self.glados_engine_instance:
             self.notify("Engine not ready.", severity="warning")
             return
-        if not self.glados_engine_instance.submit_text_input(command):
+        if not self.glados_engine_instance.submit_text_input(text):
             self.notify("No text submitted.", severity="warning")
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "command_input":
-            return
-        self._update_command_hints(event.value)
-
     def on_key(self, event: events.Key) -> None:
-        if self._palette_visible() and isinstance(self.focused, Input) and self.focused.id == "command_input":
-            if event.key == "up":
-                self._move_command_palette(-1)
-                event.stop()
-                return
-            if event.key == "down":
-                self._move_command_palette(1)
-                event.stop()
-                return
-            if event.key == "escape":
-                try:
-                    command_input = self.query_one("#command_input", Input)
-                except NoMatches:
-                    command_input = None
-                if command_input is not None:
-                    command_input.value = ""
-                self._hide_command_palette()
-                self._update_command_hints("")
-                event.stop()
-                return
-        if event.key != "/":
+        # Control-key shortcuts (work globally, even when typing)
+        key = event.key
+        if key == "f1":
+            self.action_help()
+            event.stop()
             return
-        if not self._bind_panels():
+        if key == "ctrl+d":
+            self._toggle_panel("dialog_log", "dialog_title")
+            event.stop()
             return
-        if isinstance(self.focused, Input) and self.focused.id == "command_input":
+        if key == "ctrl+l":
+            self._toggle_panel("log_area", "system_title")
+            event.stop()
             return
-        self.action_command()
-        event.stop()
+        if key == "ctrl+s":
+            self._toggle_panel("status_panel", "status_title")
+            event.stop()
+            return
+        if key == "ctrl+a":
+            self._toggle_panel("autonomy_panel", "autonomy_title")
+            event.stop()
+            return
+        if key == "ctrl+m":
+            self._toggle_panel("mcp_panel", "mcp_title")
+            event.stop()
+            return
+        if key == "ctrl+u":
+            self._toggle_panel("queue_panel", "queue_title")
+            event.stop()
+            return
+        if key == "ctrl+r":
+            self._restore_all_panels()
+            event.stop()
+            return
+        # Note: ctrl+i/tab handled via BINDINGS with priority=True
 
     def _refresh_panels(self) -> None:
         if not self._bind_panels():
@@ -1157,8 +1253,6 @@ class GladosUI(App[None]):
             and self._queue_panel is not None
             and self._autonomy_panel is not None
             and self._mcp_panel is not None
-            and self._tips_panel is not None
-            and self._command_palette is not None
         ):
             return True
         try:
@@ -1167,8 +1261,6 @@ class GladosUI(App[None]):
             self._queue_panel = self.query_one("#queue_panel", QueuePanel)
             self._autonomy_panel = self.query_one("#autonomy_panel", AutonomyPanel)
             self._mcp_panel = self.query_one("#mcp_panel", MCPPanel)
-            self._tips_panel = self.query_one("#tips_panel", Static)
-            self._command_palette = self.query_one("#command_palette", OptionList)
             return True
         except NoMatches:
             return False
@@ -1179,86 +1271,6 @@ class GladosUI(App[None]):
         except NoMatches:
             return
         command_input.focus()
-
-    def _command_names(self) -> list[str]:
-        engine = self.glados_engine_instance
-        names: list[str] = []
-        if engine:
-            for spec in engine.command_specs():
-                names.append(f"/{spec.name}")
-                for alias in spec.aliases:
-                    names.append(f"/{alias}")
-                usage = spec.usage or ""
-                if "debounce on|off" in usage and spec.name == "autonomy":
-                    names.append("/autonomy debounce")
-        names.extend(["/observe", "/context", "/messages", "/quit", "/theme"])
-        return list(dict.fromkeys(names))
-
-    def _command_entries(self) -> list[tuple[str, str]]:
-        engine = self.glados_engine_instance
-        entries: list[tuple[str, str]] = []
-        if engine:
-            for spec in engine.command_specs():
-                label = f"/{spec.name}"
-                entries.append((label, spec.description))
-                usage = spec.usage or ""
-                if "debounce on|off" in usage and spec.name == "autonomy":
-                    entries.append(("/autonomy debounce", "Toggle autonomy tick debouncing"))
-        entries.extend(
-            [
-                ("/observe", "Open observability screen"),
-                ("/context", "Show autonomy slot context"),
-                ("/messages", "Show dialog history"),
-                ("/quit", "Quit GLaDOS"),
-                ("/theme", "Switch TUI theme"),
-            ]
-        )
-        unique: dict[str, str] = {}
-        for label, desc in entries:
-            if label not in unique:
-                unique[label] = desc
-        return list(unique.items())
-
-    def _onoff_command_targets(self) -> dict[str, str]:
-        engine = self.glados_engine_instance
-        targets: dict[str, str] = {}
-        if not engine:
-            return targets
-        for spec in engine.command_specs():
-            usage = spec.usage.lstrip("/").strip()
-            if "on|off" not in usage:
-                continue
-            prefix = usage.split("on|off", 1)[0].strip()
-            if not prefix:
-                continue
-            targets[spec.name.casefold()] = prefix
-            for alias in spec.aliases:
-                targets[alias.casefold()] = prefix
-        return targets
-
-    def _update_command_hints(self, value: str) -> None:
-        if not self._bind_panels():
-            return
-        if self._tips_panel is None or self._command_palette is None:
-            return
-        text = value.strip()
-        if not text.startswith("/"):
-            self._tips_panel.update(self.DEFAULT_TIPS)
-            self._hide_command_palette()
-            return
-        entries = self._command_entries()
-        if not entries:
-            self._tips_panel.update("Commands loading...")
-            self._hide_command_palette()
-            return
-        prefix = text.split()[0].casefold()
-        matches = [(label, desc) for label, desc in entries if label.casefold().startswith(prefix)]
-        if not matches:
-            self._tips_panel.update("No matching commands. Try /help.")
-            self._hide_command_palette()
-            return
-        self._show_command_palette(matches)
-        self._tips_panel.update("Up/Down to select, Enter to run, Esc to clear.")
 
     def _resolve_theme(self) -> str:
         if self._theme_override:
@@ -1286,61 +1298,68 @@ class GladosUI(App[None]):
     def _theme_label(self) -> str:
         return self._active_theme or "aperture"
 
-    def _show_command_palette(self, matches: list[tuple[str, str]]) -> None:
-        if self._command_palette is None:
-            return
-        visible_matches = matches[: self.COMMAND_PALETTE_LIMIT]
-        self._command_matches = visible_matches
-        options: list[Text] = []
-        for label, desc in visible_matches:
-            prompt = Text.assemble((label, "bold"), ("  ", ""), (desc, "dim"))
-            options.append(prompt)
-        self._command_palette.clear_options()
-        self._command_palette.add_options(options)
-        self._command_palette.highlighted = 0 if options else None
-        self._command_palette.remove_class("hidden")
-
-    def _hide_command_palette(self) -> None:
-        if self._command_palette is None:
-            return
-        self._command_palette.add_class("hidden")
-        self._command_matches = []
-
-    def _palette_visible(self) -> bool:
-        return bool(self._command_palette and not self._command_palette.has_class("hidden"))
-
-    def _selected_command(self) -> str | None:
-        if not self._command_palette or self._command_palette.option_count == 0:
-            return None
-        index = self._command_palette.highlighted
-        if index is None:
-            index = 0
-        if index < 0 or index >= len(self._command_matches):
-            return None
-        return self._command_matches[index][0]
-
-    def _move_command_palette(self, delta: int) -> None:
-        if not self._command_palette or self._command_palette.option_count == 0:
-            return
-        current = self._command_palette.highlighted
-        if current is None:
-            current = 0
-        new_index = (current + delta) % self._command_palette.option_count
-        self._command_palette.highlighted = new_index
-        self._command_palette.scroll_to_highlight()
-
-    def _complete_command_input(self, add_space: bool = True) -> bool:
-        command = self._selected_command()
-        if not command:
-            return False
+    def _toggle_panel(self, panel_id: str, title_id: str | None = None) -> None:
         try:
-            command_input = self.query_one("#command_input", Input)
+            panel = self.query_one(f"#{panel_id}")
+            # Toggle using display property directly (more reliable than CSS classes)
+            new_display = "block" if panel.styles.display == "none" else "none"
+            panel.styles.display = new_display
+            if title_id:
+                self.query_one(f"#{title_id}").styles.display = new_display
+            # Force refresh of sibling widget to trigger proper redraw
+            if panel_id == "log_area" and self._dialog_log:
+                self._dialog_log.refresh()
+            elif panel_id == "dialog_log":
+                self.query_one("#log_area").refresh()
         except NoMatches:
-            return False
-        command_input.value = f"{command} " if add_space else command
-        command_input.cursor_position = len(command_input.value)
-        self._update_command_hints(command_input.value)
-        return True
+            pass
+
+    def _restore_all_panels(self) -> None:
+        """Restore all hidden panels to visible."""
+        panel_ids = [
+            ("dialog_log", "dialog_title"),
+            ("log_area", "system_title"),
+            ("status_panel", "status_title"),
+            ("autonomy_panel", "autonomy_title"),
+            ("queue_panel", "queue_title"),
+            ("mcp_panel", "mcp_title"),
+        ]
+        for panel_id, title_id in panel_ids:
+            try:
+                self.query_one(f"#{panel_id}").styles.display = "block"
+                self.query_one(f"#{title_id}").styles.display = "block"
+            except NoMatches:
+                pass
+        # Also restore right panel container and left panel width
+        try:
+            self.query_one("#right_panel").styles.display = "block"
+            self.query_one("#left_panel").styles.width = "70%"
+        except NoMatches:
+            pass
+        # Trigger redraw
+        if self._dialog_log:
+            self._dialog_log.refresh()
+
+    def _toggle_right_panel(self) -> None:
+        """Toggle the entire right panel (Status, Autonomy, Queues, MCP)."""
+        try:
+            right_panel = self.query_one("#right_panel")
+            left_panel = self.query_one("#left_panel")
+            # Check if currently hidden (display is "none")
+            is_hidden = str(right_panel.styles.display) == "none"
+            if is_hidden:
+                # Show right panel, restore left panel width
+                right_panel.styles.display = "block"
+                left_panel.styles.width = "70%"
+            else:
+                # Hide right panel, expand left panel
+                right_panel.styles.display = "none"
+                left_panel.styles.width = "100%"
+            # Trigger redraw
+            if self._dialog_log:
+                self._dialog_log.refresh()
+        except NoMatches:
+            pass
 
     def start_glados(self) -> None:
         """

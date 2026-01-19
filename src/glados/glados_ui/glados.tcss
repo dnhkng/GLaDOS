@@ -62,21 +62,19 @@ HeaderClock {
     background: $surface;
 }
 
-#command_palette {
-    height: 6;
-    border: solid $primary 40%;
-    background: $background;
-    color: $foreground;
-    padding: 0 1;
-}
-
-#command_palette.hidden {
+#dialog_log.hidden,
+#dialog_title.hidden,
+#log_area.hidden,
+#system_title.hidden,
+#status_panel.hidden,
+#status_title.hidden,
+#autonomy_panel.hidden,
+#autonomy_title.hidden,
+#mcp_panel.hidden,
+#mcp_title.hidden,
+#queue_panel.hidden,
+#queue_title.hidden {
     display: none;
-}
-
-#command_palette > .option-list--option-highlighted {
-    background: $primary 30%;
-    color: $foreground;
 }
 
 #command_input {
@@ -134,8 +132,7 @@ HeaderClock {
 #status_title,
 #autonomy_title,
 #queue_title,
-#mcp_title,
-#tips_title {
+#mcp_title {
     color: $primary;
     text-style: bold;
     height: 1;
@@ -155,15 +152,14 @@ HeaderClock {
 #status_panel,
 #autonomy_panel,
 #queue_panel,
-#mcp_panel,
-#tips_panel {
+#mcp_panel {
     border: solid $primary 40%;
     padding: 1 2;
     background: $surface;
 }
 
 #status_panel {
-    height: 8;
+    height: 10;
 }
 
 #autonomy_panel {
@@ -176,11 +172,6 @@ HeaderClock {
 
 #mcp_panel {
     height: 5;
-}
-
-#tips_panel {
-    height: 6;
-    color: $foreground 70%;
 }
 
 
@@ -216,7 +207,8 @@ OnOffPickerScreen {
 }
 
 #context_dialog,
-#messages_dialog {
+#messages_dialog,
+#info_dialog {
     border-title-align: center;
     border: round $primary;
     color: $primary;

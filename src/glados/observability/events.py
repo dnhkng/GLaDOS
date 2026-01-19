@@ -14,7 +14,7 @@ class ObservabilityEvent:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
-def trim_message(text: str, limit: int = 160) -> str:
+def trim_message(text: str, limit: int = 500) -> str:
     cleaned = " ".join(text.split())
     if len(cleaned) <= limit:
         return cleaned
