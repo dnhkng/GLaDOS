@@ -396,6 +396,8 @@ Type `/help` in the TUI. Highlights:
 
 ## Configuration
 
+> *"As part of a required test protocol, we will not monitor the next test chamber. You will be entirely on your own. Good luck."  -  GLaDOS*
+
 ### Change the LLM
 
 ```bash
@@ -478,6 +480,8 @@ curl -X POST http://localhost:5050/v1/audio/speech \
 ```
 
 ## Troubleshooting
+
+> *"No one will blame you for giving up. In fact, quitting at this point is a perfectly reasonable response."  -  GLaDOS*
 
 **She keeps responding to herself:**
 Use headphones or a mic with echo cancellation. Or set `interruptible: false`.
