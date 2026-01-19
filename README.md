@@ -8,13 +8,14 @@
 
 GLaDOS is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
 
-Back in 2022 when ChatGPT made its debut, I had a realization: we can actually build her now. A demented, obsessive AI fixated on humanity, super intelligent yet utterly lacking sound judgment—sounds just like an LLM, right? Still no moon colonies. But a passive-aggressive AI that controls your lights and runs experiments on you? That we can do.
+Back in 2022 when ChatGPT made its debut, I had a realization: we are living in the Sci-Fi future and can actually build her now. A demented, obsessive AI fixated on humanity, super intelligent yet utterly lacking sound judgment—sounds; so just like an LLM, right? Still no moon colonies or flying cars. But a passive-aggressive AI that controls your lights and runs experiments on you? That we can do.
 
 The architecture borrows from Minsky's Society of Mind—rather than one monolithic prompt, multiple specialized agents (vision, memory, personality, planning) each contribute to a dynamic context. GLaDOS's "self" emerges from their combined output, assembled fresh for each interaction.
 
 The hard part was latency. Getting round-trip response time under 600 milliseconds is a threshold—below it, conversation stops feeling stilted and starts to flow. That meant training a custom TTS model and ruthlessly cutting milliseconds from every part of the pipeline.
 
 Since 2023 I've refactored the system multiple times as better models came out. The current version finally adds what I always wanted: vision, memory, and tool use via MCP.
+
 She sees through a camera, hears through a microphone, speaks through a speaker, and judges you accordingly.
 
 [Join our Discord!](https://discord.com/invite/ERTDKwpjNB) | [Sponsor the project](https://ko-fi.com/dnhkng)
@@ -26,7 +27,7 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 > *"We've both said a lot of things that you're going to regret"  -  GLaDOS*
 
-Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, thinks, and speaks when she has something to say.
+Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, thinks, and speaks when she has something to say. All the while, parts of her minds are tracking what she sees, monitoring system stats, and researching new neurotoxin recipes online.
 
 **Goals:**
 - **Proactive behavior**: React to events (vision, sound, time) without being prompted
@@ -49,6 +50,7 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 
 > *"Federal regulations require me to warn you that this next test chamber... is looking pretty good.”  -  GLaDOS*
 
+There's still a lot do do; I will be swapping out models are they are released, and then working on anamatronics, once a good model with inverse kinematics comes out. There was a time when I would code that myself; these days it makes more sense to wait until a trained model is released!
 
 - [x] Train GLaDOS voice
 - [x] Personality that actually sounds like her
@@ -57,13 +59,14 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 - [x] MCP tool system
 - [x] Emotional state (PAD + HEXACO model)
 - [x] Long-term memory
-- [x] Observer agent (behavior adjustment)
+- [ ] Implement streaming ASR (nvidia/multitalker-parakeet-streaming-0.6b-v1)
+- [ ] Observer agent (behavior adjustment)
 - [ ] 3D-printable enclosure
 - [ ] Animatronics
 
 ## Architecture
 
-> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."  -  GLaDOS*
+> *"Let's be honest. Neither one of us knows what that thing does. Just put it in the corner and I'll deal with it later."  -  GLaDOS*
 
 ```mermaid
 flowchart TB
@@ -283,6 +286,8 @@ See [mcp.md](/mcp.md) for configuration.
 
 ### Components
 
+> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."  -  GLaDOS*
+
 | Component | Technology | Purpose | Status |
 |-----------|------------|---------|--------|
 | **Speech Recognition** | Parakeet TDT (ONNX) | Speech-to-text, 16kHz streaming | ✅ |
@@ -303,7 +308,7 @@ See [mcp.md](/mcp.md) for configuration.
 
 ## Quick Start
 
-> *"Unbelievable. You, [Subject Name Here] must be the pride of [Subject Hometown Here]."  -  GLaDOS*
+> *"The Enrichment Center is required to remind you that the Weighted Companion Cube cannot talk. In the event that it does talk The Enrichment Centre asks you to ignore its advice."  -  GLaDOS*
 
 1. Install [Ollama](https://github.com/ollama/ollama) and grab a model:
    ```bash
