@@ -6,15 +6,16 @@
 
 > *"Science isn't about why it's about why not."  -  Cave Johnson*
 
-GLaDOS (Genetic Lifeform and Disk Operating System) is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
+GLaDOS is the AI antagonist from Valve's Portal series—a sardonic, passive-aggressive superintelligence who views humans as test subjects worthy of both study and mockery.
 
-15 years after the release of Portal, I had the realisation that we have the technology to actually build her, back in ‘22 when ChatGPT made its big debut. A demented, obsessive AI focused on Humanity, both super intelligent and yet utterly lacking sound judgment - sounds just like an LLM, right?
+Back in 2022 when ChatGPT made its debut, I had a realization: we can actually build her now. A demented, obsessive AI fixated on humanity, super intelligent yet utterly lacking sound judgment—sounds just like an LLM, right? Still no moon colonies. But a passive-aggressive AI that controls your lights and runs experiments on you? That we can do.
 
-At the same time, Whisper Automatic-Speech-Recognition (ASR) was released, so we had the input side ready, but the output was still missing. In 2023, I built the end-to-end system by training the Speech-to-Text (STT) model and carefully engineering away as much latency as possible. I found that achieving a round-trip latency of under 600 milliseconds was a significant threshold, and going below it was transformative. It goes from feeling stilted to a flowing conversation.
+The architecture borrows from Minsky's Society of Mind—rather than one monolithic prompt, multiple specialized agents (vision, memory, personality, planning) each contribute to a dynamic context. GLaDOS's "self" emerges from their combined output, assembled fresh for each interaction.
 
-Over the next year or two, I refactored GLaDOS multiple times, replacing all the core code, and the ASR multiple times as better models were released, but the technology I really wanted to add was still missing - Vision, RADAR, Memory, Internet access, and self-agency.  These are now available via MCP’s, tool use, and low-latency tiny VLMs.
+The hard part was latency. Getting round-trip response time under 600 milliseconds is a threshold—below it, conversation stops feeling stilted and starts to flow. That meant training a custom TTS model and ruthlessly cutting milliseconds from every part of the pipeline.
 
-This project brings her to life on real hardware. She sees through a camera, hears through a microphone, speaks through a speaker, and judges you accordingly.
+Since 2023 I've refactored the system multiple times as better models came out. The current version finally adds what I always wanted: vision, memory, and tool use via MCP.
+She sees through a camera, hears through a microphone, speaks through a speaker, and judges you accordingly.
 
 [Join our Discord!](https://discord.com/invite/ERTDKwpjNB) | [Sponsor the project](https://ko-fi.com/dnhkng)
 
