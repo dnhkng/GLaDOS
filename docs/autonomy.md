@@ -8,24 +8,13 @@ Traditional AI assistants are purely reactive - they wait for user input, respon
 
 GLaDOS closes this loop by **auto-prompting itself**:
 
-```
-+------------------+     +-----------------+     +------------------+
-|  Vision Change   |     |                 |     |                  |
-|       or         +---->|  Autonomy Loop  +---->|   Main Agent     |
-|   Timer Tick     |     |                 |     |                  |
-+------------------+     +--------+--------+     +--------+---------+
-                                  |                       |
-                                  v                       v
-                         +--------+--------+     +--------+---------+
-                         |    Subagents    |     |  speak() or      |
-                         |    (Minds)      |     |  do_nothing()    |
-                         +--------+--------+     +------------------+
-                                  |
-                                  v
-                         +--------+--------+
-                         |     Slots       |
-                         |  (shared state) |
-                         +-----------------+
+```mermaid
+flowchart LR
+    A[Vision Change<br>or<br>Timer Tick] --> B[Autonomy Loop]
+    B --> C[Main Agent]
+    B --> D[Subagents<br>Minds]
+    C --> E[speak or<br>do_nothing]
+    D --> F[Slots<br>shared state]
 ```
 
 Each cycle, the main agent receives an update about its environment and decides whether to act. This creates genuine situational awareness - GLaDOS knows time is passing and can observe changes in its surroundings.
@@ -68,17 +57,10 @@ When a user speaks or types, the autonomy loop defers. The interrupt handler cut
 
 GLaDOS uses separate inference paths for user requests and background work:
 
-```
-+-------------------+     +----------------------------+
-|  User Input       |     |  Priority Lane             |
-|  (speech/text)    +---->|  (1 dedicated worker)      |
-+-------------------+     +----------------------------+
-
-+-------------------+     +----------------------------+
-|  Autonomy Loop    |     |  Autonomy Lane             |
-|  Subagents        +---->|  (N pooled workers)        |
-|  Background Jobs  |     |  autonomy_parallel_calls   |
-+-------------------+     +----------------------------+
+```mermaid
+flowchart LR
+    A[User Input<br>speech/text] --> B[Priority Lane<br>1 dedicated worker]
+    C[Autonomy Loop<br>Subagents<br>Background Jobs] --> D[Autonomy Lane<br>N pooled workers]
 ```
 
 - **Priority Lane**: Single dedicated inference slot ensures user requests are never blocked
@@ -132,7 +114,7 @@ Subagents write their outputs to **slots**. The main agent sees all slot content
 | `next_run` | float | Seconds until next update |
 | `notify_user` | bool | Whether to trigger autonomy on update |
 
-View slots in the TUI with `/slots`.
+Slots are displayed in the TUI.
 
 ## Minds (Subagents)
 
@@ -141,7 +123,7 @@ View slots in the TUI with `/slots`.
 - Write results to slots
 - Can be preconfigured (Weather, News) or spawned dynamically
 
-Monitor active minds in the TUI with `/minds`.
+Active minds are displayed in the TUI.
 
 ## Background Jobs
 

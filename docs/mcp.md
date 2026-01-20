@@ -6,25 +6,13 @@ GLaDOS supports Model Context Protocol (MCP) servers for extensible tool access.
 
 MCP forms the **Tool Layer** at the bottom of the GLaDOS architecture:
 
-```
-+------------------+
-|   Main Agent     |
-+--------+---------+
-         |
-         | tool calls
-         v
-+--------+---------+
-|   Tool Executor  |
-+--------+---------+
-         |
-         v
-+--------+----------------------------+
-|           MCP Tool Layer            |
-|  +--------+  +--------+  +--------+ |
-|  | Local  |  | Remote |  | Custom | |
-|  | Servers|  | Servers|  | Servers| |
-|  +--------+  +--------+  +--------+ |
-+-------------------------------------+
+```mermaid
+flowchart TB
+    A[Main Agent] -->|tool calls| B[Tool Executor]
+    B --> C[MCP Tool Layer]
+    C --> D[Local Servers]
+    C --> E[Remote Servers]
+    C --> F[Custom Servers]
 ```
 
 Both the main agent and subagents can invoke MCP tools. Tools are discovered at startup and registered with the LLM.

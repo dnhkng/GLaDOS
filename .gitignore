@@ -171,3 +171,6 @@ data/knowledge.json
 
 # Local scratch space
 tmp/
+
+# macOS
+.DS_Store

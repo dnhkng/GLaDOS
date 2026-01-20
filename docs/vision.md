@@ -12,23 +12,12 @@ Vision is a core input to the [autonomy loop](./autonomy.md). When enabled:
 4. **VisionUpdateEvent triggers** the autonomy loop
 5. **Main agent decides** whether to act on what it sees
 
-```
-+-------------+     +------------------+     +----------------+
-|   Camera    +---->| Scene Change     +---->| FastVLM        |
-|   Capture   |     | Detection        |     | Inference      |
-+-------------+     +------------------+     +-------+--------+
-                                                     |
-                                                     v
-                                             +-------+--------+
-                                             | VisionUpdate   |
-                                             | Event          |
-                                             +-------+--------+
-                                                     |
-                                                     v
-                                             +-------+--------+
-                                             | Autonomy Loop  |
-                                             | (Main Agent)   |
-                                             +----------------+
+```mermaid
+flowchart LR
+    A[Camera<br>Capture] --> B[Scene Change<br>Detection]
+    B --> C[FastVLM<br>Inference]
+    C --> D[VisionUpdate<br>Event]
+    D --> E[Autonomy Loop<br>Main Agent]
 ```
 
 Vision takes priority over timer ticks - when vision is enabled, scene changes drive the autonomy loop instead of periodic timers.
@@ -198,13 +187,6 @@ vision:
 | **Output** | Natural language scene descriptions |
 | **Backend** | ONNX Runtime (CPU/CUDA) |
 | **Integration** | Same ONNX patterns as ASR/TTS |
-
-## TUI Commands
-
-| Command | Description |
-|---------|-------------|
-| `/vision` | Show current vision status and last snapshot |
-| `/observe` | View all events including vision updates |
 
 ## See Also
 
