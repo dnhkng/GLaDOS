@@ -429,6 +429,30 @@ class MCPPanel(Static):
         self.update("\n".join(lines))
 
 
+class CameraPanel(Static):
+    """Displays ASCII camera feed from the vision system."""
+
+    can_focus = False
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.markup = False  # Raw text, no markup processing
+
+    def render_camera(self, app: "GladosUI") -> None:
+        engine = app.glados_engine_instance
+        if not engine or not engine.ascii_camera:
+            self.update("Camera: unavailable")
+            return
+        if not engine.ascii_camera.enabled:
+            self.update("Camera: disabled (Ctrl+V to enable)")
+            return
+        frame = engine.ascii_camera.get_frame()
+        if frame:
+            self.update(frame)
+        else:
+            self.update("Camera: no signal")
+
+
 # Screens
 class SplashScreen(Screen[None]):
     """Splash screen shown on startup."""
@@ -934,6 +958,7 @@ class GladosUI(App[None]):
     _queue_panel: QueuePanel | None = None
     _autonomy_panel: AutonomyPanel | None = None
     _mcp_panel: MCPPanel | None = None
+    _camera_panel: CameraPanel | None = None
     _queue_metrics: dict[str, dict[str, float | int | None]]
     _config_path: Path
     _input_mode_override: str | None
@@ -989,6 +1014,8 @@ class GladosUI(App[None]):
                     yield Label("System [u]L[/u]og", id="system_title")
                     yield Printer(id="log_area")
                 with Vertical(id="right_panel"):
+                    yield Label("[u]V[/u]ision", id="camera_title")
+                    yield CameraPanel(id="camera_panel")
                     yield Label("[u]S[/u]tatus", id="status_title")
                     yield StatusPanel(id="status_panel")
                     yield Label("[u]A[/u]utonomy", id="autonomy_title")
@@ -1207,6 +1234,10 @@ class GladosUI(App[None]):
             self._toggle_panel("queue_panel", "queue_title")
             event.stop()
             return
+        if key == "ctrl+v":
+            self._toggle_camera_panel()
+            event.stop()
+            return
         if key == "ctrl+r":
             self._restore_all_panels()
             event.stop()
@@ -1229,6 +1260,8 @@ class GladosUI(App[None]):
             self._autonomy_panel.render_autonomy(self)
         if self._mcp_panel:
             self._mcp_panel.render_mcp(self)
+        if self._camera_panel:
+            self._camera_panel.render_camera(self)
 
     @property
     def queue_metrics(self) -> dict[str, dict[str, float | int | None]]:
@@ -1253,6 +1286,7 @@ class GladosUI(App[None]):
             and self._queue_panel is not None
             and self._autonomy_panel is not None
             and self._mcp_panel is not None
+            and self._camera_panel is not None
         ):
             return True
         try:
@@ -1261,6 +1295,7 @@ class GladosUI(App[None]):
             self._queue_panel = self.query_one("#queue_panel", QueuePanel)
             self._autonomy_panel = self.query_one("#autonomy_panel", AutonomyPanel)
             self._mcp_panel = self.query_one("#mcp_panel", MCPPanel)
+            self._camera_panel = self.query_one("#camera_panel", CameraPanel)
             return True
         except NoMatches:
             return False
@@ -1314,11 +1349,27 @@ class GladosUI(App[None]):
         except NoMatches:
             pass
 
+    def _toggle_camera_panel(self) -> None:
+        """Toggle camera panel and enable/disable the camera feed."""
+        self._toggle_panel("camera_panel", "camera_title")
+        # Enable/disable camera feed to save CPU when hidden
+        engine = self.glados_engine_instance
+        if engine and engine.ascii_camera:
+            try:
+                panel = self.query_one("#camera_panel")
+                if panel.styles.display == "none":
+                    engine.ascii_camera.disable()
+                else:
+                    engine.ascii_camera.enable()
+            except NoMatches:
+                pass
+
     def _restore_all_panels(self) -> None:
         """Restore all hidden panels to visible."""
         panel_ids = [
             ("dialog_log", "dialog_title"),
             ("log_area", "system_title"),
+            ("camera_panel", "camera_title"),
             ("status_panel", "status_title"),
             ("autonomy_panel", "autonomy_title"),
             ("queue_panel", "queue_title"),

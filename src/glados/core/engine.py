@@ -30,7 +30,7 @@ from ..autonomy.llm_client import LLMConfig
 from ..autonomy.summarization import estimate_tokens
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
-from ..vision import VisionConfig, VisionState
+from ..vision import AsciiCameraFeed, VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
 from .context import ContextBuilder
@@ -48,7 +48,10 @@ from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 from .memory_context import MemoryContext
 
-logger.remove(0)
+try:
+    logger.remove(0)
+except ValueError:
+    pass  # Default handler already removed
 logger.add(sys.stderr, level="SUCCESS")
 
 
@@ -501,6 +504,17 @@ class Glados:
                 observability_bus=self.observability_bus,
             )
 
+        # ASCII camera feed for TUI display (initialized but not started until enabled)
+        self.ascii_camera: AsciiCameraFeed | None = None
+        if self.vision_config:
+            self.ascii_camera = AsciiCameraFeed(
+                camera_index=self.vision_config.camera_index,
+                fps=15.0,
+                width=60,
+                height=20,
+            )
+            self.ascii_camera.start()
+
         self.autonomy_ticker_thread: threading.Thread | None = None
         if self.autonomy_config.enabled:
             assert self.autonomy_event_bus is not None
@@ -895,6 +909,11 @@ class Glados:
         if self.autonomy_tasks:
             logger.debug("Shutting down task manager...")
             self.autonomy_tasks.shutdown(wait=True)
+
+        # Stop ASCII camera feed
+        if self.ascii_camera:
+            logger.debug("Shutting down ASCII camera feed...")
+            self.ascii_camera.stop()
 
         # Use orchestrator for coordinated thread shutdown
         results = self._shutdown_orchestrator.initiate_shutdown()

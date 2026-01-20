@@ -1,10 +1,14 @@
 import argparse
 import asyncio
 from hashlib import sha256
+import logging
 from pathlib import Path
 import sys
 
 import httpx
+
+# Suppress verbose HTTP request logs during downloads
+logging.getLogger("httpx").setLevel(logging.WARNING)
 from rich import print as rprint
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
 import sounddevice as sd  # type: ignore

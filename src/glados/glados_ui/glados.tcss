@@ -66,6 +66,8 @@ HeaderClock {
 #dialog_title.hidden,
 #log_area.hidden,
 #system_title.hidden,
+#camera_panel.hidden,
+#camera_title.hidden,
 #status_panel.hidden,
 #status_title.hidden,
 #autonomy_panel.hidden,
@@ -149,6 +151,7 @@ HeaderClock {
     background: $background;
 }
 
+#camera_panel,
 #status_panel,
 #autonomy_panel,
 #queue_panel,
@@ -156,6 +159,11 @@ HeaderClock {
     border: solid $primary 40%;
     padding: 1 2;
     background: $surface;
+}
+
+#camera_panel {
+    height: 22;
+    padding: 0 1;
 }
 
 #status_panel {
