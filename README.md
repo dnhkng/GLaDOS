@@ -41,9 +41,9 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 - **Emotions**: PAD model for reactive mood + HEXACO traits for persistent personality
 - **Long-term Memory**: Facts, preferences, and conversation summaries persist across sessions
 - **Observer Agent**: Constitutional AI monitors behavior and self-adjusts within bounds
-- **Vision**: FastVLM gives her eyes. [Details](/vision.md) | [Demo](https://www.youtube.com/watch?v=JDd9Rc4toEo)
-- **Autonomy**: She watches, waits, and speaks when she has something to say. [Details](/autonomy.md)
-- **MCP Tools**: Extensible tool system for home automation, system info, etc. [Details](/mcp.md)
+- **Vision**: FastVLM gives her eyes. [Details](/docs/vision.md) | [Demo](https://www.youtube.com/watch?v=JDd9Rc4toEo)
+- **Autonomy**: She watches, waits, and speaks when she has something to say. [Details](/docs/autonomy.md)
+- **MCP Tools**: Extensible tool system for home automation, system info, etc. [Details](/docs/mcp.md)
 - **8GB SBC**: Runs on a Rock5b with RK3588 NPU. [Branch](https://github.com/dnhkng/RKLLM-Gradio)
 
 ## Roadmap
