@@ -48,7 +48,10 @@ from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 from .memory_context import MemoryContext
 
-logger.remove(0)
+try:
+    logger.remove(0)
+except ValueError:
+    pass  # Handler already removed (e.g., by TUI)
 logger.add(sys.stderr, level="SUCCESS")
 
 
@@ -1045,24 +1048,6 @@ class Glados:
         )
         register(
             CommandSpec(
-                name="mute-tts",
-                description="Mute TTS output",
-                usage="/mute-tts",
-                handler=self._cmd_mute_tts,
-                aliases=("tts-mute",),
-            )
-        )
-        register(
-            CommandSpec(
-                name="unmute-tts",
-                description="Unmute TTS output",
-                usage="/unmute-tts",
-                handler=self._cmd_unmute_tts,
-                aliases=("tts-unmute",),
-            )
-        )
-        register(
-            CommandSpec(
                 name="quit",
                 description="Quit GLaDOS",
                 usage="/quit",
@@ -1076,24 +1061,6 @@ class Glados:
                 description="Control ASR input",
                 usage="/asr on|off",
                 handler=self._cmd_asr,
-            )
-        )
-        register(
-            CommandSpec(
-                name="mute-asr",
-                description="Mute ASR input",
-                usage="/mute-asr",
-                handler=self._cmd_mute_asr,
-                aliases=("asr-mute",),
-            )
-        )
-        register(
-            CommandSpec(
-                name="unmute-asr",
-                description="Unmute ASR input",
-                usage="/unmute-asr",
-                handler=self._cmd_unmute_asr,
-                aliases=("asr-unmute",),
             )
         )
         register(
@@ -1259,22 +1226,6 @@ class Glados:
             self.set_tts_muted(True)
             return "TTS muted."
         return "Usage: /tts on|off"
-
-    def _cmd_mute_asr(self, _args: list[str]) -> str:
-        self.set_asr_muted(True)
-        return "ASR muted."
-
-    def _cmd_unmute_asr(self, _args: list[str]) -> str:
-        self.set_asr_muted(False)
-        return "ASR unmuted."
-
-    def _cmd_mute_tts(self, _args: list[str]) -> str:
-        self.set_tts_muted(True)
-        return "TTS muted."
-
-    def _cmd_unmute_tts(self, _args: list[str]) -> str:
-        self.set_tts_muted(False)
-        return "TTS unmuted."
 
     def _cmd_observe(self, _args: list[str]) -> str:
         return "Observability is available in the TUI via /observe."
