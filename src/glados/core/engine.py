@@ -48,7 +48,10 @@ from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
 from .memory_context import MemoryContext
 
-logger.remove(0)
+try:
+    logger.remove(0)
+except ValueError:
+    pass  # No default handler to remove
 logger.add(sys.stderr, level="SUCCESS")
 
 

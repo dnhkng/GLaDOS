@@ -8,14 +8,43 @@ subagents to track what the user has already heard about.
 
 from __future__ import annotations
 
-import fcntl
 import json
+import sys
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import IO, Any, Iterator
 
 from loguru import logger
+
+# Cross-platform file locking
+if sys.platform == "win32":
+    import msvcrt
+
+    @contextmanager
+    def _file_lock(f: IO, exclusive: bool = False) -> Iterator[None]:
+        """Acquire a file lock on Windows."""
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK, 1)
+            yield
+        finally:
+            try:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+else:
+    import fcntl
+
+    @contextmanager
+    def _file_lock(f: IO, exclusive: bool = False) -> Iterator[None]:
+        """Acquire a file lock on Unix."""
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+            yield
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 @dataclass
@@ -127,8 +156,7 @@ class SubagentMemory:
 
         try:
             with open(self.file_path, "r") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                try:
+                with _file_lock(f, exclusive=False):
                     for line in f:
                         line = line.strip()
                         if not line:
@@ -141,8 +169,6 @@ class SubagentMemory:
                             shown_at=data.get("shown_at"),
                         )
                         self._entries[entry.key] = entry
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as exc:
             logger.warning("Failed to load memory for %s: %s", self.agent_id, exc)
 
@@ -150,13 +176,10 @@ class SubagentMemory:
         """Save entries to disk."""
         try:
             with open(self.file_path, "w") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                try:
+                with _file_lock(f, exclusive=True):
                     for entry in self._entries.values():
                         line = json.dumps(asdict(entry), ensure_ascii=False)
                         f.write(line + "\n")
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as exc:
             logger.warning("Failed to save memory for %s: %s", self.agent_id, exc)
 
