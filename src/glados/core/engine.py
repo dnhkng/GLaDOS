@@ -6,6 +6,7 @@ configuration management, and component coordination.
 """
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import queue
 import sys
@@ -14,7 +15,7 @@ import time
 from typing import Any, Callable, Literal
 
 from loguru import logger
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, model_validator
 import yaml
 
 from ..ASR import TranscriberProtocol, get_audio_transcriber
@@ -122,6 +123,15 @@ class GladosConfig(BaseModel):
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
+
+    @model_validator(mode="after")
+    def _resolve_api_key_from_env(self) -> "GladosConfig":
+        """Fall back to MINIMAX_API_KEY environment variable when api_key is not set."""
+        if self.api_key is None:
+            env_key = os.environ.get("MINIMAX_API_KEY")
+            if env_key:
+                self.api_key = env_key
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
