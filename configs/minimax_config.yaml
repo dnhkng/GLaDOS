@@ -6,14 +6,16 @@
 #   2. Set your API key below or via the MINIMAX_API_KEY environment variable
 #
 # Available models:
+#   - MiniMax-M2.7           Latest flagship model with enhanced reasoning and coding
+#   - MiniMax-M2.7-highspeed High-speed version of M2.7 for low-latency scenarios
 #   - MiniMax-M2.5           204K context, best quality
 #   - MiniMax-M2.5-highspeed 204K context, optimized for speed
 #
-# Note: MiniMax models support thinking/reasoning tags (<think>...</think>),
+# Note: MiniMax models (M2.5, M2.7) support thinking/reasoning tags (<think>...</think>),
 #       which GLaDOS will automatically extract and log separately from speech.
 
 Glados:
-  llm_model: "MiniMax-M2.5"
+  llm_model: "MiniMax-M2.7"
   completion_url: "https://api.minimax.io/v1/chat/completions"
   api_key: null  # Set your MiniMax API key here, or use MINIMAX_API_KEY env var
   interruptible: true
