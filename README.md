@@ -507,15 +507,3 @@ jupyter notebook demo.ipynb
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=dnhkng/GlaDOS&type=Date)](https://star-history.com/#dnhkng/GlaDOS&Date)
-
-## Sponsors
-
-<div align="center">
-
-### [Wispr Flow](https://ref.wisprflow.ai/qbHPGg8)
-
-[![Sponsor](https://raw.githubusercontent.com/dnhkng/assets/refs/heads/main/Flow-symbol.svg)](https://ref.wisprflow.ai/qbHPGg8)
-
-[**Talk to code, stay in the Flow.**](https://ref.wisprflow.ai/qbHPGg8)
-
-</div>
