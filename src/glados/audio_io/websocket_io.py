@@ -17,6 +17,9 @@ from . import VAD
 
 @dataclass
 class AudioData:
+    """
+    Audio Data. Encapsulated here for synchronization.
+    """
     data: NDArray[np.float32]
     sample_rate: int
     play_time: float
@@ -24,6 +27,10 @@ class AudioData:
 
 @dataclass
 class MicState:
+    """
+    Microphone State.
+    Encapsulated here for synchronization.
+    """
     room: str
     current_id: uuid.UUID | None = None
     silence_chunks: int = 0
@@ -33,10 +40,10 @@ class MicState:
 
 
 class WebsocketAudioIO:
-    """Audio I/O implementation using sounddevice for both input and output.
+    """Audio I/O implementation using websockets for both input and output.
 
     This class provides an implementation of the AudioIO interface using the
-    sounddevice library to interact with system audio devices. It handles
+    websockets library to interact with remote clients. It handles
     real-time audio capture with voice activity detection and audio playback.
     """
 
@@ -47,8 +54,8 @@ class WebsocketAudioIO:
     PORT: int = 5050  # websockets server port
     SPEAKER_SYNC_DELAY_MS: int = 250  # Milliseconds to add to start time to account for speaker synchronisation
     MIC_MAX_SILENCE_CHUNKS: int = 10  # how many VAD chunks must be silent for a mic to relinquish control
-    DEFAULT_ROOM_TAG: str = "office"
-    SEGREGATE_SPEAKERS: bool = False
+    DEFAULT_ROOM_TAG: str = "office" # default room tag
+    SEGREGATE_SPEAKERS: bool = False # default value for speaker segregation.
 
     def __init__(self, vad_threshold: float | None = None, options: dict[str, Any] | None = None) -> None:
         """Initialize the sounddevice audio I/O.
@@ -290,7 +297,7 @@ class WebsocketAudioIO:
             if ws_msg == "sync_ping":
                 await websocket.send(f"sync_pong:{time.time()}")
                 return False
-            elif type(ws_msg) == str and ws_msg.startswith("room"):
+            elif isinstance(ws_msg, str) and ws_msg.startswith("room"):
                 nonlocal room
                 room = ws_msg.split(":")[1]
                 return False
@@ -344,8 +351,7 @@ class WebsocketAudioIO:
             while not self._stop_playback:
                 try:
                     message = await asyncio.wait_for(websocket.recv(), timeout=0.05)
-                    if await handle_default_msg(message):
-                        # got ACK
+                    if await handle_default_msg(message) and message == "played":
                         logger.debug("Websocket: Audio played fully")
                         self._playback_was_interrupted = False
                         break
@@ -399,7 +405,7 @@ class WebsocketAudioIO:
             except websockets.exceptions.ConnectionClosed:
                 break
 
-            if type(msg) == str and msg.startswith("room"):
+            if isinstance(msg, str) and msg.startswith("room"):
                 room = msg.split(":")[1]
                 continue
 

@@ -41,7 +41,7 @@ Used to stream audio from the server to a client for speaker playback.
 
 | Message Type | Format        | Description                                                                            |
 |--------------|---------------|----------------------------------------------------------------------------------------|
-| ACK          | `ACK`         | Signal that audio playback is complete                                                 |
+| ACK          | `played`      | Signal that audio playback is complete                                                 |
 | Sync Ping    | `sync_ping`   | Request for synchronization; server responds with `sync_pong:<timestamp>`              |
 | Room         | `room:<name>` | Room/location tag for the device (optional; defaults to configurable value if not set) |
 
