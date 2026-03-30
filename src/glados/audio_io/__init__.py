@@ -13,7 +13,7 @@ Functions:
 """
 
 import queue
-from typing import Protocol
+from typing import Protocol, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -26,7 +26,7 @@ class AudioProtocol(Protocol):
     def start_listening(self) -> None: ...
     def stop_listening(self) -> None: ...
     def start_speaking(
-        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = ""
+        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "", wait: bool = False
     ) -> None: ...
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]: ...
     def check_if_speaking(self) -> bool: ...
@@ -35,7 +35,7 @@ class AudioProtocol(Protocol):
 
 
 # Factory function
-def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | None = None) -> AudioProtocol:
+def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[str, Any] | None = None, vad_threshold: float | None = None) -> AudioProtocol:
     """
     Factory function to get an instance of an audio I/O system based on the specified backend type.
 
@@ -43,6 +43,9 @@ def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | N
         backend_type (str): The type of audio backend to use:
             - "sounddevice": Uses the sounddevice library for local audio I/O
             - "websocket": Network-based audio I/O (not yet implemented)
+        backend_options: Options for the specified backend.
+            - "sounddevice": No options are allowed.
+            - "websocket": Not yet implemented.
         vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
@@ -53,6 +56,9 @@ def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | N
     """
     if backend_type == "sounddevice":
         from .sounddevice_io import SoundDeviceAudioIO
+
+        if backend_options is not None:
+            raise ValueError("Sounddevice backend does not support options")
 
         return SoundDeviceAudioIO(
             vad_threshold=vad_threshold,

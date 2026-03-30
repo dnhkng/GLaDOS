@@ -117,13 +117,14 @@ class SoundDeviceAudioIO:
             finally:
                 self.input_stream = None
 
-    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None:
+    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "", wait: bool = False) -> None:
         """Play audio through the system speakers.
 
         Parameters:
             audio_data: The audio data to play as a numpy float32 array
             sample_rate: The sample rate of the audio data in Hz
             text: Optional text associated with the audio (not used by this implementation)
+            wait: Optionally wait for the audio_data to be spoken
 
         Raises:
             RuntimeError: If audio playback cannot be initiated
@@ -144,6 +145,8 @@ class SoundDeviceAudioIO:
         logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio_data)} samples")
         self._is_playing = True
         sd.play(audio_data, sample_rate)
+        if wait:
+            sd.wait()
 
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]:
         """

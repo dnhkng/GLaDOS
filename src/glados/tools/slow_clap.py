@@ -2,8 +2,9 @@ import queue
 from typing import Any
 
 from loguru import logger
-import sounddevice as sd  # type: ignore
 import soundfile as sf
+
+from glados.audio_io import get_audio_system
 
 tool_definition = {
     "type": "function",
@@ -39,6 +40,7 @@ class SlowClap:
         self.llm_queue = llm_queue
         tool_config = tool_config or {}
         self.audio_path = tool_config.get("slow_clap_audio_path", "data/slow-clap.mp3")
+        self.audio_io = tool_config.get("audio_io", get_audio_system())
 
     def run(self, tool_call_id: str, call_args: dict[str, Any]) -> None:
         """
@@ -58,8 +60,7 @@ class SlowClap:
             data, sample_rate = sf.read(self.audio_path)
 
             for _ in range(claps):
-                sd.play(data, sample_rate)
-                sd.wait()
+                self.audio_io.start_speaking(data, sample_rate=sample_rate, wait=True)
             self.llm_queue.put(
                 {
                     "role": "tool",
@@ -93,8 +94,8 @@ class SlowClap:
                 }
             )
 
-        except sd.PortAudioError as pa_err:
-            error_msg = f"error: audio device error - {pa_err}"
+        except Exception as other_error:
+            error_msg = f"error: other (possibly audio device) - {other_error}"
             logger.error(f"SlowClap: {error_msg}")
             self.llm_queue.put(
                 {

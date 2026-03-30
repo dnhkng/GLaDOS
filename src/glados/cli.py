@@ -7,8 +7,8 @@ import sys
 import httpx
 from rich import print as rprint
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
-import sounddevice as sd  # type: ignore
 
+from .audio_io import get_audio_system
 from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
@@ -196,10 +196,11 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
     # Generate the audio to from the text
     audio = glados_tts.generate_speech_audio(converted_text)
 
-    # Play the audio
-    sd.play(audio, glados_tts.sample_rate)
-    sd.wait()
+    glados_config = GladosConfig.from_yaml(str(config_path))
+    audio_system = get_audio_system(backend_type=glados_config.audio_io, backend_options=glados_config.audio_io_options)
 
+    # Play the audio
+    audio_system.start_speaking(audio, sample_rate=glados_tts.sample_rate, wait=True)
 
 def start(
     config_path: str | Path = "glados_config.yaml",
