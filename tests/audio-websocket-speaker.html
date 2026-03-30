@@ -160,6 +160,20 @@
             speakerWs = null;
             speakerIsReconnecting = true;
 
+            if (speakerCurrentAudio) {
+                speakerCurrentAudio.onended = null;
+                try {
+                    speakerCurrentAudio.stop();
+                } catch (_err) {}
+                speakerCurrentAudio = null;
+            }
+            if (speakerAudioCtx) {
+                if (speakerAudioCtx.state !== "closed") {
+                    speakerAudioCtx.close();
+                }
+                speakerAudioCtx = null;
+            }
+
             // Retry loop
             setTimeout(() => {
                 speakerIsReconnecting = false;
