@@ -4,8 +4,8 @@ This document describes the WebSocket endpoints and communication protocol used 
 
 ## Server Configuration
 
-- **Host**: `0.0.0.0` (configurable)
-- **Port**: `5050` (configurable)
+- **Host**: `127.0.0.1` (configurable)
+- **Port**: `5051` (configurable)
 - **Audio Sample Rate**: `16000 Hz` (16 kHz)
 - **Audio Format**: `float32` (NumPy dtype)
 
@@ -13,15 +13,15 @@ This document describes the WebSocket endpoints and communication protocol used 
 
 Use the `audio_io_options` key in `glados_config.yaml`.
 
-| Option                   | Type  | Default   | Description                                                                                  |
-|--------------------------|-------|-----------|----------------------------------------------------------------------------------------------|
-| `server`                 | str   | `0.0.0.0` | WebSocket listen address                                                                     |
-| `port`                   | int   | `5050`    | WebSocket listen port                                                                        |
-| `speaker_sync_delay_ms`  | int   | `250`     | Delay added to start time for speaker sync                                                   |
-| `mic_max_silence_chunks` | int   | `10`      | Silent chunks before mic relinquishes control                                                |
-| `vad_threshold`          | float | `0.8`     | VAD confidence threshold (0.0 - 1.0)                                                         |
-| `default_room_tag`       | str   | `office`  | Default room tag when `room:<name>` message is not sent                                      |
-| `segregate_speakers`     | bool  | `False`   | If True, audio is only sent to speakers with the same room tag as the last active microphone |
+| Option                   | Type  | Default     | Description                                                                                  |
+|--------------------------|-------|-------------|----------------------------------------------------------------------------------------------|
+| `server`                 | str   | `127.0.0.1` | WebSocket listen address                                                                     |
+| `port`                   | int   | `5051`      | WebSocket listen port                                                                        |
+| `speaker_sync_delay_ms`  | int   | `250`       | Delay added to start time for speaker sync                                                   |
+| `mic_max_silence_chunks` | int   | `10`        | Silent chunks before mic relinquishes control                                                |
+| `vad_threshold`          | float | `0.8`       | VAD confidence threshold (0.0 - 1.0)                                                         |
+| `default_room_tag`       | str   | `office`    | Default room tag when `room:<name>` message is not sent                                      |
+| `segregate_speakers`     | bool  | `False`     | If True, audio is only sent to speakers with the same room tag as the last active microphone |
 
 ## Endpoints
 
@@ -118,19 +118,19 @@ audio_data = np.frombuffer(raw_bytes, dtype=np.float32)
 
 #### Speaker Endpoint Flow
 
-```
+```text
 Client connects to /speaker
 Client: room:Living Room
 
 Server: time:1704067200.123
 Server: sampleRate:16000
 Server: <raw float32 audio bytes>
-Client: ACK
+Client: played
 ```
 
 #### Microphone Endpoint Flow
 
-```
+```text
 Client connects to /microphone
 
 Client: room:Living Room
@@ -145,7 +145,7 @@ Client: <raw float32 audio bytes>
 
 For precise speaker synchronization, clients can use the sync ping/pong mechanism:
 
-```
+```text
 Client connects to /speaker
 
 Client: sync_ping

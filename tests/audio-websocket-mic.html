@@ -57,7 +57,7 @@
 <button id="roomBtn">Set room</button>
 
 <script>
-    const MIC_WSL_URL = 'ws://localhost:5050/microphone';
+    const MIC_WSL_URL = 'ws://localhost:5051/microphone';
     const microphoneStatusEl = document.getElementById('microphoneStatus');
 
     const startBtn = document.getElementById('startBtn');
@@ -105,29 +105,24 @@
         micWs.onmessage = async (event) => {
             // Treat all messages as sample data
             try {
-                let textData;
-                // Depending on your server, the first message might be text or binary-encoded text
-                if (event.data instanceof ArrayBuffer) {
-                    textData = new TextDecoder().decode(event.data);
-                } else {
-                    textData = event.data;
-                }
+                if (typeof event.data === 'string' && event.data.startsWith("sampleRate:")) {
+                    let sampleRateStr = event.data.split(":")[1];
+                    micSampleRate = parseInt(sampleRateStr, 10);
 
-                micSampleRate = parseInt(textData, 10);
+                    if (isNaN(micSampleRate) || micSampleRate <= 0) {
+                        console.error("Invalid sample rate received");
+                        micSampleRate = null;
+                        return;
+                    }
 
-                if (isNaN(micSampleRate) || micSampleRate <= 0) {
-                    console.error("Invalid sample rate received");
-                    micSampleRate = null;
-                    return;
-                }
+                    micStatus(`Recording voice at ${micSampleRate}Hz`);
 
-                micStatus(`Recording voice at ${micSampleRate}Hz`);
+                    if (micAudioCtx) micAudioCtx.close();
 
-                if (micAudioCtx) micAudioCtx.close();
-
-                // Only create context if user has clicked, otherwise audio is blocked
-                if (userHasInteracted) {
-                    await startMic();
+                    // Only create context if user has clicked, otherwise audio is blocked
+                    if (userHasInteracted) {
+                        await startMic();
+                    }
                 }
             } catch (err) {
                 console.error("Failed to parse sample rate:", err);
@@ -217,11 +212,11 @@
     }
 
     roomBtn.addEventListener('click', () => {
-       let room = document.getElementById('room').value;
+        let room = document.getElementById('room').value;
 
-       if (micWs && micWs.readyState === WebSocket.OPEN) {
-           micWs.send("room:" + room);
-       }
+        if (micWs && micWs.readyState === WebSocket.OPEN) {
+            micWs.send("room:" + room);
+        }
     });
 </script>
 </body>

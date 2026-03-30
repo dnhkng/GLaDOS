@@ -57,7 +57,7 @@
 <button id="roomBtn">Set room</button>
 
 <script>
-    const SPEAKER_WS_URL = 'ws://localhost:5050/speaker';
+    const SPEAKER_WS_URL = 'ws://localhost:5051/speaker';
     const speakerStatusEl = document.getElementById('speakerStatus');
 
     const startBtn = document.getElementById('startBtn');
@@ -111,7 +111,7 @@
         speakerWs.onmessage = (event) => {
             // Control messages
             if (typeof event.data === 'string') {
-                if (event.data.startsWith("sampleRate")) {
+                if (event.data.startsWith("sampleRate:")) {
                     let sampleRateStr = event.data.split(":")[1];
 
                     speakerCurrentSampleRate = parseInt(sampleRateStr, 10);

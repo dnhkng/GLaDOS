@@ -50,21 +50,21 @@ class WebsocketAudioIO:
     SAMPLE_RATE: int = 16000  # Sample rate for input stream
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
-    SERVER: str = "0.0.0.0"  # websockets server listen address
-    PORT: int = 5050  # websockets server port
+    SERVER: str = "127.0.0.1"  # websockets server listen address
+    PORT: int = 5051  # websockets server port
     SPEAKER_SYNC_DELAY_MS: int = 250  # Milliseconds to add to start time to account for speaker synchronisation
     MIC_MAX_SILENCE_CHUNKS: int = 10  # how many VAD chunks must be silent for a mic to relinquish control
     DEFAULT_ROOM_TAG: str = "office" # default room tag
     SEGREGATE_SPEAKERS: bool = False # default value for speaker segregation.
 
     def __init__(self, vad_threshold: float | None = None, options: dict[str, Any] | None = None) -> None:
-        """Initialize the sounddevice audio I/O.
+        """Initialize the websocket audio I/O.
 
         Args:
             vad_threshold: Threshold for VAD detection (default: 0.8)
             options: backend options
-              - server: Websocket listening address (default: 0.0.0.0)
-              - port: Websocket listening port (default: 5050)
+              - server: Websocket listening address (default: 127.0.0.1)
+              - port: Websocket listening port (default: 5051)
               - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
               - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
 
@@ -173,7 +173,8 @@ class WebsocketAudioIO:
         logger.debug("Scheduled audio playback")
 
         if wait:
-            self._playback_finished_event.wait()
+            max_timeout = (len(audio_data) / sample_rate) + (self._speaker_sync_delay_ms / 1000.0) + 1.0
+            self._playback_finished_event.wait(timeout=max_timeout)
 
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]:
         """
@@ -197,10 +198,10 @@ class WebsocketAudioIO:
         self._playback_was_interrupted = False
 
         # wait for finish
-        max_timeout = total_samples / sample_rate
+        max_timeout = (total_samples / sample_rate) + (self._speaker_sync_delay_ms / 1000.0) + 1.0
 
         now = time.monotonic()
-        completed = self._playback_finished_event.wait(max_timeout + 1)
+        completed = self._playback_finished_event.wait(max_timeout)
         interrupted = self._playback_was_interrupted
         elapsed = time.monotonic() - now
 
@@ -297,9 +298,9 @@ class WebsocketAudioIO:
             if ws_msg == "sync_ping":
                 await websocket.send(f"sync_pong:{time.time()}")
                 return False
-            elif isinstance(ws_msg, str) and ws_msg.startswith("room"):
+            elif isinstance(ws_msg, str) and ws_msg.startswith("room:"):
                 nonlocal room
-                room = ws_msg.split(":")[1]
+                room = ws_msg.split(":", maxsplit=1)[1]
                 return False
             return True
 
@@ -335,12 +336,17 @@ class WebsocketAudioIO:
             # We acquire the lock just long enough to grab the data safely.
             try:
                 with self._audio_lock:
-                    # Send timestamp, then sample rate, then bytes
-                    await websocket.send("time:" + str(self._audio_data.play_time))
-                    await websocket.send("sampleRate:" + str(self._audio_data.sample_rate))
-                    await websocket.send(self._audio_data.data.tobytes())
+                    play_time = self._audio_data.play_time
+                    sample_rate = self._audio_data.sample_rate
+                    audio_data_bytes = self._audio_data.data.tobytes()
+                    sample_count = len(self._audio_data.data)
 
-                    logger.debug(f"Playing audio with sample rate: {self._audio_data.sample_rate} Hz, length: {len(self._audio_data.data)} samples")
+                # Send timestamp, then sample rate, then bytes
+                await websocket.send("time:" + str(play_time))
+                await websocket.send("sampleRate:" + str(sample_rate))
+                await websocket.send(audio_data_bytes)
+
+                logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {sample_count} samples")
             except websockets.exceptions.ConnectionClosed:
                 self._playback_was_interrupted = True
                 self._is_playing = False
@@ -394,7 +400,7 @@ class WebsocketAudioIO:
 
         # send sample rate
         try:
-            await websocket.send(str(self.SAMPLE_RATE))
+            await websocket.send("sampleRate:" + str(self.SAMPLE_RATE))
         except websockets.exceptions.ConnectionClosed:
             return
 
@@ -405,11 +411,9 @@ class WebsocketAudioIO:
             except websockets.exceptions.ConnectionClosed:
                 break
 
-            if isinstance(msg, str) and msg.startswith("room"):
-                room = msg.split(":")[1]
-                continue
-
-            if self._is_listening:
+            if isinstance(msg, str) and msg.startswith("room:"):
+                room = msg.split(":", maxsplit=1)[1]
+            elif isinstance(msg, bytes) and self._is_listening:
                 # append to current_data
                 data = np.frombuffer(msg, dtype=np.float32)
                 current_data = np.append(current_data, data)
@@ -445,7 +449,8 @@ class WebsocketAudioIO:
                                 self._mic_state.silence_chunks = 0
                             else:
                                 self._mic_state.silence_chunks += 1
-            else:
+
+            if not self._is_listening:
                 # reset when not listening
                 current_data = np.empty((0,), dtype=np.float32)
                 vad_model.reset_states()

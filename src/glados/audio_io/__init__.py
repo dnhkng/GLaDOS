@@ -46,8 +46,8 @@ def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[st
         backend_options: Options for the specified backend.
             - "sounddevice": No options are allowed.
             - "websocket": The following options are allowed:
-                - server: Websocket listening address (default: 0.0.0.0)
-                - port: Websocket listening port (default: 5050)
+                - server: Websocket listening address (default: 127.0.0.1)
+                - port: Websocket listening port (default: 5051)
                 - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
                 - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
                 - default_room_tag: The default room tag to use if a client doesn't set it (default: office)
