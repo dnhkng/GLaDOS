@@ -87,6 +87,7 @@
         }
     });
 
+    // connect to WS
     function speakerConnect() {
         if (speakerIsReconnecting) return;
 
@@ -104,6 +105,8 @@
             speakerCurrentPlayTimeMs = null;
             speakerAudioCtx = null;
             speakerCurrentAudio = null;
+
+            sendRoom();
         };
 
         syncClockWithServer(speakerWs);
@@ -125,10 +128,10 @@
                     speakerStatus(`Streaming audio at ${speakerCurrentSampleRate}Hz`);
 
                     // Re-initialize AudioContext with the correct sample rate if needed
-                    if (speakerAudioCtx) speakerAudioCtx.close();
+                    if (speakerAudioCtx && speakerAudioCtx.sampleRate !== speakerCurrentSampleRate) speakerAudioCtx.close();
 
                     // Only create context if user has clicked, otherwise audio is blocked
-                    if (userHasInteracted) {
+                    if (userHasInteracted && (speakerAudioCtx == null || speakerAudioCtx.state === "closed")) {
                         speakerAudioCtx = new window.AudioContext({
                             sampleRate: speakerCurrentSampleRate
                         });
@@ -171,6 +174,7 @@
         };
     }
 
+    // all variables are filled and audio was received: play it
     function playAudioChunk(arrayBuffer, serverPlaytimeMs) {
         if (!speakerAudioCtx) return;
 
@@ -204,10 +208,12 @@
         // Schedule the chunk to play seamlessly after the previous one
         speakerCurrentAudio.start(audioCtxPlayTime, playOffset);
 
+        // copy localWs to not use (*another* speakerWs instance
+        let localWs = speakerWs;
         // send ACK on end
         speakerCurrentAudio.onended = () => {
-            if (speakerWs && speakerWs.readyState === WebSocket.OPEN) {
-                speakerWs.send("played");
+            if (localWs && localWs.readyState === WebSocket.OPEN) {
+                localWs.send("played");
                 speakerStatus("Current audio played.");
             }
         };
@@ -217,6 +223,7 @@
         speakerCurrentPlayTimeMs = null;
     }
 
+    // set status HTML div, also log to console
     function speakerStatus(status) {
         console.log("Speaker Status changed: ", status);
         speakerStatusEl.innerText = "Speaker Status: " + status;
@@ -270,10 +277,11 @@
             ws.send("sync_ping");
         }
 
+        // helper to fire the initial ping: try the websocket max. 5 times, wait 500ms after each unsuccessful attempt
         function sendPingInit(i) {
             if (ws.readyState === WebSocket.OPEN) {
                 sendPing();
-            } else {
+            } else if (i <= 5) {
                 setTimeout(() => sendPingInit(i + 1), 500);
             }
         }
@@ -282,12 +290,17 @@
         sendPingInit(0);
     }
 
-    roomBtn.addEventListener('click', () => {
-       let room = document.getElementById('room').value;
+    // send the room data if the WS is open
+    function sendRoom() {
+        let room = document.getElementById('room').value;
 
-       if (speakerWs && speakerWs.readyState === WebSocket.OPEN) {
-           speakerWs.send("room:" + room);
-       }
+        if (speakerWs && speakerWs.readyState === WebSocket.OPEN) {
+            speakerWs.send("room:" + room);
+        }
+    }
+
+    roomBtn.addEventListener('click', () => {
+        sendRoom();
     });
 </script>
 </body>

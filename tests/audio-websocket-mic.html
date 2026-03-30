@@ -86,6 +86,7 @@
         micStream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
     })
 
+    // connect microphone websocket
     function micConnect() {
         if (micIsReconnecting) return;
 
@@ -100,6 +101,7 @@
             micStatus("Connected! Waiting for sample rate...");
             // Reset on a fresh connection
             micSampleRate = null;
+            sendRoom();
         };
 
         micWs.onmessage = async (event) => {
@@ -154,6 +156,7 @@
         };
     }
 
+    // all variables are filled: start recording
     async function startMic() {
         micAudioCtx = new window.AudioContext({
             sampleRate: micSampleRate
@@ -206,17 +209,23 @@
         silentSink.connect(micAudioCtx.destination);
     }
 
+    // set status HTML div, also log to console
     function micStatus(status) {
         console.log("Microphone Status changed: ", status);
         microphoneStatusEl.innerText = "Mic Status: " + status;
     }
 
-    roomBtn.addEventListener('click', () => {
+    // send the room data if the WS is open
+    function sendRoom() {
         let room = document.getElementById('room').value;
 
         if (micWs && micWs.readyState === WebSocket.OPEN) {
             micWs.send("room:" + room);
         }
+    }
+
+    roomBtn.addEventListener('click', () => {
+        sendRoom();
     });
 </script>
 </body>
