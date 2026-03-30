@@ -140,7 +140,9 @@
                     let valueStr = event.data.split(":")[1];
                     speakerCurrentPlayTimeMs = parseFloat(valueStr) * 1000
                 } else if (event.data === "reset" && speakerCurrentAudio) {
+                    speakerCurrentAudio.onended = null;
                     speakerCurrentAudio.stop();
+                    speakerCurrentAudio = null;
                     speakerStatus("Stream reset");
                 }
             }
