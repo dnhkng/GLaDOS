@@ -9,6 +9,8 @@ Glados:
     port: 5050
     speaker_sync_delay_ms: 250
     mic_max_silence_chunks: 10
+    default_room_tag: office
+    segregate_speakers: false
   input_mode: "audio"  # audio, text, or both
   tts_enabled: true
   asr_muted: false

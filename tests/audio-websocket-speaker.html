@@ -41,6 +41,11 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
+        input {
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -48,11 +53,15 @@
 <div id="speakerStatus" class="status">Speaker Status: Waiting to connect...</div>
 <button id="startBtn">Enable Speaker & Connect</button>
 
+<input type="text" id="room"/>
+<button id="roomBtn">Set room</button>
+
 <script>
     const SPEAKER_WS_URL = 'ws://localhost:5050/speaker';
     const speakerStatusEl = document.getElementById('speakerStatus');
 
     const startBtn = document.getElementById('startBtn');
+    const roomBtn = document.getElementById('roomBtn');
 
     let speakerWs = null;
     let speakerAudioCtx = null;
@@ -272,6 +281,14 @@
         // Start the process
         sendPingInit(0);
     }
+
+    roomBtn.addEventListener('click', () => {
+       let room = document.getElementById('room').value;
+
+       if (speakerWs && speakerWs.readyState === WebSocket.OPEN) {
+           speakerWs.send("room:" + room);
+       }
+    });
 </script>
 </body>
 </html>

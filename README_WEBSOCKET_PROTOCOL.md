@@ -13,13 +13,15 @@ This document describes the WebSocket endpoints and communication protocol used 
 
 Use the `audio_io_options` key in `glados_config.yaml`.
 
-| Option                   | Type  | Default   | Description                                   |
-|--------------------------|-------|-----------|-----------------------------------------------|
-| `server`                 | str   | `0.0.0.0` | WebSocket listen address                      |
-| `port`                   | int   | `5050`    | WebSocket listen port                         |
-| `speaker_sync_delay_ms`  | int   | `250`     | Delay added to start time for speaker sync    |
-| `mic_max_silence_chunks` | int   | `10`      | Silent chunks before mic relinquishes control |
-| `vad_threshold`          | float | `0.8`     | VAD confidence threshold (0.0 - 1.0)          |
+| Option                   | Type  | Default   | Description                                                                                  |
+|--------------------------|-------|-----------|----------------------------------------------------------------------------------------------|
+| `server`                 | str   | `0.0.0.0` | WebSocket listen address                                                                     |
+| `port`                   | int   | `5050`    | WebSocket listen port                                                                        |
+| `speaker_sync_delay_ms`  | int   | `250`     | Delay added to start time for speaker sync                                                   |
+| `mic_max_silence_chunks` | int   | `10`      | Silent chunks before mic relinquishes control                                                |
+| `vad_threshold`          | float | `0.8`     | VAD confidence threshold (0.0 - 1.0)                                                         |
+| `default_room_tag`       | str   | `office`  | Default room tag when `room:<name>` message is not sent                                      |
+| `segregate_speakers`     | bool  | `False`   | If True, audio is only sent to speakers with the same room tag as the last active microphone |
 
 ## Endpoints
 
@@ -37,10 +39,20 @@ Used to stream audio from the server to a client for speaker playback.
 
 #### Client → Server Messages
 
-| Message Type | Format      | Description                                                               |
-|--------------|-------------|---------------------------------------------------------------------------|
-| ACK          | `ACK`       | Signal that audio playback is complete                                    |
-| Sync Ping    | `sync_ping` | Request for synchronization; server responds with `sync_pong:<timestamp>` |
+| Message Type | Format        | Description                                                                            |
+|--------------|---------------|----------------------------------------------------------------------------------------|
+| ACK          | `ACK`         | Signal that audio playback is complete                                                 |
+| Sync Ping    | `sync_ping`   | Request for synchronization; server responds with `sync_pong:<timestamp>`              |
+| Room         | `room:<name>` | Room/location tag for the device (optional; defaults to configurable value if not set) |
+
+#### Room Tag Segregation
+
+If the `segregate_speakers` option is enabled (`True`), audio playback is restricted to speakers whose room tag matches the room tag of the last active microphone:
+
+- When a microphone takes control, its room tag is recorded
+- Only speakers with a matching room tag will receive audio when `segregate_speakers=True`
+- Speakers with non-matching room tags will not receive audio (they may receive a `reset` message instead)
+- If `segregate_speakers=False` (default), audio is broadcast to all connected speakers regardless of room tag
 
 #### Interruption Handling
 
@@ -62,9 +74,10 @@ Used to stream microphone audio from a client to the server for Voice Activity D
 
 #### Client → Server Messages
 
-| Message Type | Format    | Description                                      |
-|--------------|-----------|--------------------------------------------------|
-| Audio Data   | Raw bytes | Float32 audio samples (sent with `decode=False`) |
+| Message Type | Format        | Description                                                                            |
+|--------------|---------------|----------------------------------------------------------------------------------------|
+| Audio Data   | Raw bytes     | Float32 audio samples (sent with `decode=False`)                                       |
+| Room         | `room:<name>` | Room/location tag for the device (optional; defaults to configurable value if not set) |
 
 #### VAD & Mic Control
 
@@ -107,6 +120,7 @@ audio_data = np.frombuffer(raw_bytes, dtype=np.float32)
 
 ```
 Client connects to /speaker
+Client: room:Living Room
 
 Server: time:1704067200.123
 Server: sampleRate:16000
@@ -119,6 +133,7 @@ Client: ACK
 ```
 Client connects to /microphone
 
+Client: room:Living Room
 Server: sampleRate:16000
 
 Client: <raw float32 audio bytes>

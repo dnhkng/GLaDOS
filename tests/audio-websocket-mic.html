@@ -41,6 +41,11 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
+        input {
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -48,11 +53,15 @@
 <div id="microphoneStatus" class="status">Mic Status: Waiting to connect...</div>
 <button id="startBtn">Enable Mic & Connect</button>
 
+<input type="text" id="room"/>
+<button id="roomBtn">Set room</button>
+
 <script>
     const MIC_WSL_URL = 'ws://localhost:5050/microphone';
     const microphoneStatusEl = document.getElementById('microphoneStatus');
 
     const startBtn = document.getElementById('startBtn');
+    const roomBtn = document.getElementById('roomBtn');
 
     let micWs = null;
     let micSampleRate = null;
@@ -202,6 +211,14 @@
         console.log("Microphone Status changed: ", status);
         microphoneStatusEl.innerText = "Mic Status: " + status;
     }
+
+    roomBtn.addEventListener('click', () => {
+       let room = document.getElementById('room').value;
+
+       if (micWs && micWs.readyState === WebSocket.OPEN) {
+           micWs.send("room:" + room);
+       }
+    });
 </script>
 </body>
 </html>

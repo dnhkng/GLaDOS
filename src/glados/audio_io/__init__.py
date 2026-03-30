@@ -50,6 +50,8 @@ def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[st
                 - port: Websocket listening port (default: 5050)
                 - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
                 - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
+                - default_room_tag: The default room tag to use if a client doesn't set it (default: office)
+                - segregate_speakers: If `True`, audio is only sent to speakers with the same room tag as the last active microphone
         vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
