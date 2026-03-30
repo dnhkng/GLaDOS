@@ -215,11 +215,11 @@
         microphoneStatusEl.innerText = "Mic Status: " + status;
     }
 
-    // send the room data if the WS is open
+    // send the room data if the WS is open and room data is set
     function sendRoom() {
         let room = document.getElementById('room').value;
 
-        if (micWs && micWs.readyState === WebSocket.OPEN) {
+        if (room.trim().length !== 0 && micWs && micWs.readyState === WebSocket.OPEN) {
             micWs.send("room:" + room);
         }
     }
