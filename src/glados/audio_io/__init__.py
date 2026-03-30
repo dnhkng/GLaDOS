@@ -42,10 +42,14 @@ def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[st
     Parameters:
         backend_type (str): The type of audio backend to use:
             - "sounddevice": Uses the sounddevice library for local audio I/O
-            - "websocket": Network-based audio I/O (not yet implemented)
+            - "websocket": Network-based audio I/O
         backend_options: Options for the specified backend.
             - "sounddevice": No options are allowed.
-            - "websocket": Not yet implemented.
+            - "websocket": The following options are allowed:
+                - server: Websocket listening address (default: 0.0.0.0)
+                - port: Websocket listening port (default: 5050)
+                - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
+                - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
         vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
@@ -60,11 +64,15 @@ def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[st
         if backend_options is not None:
             raise ValueError("Sounddevice backend does not support options")
 
+        # noinspection PyTypeChecker
         return SoundDeviceAudioIO(
             vad_threshold=vad_threshold,
         )
     elif backend_type == "websocket":
-        raise ValueError("WebSocket audio backend is not yet implemented.")
+        from .websocket_io import WebsocketAudioIO
+
+        # noinspection PyTypeChecker
+        return WebsocketAudioIO(vad_threshold=vad_threshold, options=backend_options)
     else:
         raise ValueError(f"Unsupported audio backend type: {backend_type}")
 
