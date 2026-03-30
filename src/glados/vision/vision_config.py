@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, NonNegativeInt, StrictStr
 
 
 class VisionConfig(BaseModel):
@@ -12,10 +13,11 @@ class VisionConfig(BaseModel):
         default=None,
         description="Path to FastVLM ONNX model directory. Uses default if None.",
     )
-    camera_index: int = Field(
+    camera_spec: Union[NonNegativeInt, StrictStr] = Field(
         default=0,
-        ge=0,
-        description="The index of the camera to use for capturing images. Use 0 if only one camera is connected.",
+        description="The specification of the camera to use for capturing images. Integers will be interpreted as a camera index, strings will be interpreted as a URI/filename. Use 0 if only one camera is connected.",
+        validation_alias=AliasChoices("camera_index", "camera_spec"),
+        union_mode='left_to_right',
     )
     capture_interval_seconds: float = Field(
         default=5.0,
