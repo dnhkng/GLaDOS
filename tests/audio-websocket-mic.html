@@ -204,7 +204,11 @@
 
         // fully connect the graph for maximum browser compatibility.
         // connect muted microphone to destination (likely speaker)
-        workletNode.connect(micAudioCtx.destination);
+        const silentSink = micAudioCtx.createGain();
+        silentSink.gain.value = 0;
+
+        workletNode.connect(silentSink);
+        silentSink.connect(micAudioCtx.destination);
     }
 
     function micStatus(status) {
