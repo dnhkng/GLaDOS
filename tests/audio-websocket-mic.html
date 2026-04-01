@@ -31,6 +31,7 @@
             border: none;
             border-radius: 6px;
             transition: background-color 0.2s;
+            margin: 5px;
         }
 
         button:hover {
@@ -43,7 +44,7 @@
         }
 
         input {
-            margin-top: 15px;
+            margin-top: 10px;
             margin-bottom: 5px;
         }
     </style>
@@ -56,12 +57,15 @@
 <input type="text" id="room"/>
 <button id="roomBtn">Set room</button>
 
+<button id="muteBtn" aria-pressed="false">Mute</button>
+
 <script>
     const MIC_WSL_URL = 'ws://localhost:5051/microphone';
     const microphoneStatusEl = document.getElementById('microphoneStatus');
 
     const startBtn = document.getElementById('startBtn');
     const roomBtn = document.getElementById('roomBtn');
+    const muteBtn = document.getElementById('muteBtn');
 
     let micWs = null;
     let micSampleRate = null;
@@ -227,6 +231,22 @@
     roomBtn.addEventListener('click', () => {
         sendRoom();
     });
+
+
+    // toggle microphone mute / unmute
+    muteBtn.addEventListener('click', () => {
+        const isPressed = muteBtn.getAttribute('aria-pressed') === 'true';
+        muteBtn.setAttribute('aria-pressed', (!isPressed).toString());
+        muteBtn.textContent = isPressed ? 'Mute' : 'Unmute';
+
+        // if isPressed = true, we were muted and should now unmute
+        const enabled = isPressed;
+        console.log("Set mic input to " + enabled);
+        if (micStream) {
+            const tracks = micStream.getAudioTracks();
+            tracks.forEach(track => track.enabled = enabled);
+        }
+    })
 </script>
 </body>
 </html>
