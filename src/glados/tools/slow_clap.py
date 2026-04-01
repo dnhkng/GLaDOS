@@ -57,7 +57,7 @@ class SlowClap:
             claps = 1
 
         try:
-            data, sample_rate = sf.read(self.audio_path)
+            data, sample_rate = sf.read(self.audio_path, dtype='float32')
 
             for _ in range(claps):
                 self.audio_io.start_speaking(data, sample_rate=sample_rate, wait=True)
@@ -65,7 +65,7 @@ class SlowClap:
                 {
                     "role": "tool",
                     "tool_call_id": tool_call_id,
-                    "content": "success",
+                    "content": "Success. The tool played a slow clap audio to the user. You do not need to narrate the clapping.",
                     "type": "function_call_output",
                 }
             )

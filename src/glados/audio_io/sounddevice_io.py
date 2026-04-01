@@ -130,7 +130,7 @@ class SoundDeviceAudioIO:
             RuntimeError: If audio playback cannot be initiated
             ValueError: If audio_data is empty or not a valid numpy array
         """
-        if not isinstance(audio_data, np.ndarray) or audio_data.size == 0:
+        if not isinstance(audio_data, np.ndarray) or audio_data.size == 0 or audio_data.dtype != np.float32:
             raise ValueError("Invalid audio data")
 
         if sample_rate is None:

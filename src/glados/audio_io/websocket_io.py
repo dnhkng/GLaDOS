@@ -149,7 +149,7 @@ class WebsocketAudioIO:
             text: Optional text associated with the audio (not used by this implementation)
             wait: Optionally wait for the audio_data to be spoken
         """
-        if not isinstance(audio_data, np.ndarray) or audio_data.size == 0:
+        if not isinstance(audio_data, np.ndarray) or audio_data.size == 0 or audio_data.dtype != np.float32:
             raise ValueError("Invalid audio data")
 
         if sample_rate is None:
