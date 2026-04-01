@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import logging
 import queue
 import threading
@@ -54,8 +55,8 @@ class WebsocketAudioIO:
     PORT: int = 5051  # websockets server port
     SPEAKER_SYNC_DELAY_MS: int = 250  # Milliseconds to add to start time to account for speaker synchronisation
     MIC_MAX_SILENCE_CHUNKS: int = 10  # how many VAD chunks must be silent for a mic to relinquish control
-    DEFAULT_ROOM_TAG: str = "office" # default room tag
-    SEGREGATE_SPEAKERS: bool = False # default value for speaker segregation.
+    DEFAULT_ROOM_TAG: str = "office"  # default room tag
+    SEGREGATE_SPEAKERS: bool = False  # default value for speaker segregation.
 
     def __init__(self, vad_threshold: float | None = None, options: dict[str, Any] | None = None) -> None:
         """Initialize the websocket audio I/O.
@@ -125,8 +126,14 @@ class WebsocketAudioIO:
         self._mic_state_lock: asyncio.Lock
         self._mic_state = MicState(room=self._default_room_tag)
 
-        self._server_thread = threading.Thread(target=lambda s, p: asyncio.run(self._run_server(s, p)), args=(server, port), daemon=True)
+        startup_future: concurrent.futures.Future[None] = concurrent.futures.Future()
+        self._server_thread = threading.Thread(
+            target=lambda s, p, f: asyncio.run(self._run_server(s, p, f)),
+            args=(server, port, startup_future),
+            daemon=True
+        )
         self._server_thread.start()
+        startup_future.result(timeout=10)
 
     def start_listening(self) -> None:
         """Start capturing audio from the websocket.
@@ -155,10 +162,12 @@ class WebsocketAudioIO:
         if sample_rate is None:
             sample_rate = self.SAMPLE_RATE
 
-        # Stop any existing playback
-        self.stop_speaking()
+        if self._is_playing:
+            # Stop any existing playback and wait for finish
+            self.stop_speaking()
+            self._playback_finished_event.wait()
 
-        # Playback is not finished
+        # Playback is finished
         self._playback_finished_event.clear()
 
         # Lock, set data, unlock
@@ -209,8 +218,9 @@ class WebsocketAudioIO:
             logger.debug("Playback was interrupted in Server thread")
 
         if not completed:
-            interrupted = True
             logger.debug("Audio playback timed out, forcing interruption")
+            # Assume nothing was played because no speaker was there
+            return True, 0
 
         played_samples = elapsed * sample_rate
         percentage_played = min(int(played_samples * 100 / total_samples), 100)
@@ -243,7 +253,7 @@ class WebsocketAudioIO:
         """
         return self._sample_queue
 
-    async def _run_server(self, server: str, port: int) -> None:
+    async def _run_server(self, server: str, port: int, result_future: concurrent.futures.Future) -> None:
         """Runs the websocket server.
 
         Args:
@@ -266,7 +276,13 @@ class WebsocketAudioIO:
         ws_logger.addHandler(ws_log_handler)
         ws_logger.propagate = False
 
-        server = await websockets.serve(self._server_listen, host=server, port=port)
+        try:
+            server = await websockets.serve(self._server_listen, host=server, port=port)
+            result_future.set_result(None)
+        except OSError as ex:
+            result_future.set_exception(ex)
+            raise
+
         await server.serve_forever()
 
     async def _server_listen(self, websocket: websockets.ServerConnection) -> None:

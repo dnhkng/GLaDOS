@@ -40,7 +40,9 @@ class SlowClap:
         self.llm_queue = llm_queue
         tool_config = tool_config or {}
         self.audio_path = tool_config.get("slow_clap_audio_path", "data/slow-clap.mp3")
-        self.audio_io = tool_config.get("audio_io", get_audio_system())
+        self.audio_io = tool_config.get("audio_io")
+        if self.audio_io is None:
+            self.audio_io = get_audio_system()
 
     def run(self, tool_call_id: str, call_args: dict[str, Any]) -> None:
         """
