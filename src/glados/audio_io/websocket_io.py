@@ -102,7 +102,10 @@ class WebsocketAudioIO:
                     case "default_room_tag":
                         self._default_room_tag = str(val)
                     case "segregate_speakers":
-                        self._segregate_speakers = bool(val)
+                        if isinstance(val, bool):
+                            self._segregate_speakers = val
+                        else:
+                            raise ValueError("segregate_speakers must be a boolean value")
                     case _:
                         raise ValueError(f"Websocket backend: unsupported option '{key}'")
 
