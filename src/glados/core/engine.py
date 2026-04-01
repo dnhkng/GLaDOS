@@ -522,6 +522,9 @@ class Glados:
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
+            # Wire emotion agent to autonomy loop for vision events
+            if self._emotion_agent is not None:
+                self.autonomy_loop.set_emotion_agent(self._emotion_agent)
             if not self.vision_config:
                 self.autonomy_ticker_thread = threading.Thread(
                     target=self._run_autonomy_ticker,
@@ -709,9 +712,7 @@ class Glados:
         )
         self.subagent_manager.register(emotion_agent)
         self._emotion_agent = emotion_agent  # Keep reference for event pushing
-        # Wire emotion agent to autonomy loop for vision events
-        if self.autonomy_config.enabled and hasattr(self, "autonomy_loop"):
-            self.autonomy_loop.set_emotion_agent(emotion_agent)
+        # Emotion agent is wired into autonomy loop after it is initialized
 
         # Compaction agent - monitors conversation size and compacts when needed
         compaction_config = SubagentConfig(
