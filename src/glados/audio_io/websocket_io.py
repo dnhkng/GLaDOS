@@ -270,7 +270,7 @@ class WebsocketAudioIO:
                 getattr(logger, level)(msg)
 
         ws_log_handler = LogAdapter()
-        ws_log_handler.setFormatter(logging.Formatter("[%(asctime)s] $(name)s %(message)s"))
+        ws_log_handler.setFormatter(logging.Formatter("[%(asctime)s] %(name)s %(message)s"))
 
         ws_logger = logging.getLogger("websockets")
         ws_logger.addHandler(ws_log_handler)
