@@ -178,7 +178,7 @@ class WebsocketAudioIO:
         with self._audio_lock:
             # allow for network jitter, time to websocket send, etc.
             play_time = time.time() + (self._speaker_sync_delay_ms / 1000)
-            self._audio_data = AudioData(audio_data, sample_rate, play_time, uuid.uuid4())
+            self._audio_data = AudioData(np.copy(audio_data), sample_rate, play_time, uuid.uuid4())
 
         # set state
         self._stop_playback = False
@@ -411,9 +411,13 @@ class WebsocketAudioIO:
                     return
             else:
                 # self._stop_playback is true
-                await websocket.send("reset")
-                logger.debug("Sent audio reset")
-                set_flags_once(current_track_id, True)
+                try:
+                    await websocket.send("reset")
+                    logger.debug("Sent audio reset")
+                except websockets.exceptions.ConnectionClosed:
+                    logger.debug("Speaker disconnected before reset could be sent")
+                finally:
+                    set_flags_once(current_track_id, True)
 
     async def _server_microphone(self, websocket: websockets.ServerConnection) -> None:
         """
@@ -458,8 +462,8 @@ class WebsocketAudioIO:
                 data = np.frombuffer(msg, dtype=np.float32)
                 current_data = np.append(current_data, data)
 
-                # if enough current data is there, run it through the VAD
-                if len(current_data) >= vad_needed_samples:
+                # process every complete VAD window stored
+                while len(current_data) >= vad_needed_samples:
                     # get data for VAD
                     vad_data = current_data[:vad_needed_samples]
                     # extra data stays for next VAD
