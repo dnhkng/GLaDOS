@@ -169,7 +169,7 @@ class WebsocketAudioIO:
         if self._is_playing:
             # Stop any existing playback and wait for finish
             self.stop_speaking()
-            self._playback_finished_event.wait()
+            self._playback_finished_event.wait(timeout=2.0)
 
         # Playback is finished
         self._playback_finished_event.clear()
