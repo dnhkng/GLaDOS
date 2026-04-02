@@ -24,6 +24,7 @@ class AudioData:
     data: NDArray[np.float32]
     sample_rate: int
     play_time: float
+    track_id: uuid.UUID | None
 
 
 @dataclass
@@ -177,10 +178,12 @@ class WebsocketAudioIO:
         with self._audio_lock:
             # allow for network jitter, time to websocket send, etc.
             play_time = time.time() + (self._speaker_sync_delay_ms / 1000)
-            self._audio_data = AudioData(audio_data, sample_rate, play_time)
+            self._audio_data = AudioData(audio_data, sample_rate, play_time, uuid.uuid4())
 
+        # set state
         self._stop_playback = False
         self._is_playing = True
+        self._playback_was_interrupted = False
 
         logger.debug("Scheduled audio playback")
 
@@ -206,8 +209,6 @@ class WebsocketAudioIO:
         """
         if sample_rate is None:
             sample_rate = self.SAMPLE_RATE
-
-        self._playback_was_interrupted = False
 
         # wait for finish
         max_timeout = (total_samples / sample_rate) + (self._speaker_sync_delay_ms / 1000.0) + 1.0
@@ -323,6 +324,26 @@ class WebsocketAudioIO:
                 return False
             return True
 
+        def set_flags_once(track_id: uuid.UUID, was_interrupted: bool) -> None:
+            """
+            Set flags that audio was played if the given track_id matches the currently stored track_id.
+            If flags are set, the track_id is cleared from self._audio_data.
+            This ensures that the flags are only set by 1 speaker task.
+
+            Args:
+                track_id: ID of the audio track
+                was_interrupted: If the audio was interrupted (as interpreted by this task).
+            """
+            assert track_id is not None
+
+            with self._audio_lock:
+                if self._audio_data.track_id == track_id:
+                    self._playback_was_interrupted = was_interrupted
+                    self._is_playing = False
+                    self._playback_finished_event.set()
+                    # ensure that this is only called once
+                    self._audio_data.track_id = None
+
         while True:
             # 1. IDLE LOOP: Check for play state, but listen for sync pings in the meantime!
             while not self._is_playing:
@@ -353,13 +374,18 @@ class WebsocketAudioIO:
 
             # 2. AUDIO SEND PHASE
             # We acquire the lock just long enough to grab the data safely.
-            try:
-                with self._audio_lock:
-                    play_time = self._audio_data.play_time
-                    sample_rate = self._audio_data.sample_rate
-                    audio_data_bytes = self._audio_data.data.tobytes()
-                    sample_count = len(self._audio_data.data)
+            with self._audio_lock:
+                play_time = self._audio_data.play_time
+                sample_rate = self._audio_data.sample_rate
+                audio_data_bytes = self._audio_data.data.tobytes()
+                sample_count = len(self._audio_data.data)
+                current_track_id = self._audio_data.track_id
 
+            # Audio with no track ID should not be played
+            if current_track_id is None:
+                continue
+
+            try:
                 # Send timestamp, then sample rate, then bytes
                 await websocket.send("time:" + str(play_time))
                 await websocket.send("sampleRate:" + str(sample_rate))
@@ -367,10 +393,8 @@ class WebsocketAudioIO:
 
                 logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {sample_count} samples")
             except websockets.exceptions.ConnectionClosed:
-                self._playback_was_interrupted = True
-                self._is_playing = False
-                self._playback_finished_event.set()
-                break
+                set_flags_once(current_track_id, True)
+                return
 
             # 3. WAITING PHASE
             while not self._stop_playback:
@@ -378,21 +402,18 @@ class WebsocketAudioIO:
                     message = await asyncio.wait_for(websocket.recv(), timeout=0.05)
                     if await handle_default_msg(message) and message == "played":
                         logger.debug("Websocket: Audio played fully")
-                        self._playback_was_interrupted = False
+                        set_flags_once(current_track_id, False)
                         break
                 except asyncio.TimeoutError:
                     continue
                 except websockets.exceptions.ConnectionClosed:
-                    self._playback_was_interrupted = True
-                    break
+                    set_flags_once(current_track_id, True)
+                    return
             else:
                 # self._stop_playback is true
-                self._playback_was_interrupted = True
                 await websocket.send("reset")
                 logger.debug("Sent audio reset")
-
-            self._is_playing = False
-            self._playback_finished_event.set()
+                set_flags_once(current_track_id, True)
 
     async def _server_microphone(self, websocket: websockets.ServerConnection) -> None:
         """
