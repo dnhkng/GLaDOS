@@ -1403,8 +1403,14 @@ class GladosUI(App[None]):
         glados_config = GladosConfig.from_yaml(str(config_path))
         updates: dict[str, object] = {}
         if self._input_mode_override:
-            if self._input_mode_override in {"text", "both"}:
-                # Avoid stdin contention between Textual and TextListener.
+            if self._input_mode_override == "text":
+                # In TUI text mode, use "none" so neither audio stream nor TextListener
+                # is started. The TUI Input widget handles all text input, avoiding
+                # both high CPU from audio and stdin contention with TextListener.
+                updates["input_mode"] = "none"
+            elif self._input_mode_override == "both":
+                # In TUI+both mode, keep audio ASR active; the TUI Input widget handles
+                # text input, so TextListener is not needed (avoids stdin contention).
                 updates["input_mode"] = "audio"
             else:
                 updates["input_mode"] = self._input_mode_override
