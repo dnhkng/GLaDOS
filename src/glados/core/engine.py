@@ -712,7 +712,9 @@ class Glados:
         )
         self.subagent_manager.register(emotion_agent)
         self._emotion_agent = emotion_agent  # Keep reference for event pushing
-        # Emotion agent is wired into autonomy loop after it is initialized
+        # Wire emotion agent to autonomy loop for vision events
+        if self.autonomy_config.enabled and self.autonomy_loop:
+            self.autonomy_loop.set_emotion_agent(emotion_agent)
 
         # Compaction agent - monitors conversation size and compacts when needed
         compaction_config = SubagentConfig(
