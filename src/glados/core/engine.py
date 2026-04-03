@@ -522,6 +522,9 @@ class Glados:
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
+            # Wire emotion agent to autonomy loop for vision events
+            if self._emotion_agent is not None:
+                self.autonomy_loop.set_emotion_agent(self._emotion_agent)
             if not self.vision_config:
                 self.autonomy_ticker_thread = threading.Thread(
                     target=self._run_autonomy_ticker,
