@@ -172,13 +172,13 @@ def models_valid() -> bool:
     return True
 
 
-def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
+def say(text: str, config_path: str | Path | list[str] | list[Path] = "glados_config.yaml") -> None:
     """
     Converts text to speech using the GLaDOS text-to-speech system and plays the generated audio.
 
     Parameters:
         text (str): The text to be spoken by the GLaDOS voice assistant.
-        config_path (str | Path, optional): Path to the configuration YAML file.
+        config_path (str | Path | list, optional): Path to the configuration YAML file(s).
             Defaults to "glados_config.yaml".
 
     Notes:
@@ -202,7 +202,7 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
 
 
 def start(
-    config_path: str | Path = "glados_config.yaml",
+    config_path: str | Path | list[str] | list[Path] = "glados_config.yaml",
     input_mode: str | None = None,
     tts_enabled: bool | None = None,
     asr_muted: bool | None = None,
@@ -214,7 +214,7 @@ def start(
     and begins the continuous listening process for voice interactions.
 
     Parameters:
-        config_path (str | Path, optional): Path to the configuration YAML file.
+        config_path (str | Path | list, optional): Path to the configuration YAML file(s).
             Defaults to "glados_config.yaml" in the current directory.
 
     Raises:
@@ -225,7 +225,7 @@ def start(
         start()  # Uses default configuration file
         start("/path/to/custom/config.yaml")  # Uses a custom configuration file
     """
-    glados_config = GladosConfig.from_yaml(str(config_path))
+    glados_config = GladosConfig.from_yaml(config_path)
     updates: dict[str, object] = {}
     if input_mode:
         updates["input_mode"] = input_mode
@@ -242,7 +242,7 @@ def start(
 
 
 def tui(
-    config_path: str | Path = "glados_config.yaml",
+    config_paths: str | Path | list[str] | list[Path] = "glados_config.yaml",
     input_mode: str | None = None,
     tts_enabled: bool | None = None,
     asr_muted: bool | None = None,
@@ -261,7 +261,7 @@ def tui(
 
     try:
         app = tui.GladosUI(
-            config_path=config_path,
+            config_paths=config_paths,
             input_mode=input_mode,
             tts_enabled=tts_enabled,
             asr_muted=asr_muted,
@@ -280,11 +280,28 @@ def parser_add_config(parser: argparse.ArgumentParser) -> None:
     Args:
         parser: parse to add the config argument to.
     """
+    class ReplaceDefaultArgsAction(argparse.Action):
+        """
+        A argparse action similar to 'append', but if any argument is specified, the default value is ignored
+        instead of the default argparse behaviour of appending to the default value.
+        """
+        def __call__(self, p: argparse.ArgumentParser, namespace: argparse.Namespace, values, option_string=None) -> None:
+            current_list = getattr(namespace, self.dest)
+            if current_list is self.default:
+                # same by identity - ignore default values, new value is the first element of the list
+                current_list = [values]
+            else:
+                # current_list already is custom - append to it
+                current_list = list(current_list)
+                current_list.append(values)
+            setattr(namespace, self.dest, current_list)
+
     parser.add_argument(
         "--config",
-        type=str,
-        default=DEFAULT_CONFIG,
-        help=f"Path to configuration file (default: {DEFAULT_CONFIG})",
+        type=Path,
+        default=[DEFAULT_CONFIG],
+        action=ReplaceDefaultArgsAction,
+        help=f"Path to configuration file (default: {DEFAULT_CONFIG}). You may specify this option more than once; the configuration settings in the later files override those in earlier ones.",
     )
 
 

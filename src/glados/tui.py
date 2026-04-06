@@ -489,7 +489,7 @@ class SplashScreen(Screen[None]):
         model = "unknown"
         endpoint = "unknown"
         try:
-            config = GladosConfig.from_yaml(str(app._config_path))
+            config = GladosConfig.from_yaml(app._config_paths)
             model = config.llm_model
             endpoint = self._format_endpoint(str(config.completion_url))
         except Exception as exc:
@@ -935,7 +935,7 @@ class GladosUI(App[None]):
     _autonomy_panel: AutonomyPanel | None = None
     _mcp_panel: MCPPanel | None = None
     _queue_metrics: dict[str, dict[str, float | int | None]]
-    _config_path: Path
+    _config_paths: list[Path]
     _input_mode_override: str | None
     _tts_enabled_override: bool | None
     _asr_muted_override: bool | None
@@ -944,7 +944,7 @@ class GladosUI(App[None]):
 
     def __init__(
         self,
-        config_path: str | Path | None = None,
+        config_paths: str | Path | list[str] | list[Path] | None = None,
         input_mode: str | None = None,
         tts_enabled: bool | None = None,
         asr_muted: bool | None = None,
@@ -952,7 +952,15 @@ class GladosUI(App[None]):
     ) -> None:
         super().__init__()
         default_config = resource_path("configs/glados_config.yaml")
-        self._config_path = Path(config_path) if config_path else Path(default_config)
+        if isinstance(config_paths, list):
+            # is already list - convert each element to Path
+            self._config_paths = list(Path(p) for p in config_paths)
+        elif config_paths is not None:
+            # single element - convert to list[Path]
+            self._config_paths = [Path(config_paths)]
+        else:
+            # None
+            self._config_paths = [Path(default_config)]
         self._input_mode_override = input_mode
         self._tts_enabled_override = tts_enabled
         self._asr_muted_override = asr_muted
@@ -1276,7 +1284,7 @@ class GladosUI(App[None]):
         if self._theme_override:
             return self._theme_override
         try:
-            config = GladosConfig.from_yaml(str(self._config_path))
+            config = GladosConfig.from_yaml(self._config_paths)
             if config.tui_theme:
                 return config.tui_theme
         except Exception as exc:
@@ -1396,11 +1404,11 @@ class GladosUI(App[None]):
             Glados: An instance of the GLaDOS engine.
         """
 
-        config_path = self._config_path
-        if not config_path.exists():
-            logger.error(f"GLaDOS config file not found: {config_path}")
+        config_paths = self._config_paths
+        if not all(p.exists() for p in config_paths):
+            logger.error(f"GLaDOS config file not found: {config_paths}")
 
-        glados_config = GladosConfig.from_yaml(str(config_path))
+        glados_config = GladosConfig.from_yaml(config_paths)
         updates: dict[str, object] = {}
         if self._input_mode_override:
             if self._input_mode_override in {"text", "both"}:
