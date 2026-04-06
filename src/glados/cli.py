@@ -196,7 +196,7 @@ def say(text: str, config_path: str | Path = "glados_config.yaml") -> None:
     # Generate the audio to from the text
     audio = glados_tts.generate_speech_audio(converted_text)
 
-    glados_config = GladosConfig.from_yaml(str(config_path))
+    glados_config = GladosConfig.from_yaml(config_path)
     audio_system = get_audio_system(backend_type=glados_config.audio_io, backend_options=glados_config.audio_io_options)
 
     # Play the audio
