@@ -165,10 +165,26 @@ class GladosConfig(BaseModel):
                 data = data[key]
 
             # Update config dict - config from later paths overrides earlier config
-            for key, value in data.items():
-                config[key] = value
+            config = GladosConfig._dict_deep_merge(config, data)
 
         return cls.model_validate(config)
+
+    @staticmethod
+    def _dict_deep_merge(a: dict, b: dict) -> dict:
+        """
+        Recursively merge two dictionaries into one.
+        Values from the second dictionary override values from the first.
+        Note: mutates the first dictionary.
+
+        Returns:
+            The merged dictionary.
+        """
+        for key in b:
+            if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+                GladosConfig._dict_deep_merge(a[key], b[key])
+            else:
+                a[key] = b[key]
+        return a
 
     def to_chat_messages(self) -> list[dict[str, str]]:
         """Convert personality preprompt to chat message format."""
