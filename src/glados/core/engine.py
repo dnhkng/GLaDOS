@@ -160,6 +160,8 @@ class GladosConfig(BaseModel):
                     if encoding == "utf-8-sig":
                         raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
 
+            data = data or dict()
+
             # Navigate through nested keys
             for key in key_to_config:
                 data = data[key]
