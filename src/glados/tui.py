@@ -1406,7 +1406,10 @@ class GladosUI(App[None]):
 
         config_paths = self._config_paths
         if not all(p.exists() for p in config_paths):
-            logger.error(f"GLaDOS config file not found: {config_paths}")
+            missing = list(p for p in config_paths if not p.exists())
+            msg = f"GLaDOS config file(s) not found: {missing}"
+            logger.error(msg)
+            raise FileNotFoundError(msg)
 
         glados_config = GladosConfig.from_yaml(config_paths)
         updates: dict[str, object] = {}
