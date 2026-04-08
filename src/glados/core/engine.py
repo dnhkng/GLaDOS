@@ -107,7 +107,7 @@ class GladosConfig(BaseModel):
     api_key: str | None
     interruptible: bool
     audio_io: str
-    input_mode: Literal["audio", "text", "both"] = "audio"
+    input_mode: Literal["audio", "text", "both", "none"] = "audio"
     tts_enabled: bool = True
     asr_muted: bool = False
     asr_engine: str
@@ -198,7 +198,7 @@ class Glados:
         vision_config: VisionConfig | None = None,
         autonomy_config: AutonomyConfig | None = None,
         mcp_servers: list[MCPServerConfig] | None = None,
-        input_mode: Literal["audio", "text", "both"] = "audio",
+        input_mode: Literal["audio", "text", "both", "none"] = "audio",
         tts_enabled: bool = True,
         asr_muted: bool = False,
         llm_headers: dict[str, str] | None = None,
@@ -865,7 +865,10 @@ class Glados:
                 logger.error(f"Failed to start audio input: {e}")
                 logger.warning("Voice input disabled - text input still available")
         else:
-            logger.info("Text input mode active. Audio input is disabled.")
+            if self.input_mode == "none":
+                logger.info("No audio input mode active (TUI handles text input).")
+            else:
+                logger.info("Text input mode active. Audio input is disabled.")
 
         logger.success("Engine running")
         logger.success("Listening...")
