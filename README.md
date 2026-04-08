@@ -341,13 +341,35 @@ Works without GPU, just slower.
 
 GLaDOS needs an LLM. Options:
 1. [Ollama](https://github.com/ollama/ollama) (easiest): `ollama pull llama3.2`
-2. Any OpenAI-compatible API
+2. Any OpenAI-compatible API (OpenAI, [MiniMax](https://platform.minimaxi.com/), OpenRouter, etc.)
 
 Configure in `glados_config.yaml`:
 ```yaml
 completion_url: "http://localhost:11434/v1/chat/completions"
 model: "llama3.2"
 api_key: ""  # if needed
+```
+
+#### Cloud LLM Providers
+
+You can use any OpenAI-compatible cloud API. Example configs are provided in `configs/`:
+
+**MiniMax** — high-performance models with 204K context and built-in reasoning:
+```yaml
+llm_model: "MiniMax-M2.7"
+completion_url: "https://api.minimax.io/v1/chat/completions"
+api_key: "your-minimax-api-key"
+```
+See `configs/minimax_config.yaml` for a complete configuration. Models: `MiniMax-M2.7` (latest flagship, default), `MiniMax-M2.7-highspeed` (low-latency), `MiniMax-M2.5`, `MiniMax-M2.5-highspeed`.
+
+**OpenRouter** — access multiple models through one API:
+```yaml
+llm_model: "openai/gpt-4o"
+completion_url: "https://openrouter.ai/api/v1/chat/completions"
+api_key: "your-openrouter-api-key"
+llm_headers:
+  HTTP-Referer: "https://github.com/dnhkng/GLaDOS"
+  X-Title: "GLaDOS"
 ```
 
 ### Platform Notes
@@ -408,16 +430,21 @@ Press `Ctrl+P` to open the command palette. Available commands:
 
 ### Change the LLM
 
+**Local (Ollama):**
 ```bash
 ollama pull mistral
 ```
-
 Then in `glados_config.yaml`:
 ```yaml
 model: "mistral"
 ```
-
 Browse models: [ollama.com/library](https://ollama.com/library)
+
+**Cloud (MiniMax, OpenRouter, etc.):**
+```bash
+uv run glados start --config configs/minimax_config.yaml
+```
+Or edit `glados_config.yaml` with your provider's `completion_url`, `llm_model`, and `api_key`. See [LLM Backend](#llm-backend) for details.
 
 ### Change the Voice
 > *“I'm speaking in an accent that is beyond her range of hearing.”  -  Wheatley*

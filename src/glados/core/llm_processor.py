@@ -33,7 +33,7 @@ class LanguageModelProcessor:
 
     PUNCTUATION_SET: ClassVar[set[str]] = {".", "!", "?", ":", ";", "?!", "\n", "\n\n"}
 
-    # Standard thinking tags (GLM-4.7, MiniMax M2.1, DeepSeek, etc.)
+    # Standard thinking tags (GLM-4.7, MiniMax M2.1/M2.5/M2.7, DeepSeek, etc.)
     THINKING_OPEN_TAGS: ClassVar[tuple[str, ...]] = ("<think>", "<thinking>", "<reasoning>")
     THINKING_CLOSE_TAGS: ClassVar[tuple[str, ...]] = ("</think>", "</thinking>", "</reasoning>")
 
@@ -411,7 +411,7 @@ class LanguageModelProcessor:
         Extract thinking tags from streaming chunk, returning only speakable content.
 
         Supports two formats:
-        1. Standard: <think>...</think> (GLM-4.7, MiniMax M2.1, DeepSeek)
+        1. Standard: <think>...</think> (GLM-4.7, MiniMax M2.1/M2.5/M2.7, DeepSeek)
         2. Harmony: <|channel|>analysis vs <|channel|>final (GPT-OSS-120B)
 
         Args:
