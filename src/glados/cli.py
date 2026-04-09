@@ -71,6 +71,14 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
         "url": "https://github.com/dnhkng/GLaDOS/releases/download/0.1/decoder_model_merged_q4f16.onnx",
         "checksum": "6ea00b526e59a5087e90e8e73b74a09347a7f1127f052476211b03aecca3fb0d",
     },
+    "models/openwakeword/melspec.onnx": {
+        "url": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
+        "checksum": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
+    },
+    "models/openwakeword/embedding.onnx": {
+        "url": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx",
+        "checksum": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f",
+    }
 }
 
 

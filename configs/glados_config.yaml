@@ -10,7 +10,8 @@ Glados:
   tui_theme: "aperture"
   asr_engine: "tdt"
   llm_headers: null  # Optional extra headers (e.g., OpenRouter HTTP-Referer, X-Title)
-  wake_word: null
+  wake_word: null # recognize wake word via ASR - specify exactly 1 word
+  wake_word_model_path: null # recognize wake word via https://github.com/dscripka/openWakeWord - specify the path to an ONNX model
   voice: "glados"
   announcement: "All neural network modules are now loaded. System Operational."
   autonomy:
