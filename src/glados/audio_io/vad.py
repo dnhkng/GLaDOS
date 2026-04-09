@@ -31,9 +31,17 @@ class VAD:
         if "CoreMLExecutionProvider" in providers:
             providers.remove("CoreMLExecutionProvider")
 
+        # Limit to 1 thread to prevent ONNX Runtime from spawning many threads
+        # for each small inference call (~31/sec). On high core-count machines this
+        # causes excessive CPU usage; Silero VAD is small enough that single-threaded
+        # inference has negligible latency impact. (Fixes #187)
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 1
+        sess_options.inter_op_num_threads = 1
+
         self.ort_sess = ort.InferenceSession(
             model_path,
-            sess_options=ort.SessionOptions(),
+            sess_options=sess_options,
             providers=providers,
         )
 
