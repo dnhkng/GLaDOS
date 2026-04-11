@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLaDOS Microphone</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        .status {
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        input {
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="microphoneStatus" class="status">Mic Status: Waiting to connect...</div>
+<button id="startBtn">Enable Mic & Connect</button>
+
+<input type="text" id="room"/>
+<button id="roomBtn">Set room</button>
+
+<button id="muteBtn" aria-pressed="false">Mute</button>
+
+<script>
+    const MIC_WSL_URL = 'ws://localhost:5051/microphone';
+    const microphoneStatusEl = document.getElementById('microphoneStatus');
+
+    const startBtn = document.getElementById('startBtn');
+    const roomBtn = document.getElementById('roomBtn');
+    const muteBtn = document.getElementById('muteBtn');
+
+    let micWs = null;
+    let micSampleRate = null;
+    let micIsReconnecting = false;
+    let micAudioCtx = null;
+    let micStream = null;
+
+    let userHasInteracted = false;
+
+    // Browsers block audio until the user interacts with the document
+    startBtn.addEventListener('click', () => {
+        userHasInteracted = true;
+        startBtn.disabled = true;
+        startBtn.innerText = "Audio Enabled";
+
+        // Start microphone
+        if (!micWs || micWs.readyState === WebSocket.CLOSED) {
+            micConnect();
+        }
+    });
+    startBtn.addEventListener('click', async () => {
+        micStream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
+    })
+
+    // connect microphone websocket
+    function micConnect() {
+        if (micIsReconnecting) return;
+
+        micStatus("Connecting to server...");
+        micWs = new WebSocket(MIC_WSL_URL);
+
+        // Crucial: Tell the WebSocket to give us ArrayBuffers instead of Blobs
+        micWs.binaryType = 'arraybuffer';
+
+        micWs.onopen = () => {
+            micIsReconnecting = false;
+            micStatus("Connected! Waiting for sample rate...");
+            // Reset on a fresh connection
+            micSampleRate = null;
+            sendRoom();
+        };
+
+        micWs.onmessage = async (event) => {
+            // Treat all messages as sample data
+            try {
+                if (typeof event.data === 'string' && event.data.startsWith("sampleRate:")) {
+                    let sampleRateStr = event.data.split(":")[1];
+                    micSampleRate = parseInt(sampleRateStr, 10);
+
+                    if (isNaN(micSampleRate) || micSampleRate <= 0) {
+                        console.error("Invalid sample rate received");
+                        micSampleRate = null;
+                        return;
+                    }
+
+                    micStatus(`Recording voice at ${micSampleRate}Hz`);
+
+                    if (micAudioCtx) micAudioCtx.close();
+
+                    // Only create context if user has clicked, otherwise audio is blocked
+                    if (userHasInteracted) {
+                        await startMic();
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to parse sample rate:", err);
+                micSampleRate = null; // Reset so the next message is treated as the sample rate
+            }
+        };
+
+        micWs.onclose = () => {
+            micStatus("Server offline. Retrying in 2 seconds...");
+            micSampleRate = null;
+            micWs = null;
+            micIsReconnecting = true;
+
+            if (micStream)
+                micStream.getTracks().forEach(track => track.stop());
+            micStream = null;
+
+            // Retry loop
+            setTimeout(() => {
+                micIsReconnecting = false;
+                // Only keep trying to connect automatically if the user has engaged
+                if (userHasInteracted) micConnect();
+            }, 2000);
+        };
+
+        micWs.onerror = (_err) => {
+            // Errors automatically trigger onclose, so we just let onclose handle the retry
+            micWs.close();
+        };
+    }
+
+    // all variables are filled: start recording
+    async function startMic() {
+        micAudioCtx = new window.AudioContext({
+            sampleRate: micSampleRate
+        });
+
+        if (!micStream) {
+            micStream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
+        }
+
+        const source = micAudioCtx.createMediaStreamSource(micStream);
+
+        const workletCode = `
+            class MicProcessor extends AudioWorkletProcessor {
+                // don't set any outputs --> mute
+                process(inputs, outputs, parameters) {
+                    const input = inputs[0];
+                    if (input && input.length > 0) {
+                        const channelData = input[0];
+                        // We must copy the data so we can transfer the buffer to the main thread
+                        const f32 = new Float32Array(channelData);
+                        this.port.postMessage(f32.buffer, [f32.buffer]);
+                    }
+                    return true;
+                }
+            }
+            registerProcessor('mic-processor', MicProcessor);
+            `;
+
+        const blob = new Blob([workletCode], {type: 'application/javascript'});
+        const workletUrl = URL.createObjectURL(blob);
+
+        await micAudioCtx.audioWorklet.addModule(workletUrl);
+        const workletNode = new AudioWorkletNode(micAudioCtx, "mic-processor");
+
+        workletNode.port.onmessage = (event) => {
+            // send raw f32
+            if (micWs && micWs.readyState === WebSocket.OPEN) {
+                micWs.send(event.data);
+            }
+        }
+
+        source.connect(workletNode);
+
+        // fully connect the graph for maximum browser compatibility.
+        // connect muted microphone to destination (likely speaker)
+        const silentSink = micAudioCtx.createGain();
+        silentSink.gain.value = 0;
+
+        workletNode.connect(silentSink);
+        silentSink.connect(micAudioCtx.destination);
+    }
+
+    // set status HTML div, also log to console
+    function micStatus(status) {
+        console.log("Microphone Status changed: ", status);
+        microphoneStatusEl.innerText = "Mic Status: " + status;
+    }
+
+    // send the room data if the WS is open and room data is set
+    function sendRoom() {
+        let room = document.getElementById('room').value;
+
+        if (room.trim().length !== 0 && micWs && micWs.readyState === WebSocket.OPEN) {
+            micWs.send("room:" + room);
+        }
+    }
+
+    roomBtn.addEventListener('click', () => {
+        sendRoom();
+    });
+
+
+    // toggle microphone mute / unmute
+    muteBtn.addEventListener('click', () => {
+        const isPressed = muteBtn.getAttribute('aria-pressed') === 'true';
+        muteBtn.setAttribute('aria-pressed', (!isPressed).toString());
+        muteBtn.textContent = isPressed ? 'Mute' : 'Unmute';
+
+        // if isPressed = true, we were muted and should now unmute
+        const enabled = isPressed;
+        console.log("Set mic input to " + enabled);
+        if (micStream) {
+            const tracks = micStream.getAudioTracks();
+            tracks.forEach(track => track.enabled = enabled);
+        }
+    })
+</script>
+</body>
+</html>

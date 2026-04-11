@@ -487,6 +487,17 @@ curl -X POST http://localhost:5050/v1/audio/speech \
   --output speech.mp3
 ```
 
+## Audio IO via websockets
+
+Audio Input/Output can be routed via Websockets.
+Multiple concurrent inputs/outputs are supported.
+GLaDos will speak via all outputs, the current microphone is automatically selected via VAD.
+You can use `tests/audio-websocket-both.html` to speak and hear GLaDOS.
+
+For configuration options, check out `configs/glados_websocket_config.yaml`.
+
+For an exact description of the websocket protocol, see [docs/audio_websocket.md](./docs/audio_websocket.md).
+
 ## Troubleshooting
 
 > *"No one will blame you for giving up. In fact, quitting at this point is a perfectly reasonable response."  -  GLaDOS*

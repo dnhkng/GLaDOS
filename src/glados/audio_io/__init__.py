@@ -13,7 +13,7 @@ Functions:
 """
 
 import queue
-from typing import Protocol
+from typing import Protocol, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -26,7 +26,7 @@ class AudioProtocol(Protocol):
     def start_listening(self) -> None: ...
     def stop_listening(self) -> None: ...
     def start_speaking(
-        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = ""
+        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "", wait: bool = False
     ) -> None: ...
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]: ...
     def check_if_speaking(self) -> bool: ...
@@ -35,14 +35,23 @@ class AudioProtocol(Protocol):
 
 
 # Factory function
-def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | None = None) -> AudioProtocol:
+def get_audio_system(backend_type: str = "sounddevice", backend_options: dict[str, Any] | None = None, vad_threshold: float | None = None) -> AudioProtocol:
     """
     Factory function to get an instance of an audio I/O system based on the specified backend type.
 
     Parameters:
         backend_type (str): The type of audio backend to use:
             - "sounddevice": Uses the sounddevice library for local audio I/O
-            - "websocket": Network-based audio I/O (not yet implemented)
+            - "websocket": Network-based audio I/O
+        backend_options: Options for the specified backend.
+            - "sounddevice": No options are allowed.
+            - "websocket": The following options are allowed:
+                - server: Websocket listening address (default: 127.0.0.1)
+                - port: Websocket listening port (default: 5051)
+                - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
+                - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
+                - default_room_tag: The default room tag to use if a client doesn't set it (default: office)
+                - segregate_speakers: If `True`, audio is only sent to speakers with the same room tag as the last active microphone
         vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
@@ -54,11 +63,18 @@ def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | N
     if backend_type == "sounddevice":
         from .sounddevice_io import SoundDeviceAudioIO
 
+        if backend_options is not None:
+            raise ValueError("Sounddevice backend does not support options")
+
+        # noinspection PyTypeChecker
         return SoundDeviceAudioIO(
             vad_threshold=vad_threshold,
         )
     elif backend_type == "websocket":
-        raise ValueError("WebSocket audio backend is not yet implemented.")
+        from .websocket_io import WebsocketAudioIO
+
+        # noinspection PyTypeChecker
+        return WebsocketAudioIO(vad_threshold=vad_threshold, options=backend_options)
     else:
         raise ValueError(f"Unsupported audio backend type: {backend_type}")
 
