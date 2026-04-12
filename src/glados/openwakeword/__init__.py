@@ -80,7 +80,7 @@ class Model:
     @classmethod
     def _validate_threshold(cls, threshold: float | None) -> float:
         """
-        Validate the threshold: it should be None or in the range 0.0 to 1.0.
+        Validate the threshold: it should be None or in the range 0.0 (excluded) to 1.0.
 
         Args:
             threshold: Threshold value
@@ -93,7 +93,7 @@ class Model:
         """
         if threshold is None:
             return cls.DEFAULT_THRESHOLD
-        if 0.0 <= threshold <= 1.0:
+        if 0.0 < threshold <= 1.0:
             return float(threshold)
         raise ValueError("threshold must be between 0.0 and 1.0")
 
