@@ -77,6 +77,26 @@ class Model:
         """
         return (np.clip(x, -1.0, 1.0) * 32767).astype(np.int16)
 
+    @classmethod
+    def _validate_threshold(cls, threshold: float | None) -> float:
+        """
+        Validate the threshold: it should be None or in the range 0.0 to 1.0.
+
+        Args:
+            threshold: Threshold value
+
+        Returns:
+            Corrected threshold: if None is given, the default value is returned, if the value is out of range, a ValueError is raised
+
+        Raises:
+            ValueError: if the threshold is out of range
+        """
+        if threshold is None:
+            return cls.DEFAULT_THRESHOLD
+        if 0.0 <= threshold <= 1.0:
+            return float(threshold)
+        raise ValueError("threshold must be between 0.0 and 1.0")
+
     def predict(self, x: np.ndarray, patience: int | None = None, debounce_time: float| None = None, threshold: float | None = None) -> bool:
         """
         Predict if the wake word was spoken
@@ -91,9 +111,12 @@ class Model:
 
         Returns:
             If the wake word was spoken in one of the samples.
+
+        Raises:
+            ValueError: if the threshold is out of range
         """
 
-        threshold = self.DEFAULT_THRESHOLD if threshold is None else float(threshold)
+        threshold = self._validate_threshold(threshold)
 
         # convert to int16
         x = self._np_f32_to_i16(x)
@@ -125,11 +148,14 @@ class Model:
 
         Returns:
             If the wake word was spoken in one of the sample chunks. If there are not enough sample chunks, return False.
+
+        Raises:
+            ValueError: if the threshold is out of range
         """
 
         self.reset()
 
-        threshold = self.DEFAULT_THRESHOLD if threshold is None else float(threshold)
+        threshold = self._validate_threshold(threshold)
 
         # convert to int16
         x = self._np_f32_to_i16(x)
