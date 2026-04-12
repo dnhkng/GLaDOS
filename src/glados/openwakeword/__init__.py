@@ -112,7 +112,7 @@ class Model:
             self.model_name: threshold,
         }
 
-        return self._model.predict(x, patience=patience, debounce_time=debounce_time, threshold=threshold_param)[self.model_name] > threshold
+        return self._model.predict(x, patience=patience, debounce_time=debounce_time, threshold=threshold_param)[self.model_name] >= threshold
 
     def predict_multi_sample(self, x: np.ndarray, threshold: float | None = None) -> bool:
         """
@@ -140,7 +140,7 @@ class Model:
             current = x[i * self.MIN_SAMPLES: (i + 1) * self.MIN_SAMPLES]
             prediction = max(self._model.predict(current)[self.model_name], prediction)
 
-        return prediction > threshold
+        return prediction >= threshold
 
 
 __all__ = ["Model"]
