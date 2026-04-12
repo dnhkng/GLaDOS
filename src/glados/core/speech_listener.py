@@ -9,6 +9,7 @@ from collections import deque
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from Levenshtein import distance
@@ -22,6 +23,7 @@ from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
 from .audio_state import AudioState
 from ..observability import ObservabilityBus, trim_message
+from ..openwakeword import Model as WakeWordModel
 
 # Callback signature: (event_type: str) -> None
 InterruptCallback = Callable[[str], None]
@@ -51,6 +53,7 @@ class SpeechListener:
         processing_active_event: threading.Event,
         asr_model: TranscriberProtocol,
         wake_word: str | None,
+        wake_word_path: Path | None,
         pause_time: float,
         interruptible: bool = True,
         interaction_state: "InteractionState | None" = None,
@@ -76,6 +79,10 @@ class SpeechListener:
         self.llm_queue = llm_queue
         self.asr_model = asr_model
         self.wake_word = wake_word.lower() if wake_word else None
+        if wake_word_path is None:
+            self.wake_word_recognizer = None
+        else:
+            self.wake_word_recognizer = WakeWordModel(wake_word_path)
         self.pause_time = pause_time
         self.interruptible = interruptible
 
@@ -266,23 +273,35 @@ class SpeechListener:
         Processes the accumulated audio samples once a speech pause is detected.
 
         This method performs the following steps:
-        1. Transcribes the collected audio samples using the ASR model.
-        2. If transcription is successful:
-            a. Checks for the `wake_word` (if configured).
-            b. If the wake word is detected (or not required), the transcribed text is
-               placed into the `llm_queue`, and `processing_active_event` is set.
+        1. Check if the `wake_word_recognizer` finds the wake word (if configured).
+        2. If the wake word was found or `wake_word_recognizer` is not configured:
+            a. Transcribes the collected audio samples using the ASR model.
+            b. If transcription is successful:
+                a1. Checks for the `wake_word` (if configured and `wake_word_recognizer` is not configured).
+                b1. If the wake word is detected (or not required), the transcribed text is
+                    placed into the `llm_queue`, and `processing_active_event` is set.
         3. Resets the listener's internal state using `self.reset()`, preparing for the next input.
         """
         logger.debug("Detected pause after speech. Processing...")
 
-        detected_text = self.asr(self._samples)
+        try:
+            audio = np.concatenate(self._samples)
 
-        if detected_text:
-            logger.success(f"ASR text: '{detected_text}'")
+            # Wake word recognition via model if available
+            if self.wake_word_recognizer and not self.wake_word_recognizer.predict_multi_sample(audio):
+                logger.info(f"Required wake word (model file {self.wake_word_recognizer.model_path}) not detected.")
+                return
 
-            if self.wake_word and not self._wakeword_detected(detected_text):
-                logger.info(f"Required wake word {self.wake_word=} not detected.")
-            else:
+            detected_text = self.asr(audio)
+
+            if detected_text:
+                logger.success(f"ASR text: '{detected_text}'")
+
+                # search for wake word via ASR text if there is no recognition model
+                if self.wake_word_recognizer is None and self.wake_word and not self._wakeword_detected(detected_text):
+                    logger.info(f"Required wake word {self.wake_word=} not detected.")
+                    return
+
                 if self._observability_bus:
                     self._observability_bus.emit(
                         source="asr",
@@ -300,10 +319,11 @@ class SpeechListener:
                 if self._interaction_state:
                     self._interaction_state.mark_user()
                 self.processing_active_event.set()
+        finally:
+            # always reset
+            self.reset()
 
-        self.reset()
-
-    def asr(self, samples: list[NDArray[np.float32]]) -> str:
+    def asr(self, audio: NDArray[np.float32]) -> str:
         """
         Performs Automatic Speech Recognition (ASR) on a list of audio samples.
 
@@ -312,16 +332,14 @@ class SpeechListener:
         volume levels before being passed to the ASR model for transcription.
 
         Args:
-            samples: A list of numpy arrays (float32) containing audio sample chunks.
+            audio: A numpy array (float32) containing audio sample chunks.
 
         Returns:
             The transcribed text as a string.
         """
-        if not samples:
+        if len(audio) == 0:
             logger.warning("ASR received empty sample list")
             return ""
-
-        audio = np.concatenate(samples)
 
         # Check for silent audio
         max_abs_val = np.max(np.abs(audio))
