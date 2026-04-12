@@ -95,7 +95,7 @@ class Model:
             return cls.DEFAULT_THRESHOLD
         if 0.0 < threshold <= 1.0:
             return float(threshold)
-        raise ValueError("threshold must be between 0.0 and 1.0")
+        raise ValueError("threshold must be 0.0 < threshold <= 1.0")
 
     def predict(self, x: np.ndarray, patience: int | None = None, debounce_time: float| None = None, threshold: float | None = None) -> bool:
         """
