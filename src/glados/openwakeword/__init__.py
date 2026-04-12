@@ -65,6 +65,18 @@ class Model:
         """Reset the model state"""
         self._model.reset()
 
+    @staticmethod
+    def _np_f32_to_i16(x: np.ndarray) -> np.ndarray:
+        """
+        Convert to given np array with dtype f32 to a np array with dtype i16, convert data.
+        Args:
+            x: numpy array, dtype f32, data should be in range -1.0 to 1.0
+
+        Returns:
+            numpy array, dtype int16, data will be scaled from -32767 to 32767
+        """
+        return (np.clip(x, -1.0, 1.0) * 32767).astype(np.int16)
+
     def predict(self, x: np.ndarray, patience: int | None = None, debounce_time: float| None = None, threshold: float | None = None) -> bool:
         """
         Predict if the wake word was spoken
@@ -84,7 +96,7 @@ class Model:
         threshold = self.DEFAULT_THRESHOLD if threshold is None else float(threshold)
 
         # convert to int16
-        x = (x * 32767).astype(np.int16)
+        x = self._np_f32_to_i16(x)
 
         if patience is None:
             patience = {}
@@ -93,15 +105,12 @@ class Model:
                 self.model_name: patience,
             }
 
-        if threshold is None:
-            threshold_param = {}
-        else:
-            threshold_param = {
-                self.model_name: threshold,
-            }
-
         if debounce_time is None:
             debounce_time = 0.0
+
+        threshold_param = {
+            self.model_name: threshold,
+        }
 
         return self._model.predict(x, patience=patience, debounce_time=debounce_time, threshold=threshold_param)[self.model_name] > threshold
 
@@ -123,12 +132,12 @@ class Model:
         threshold = self.DEFAULT_THRESHOLD if threshold is None else float(threshold)
 
         # convert to int16
-        x = (x * 32767).astype(np.int16)
+        x = self._np_f32_to_i16(x)
 
+        count_samples = len(x) // self.MIN_SAMPLES
         prediction = 0
-        while len(x) >= self.MIN_SAMPLES:
-            current = x[:self.MIN_SAMPLES]
-            x = x[self.MIN_SAMPLES:]
+        for i in range(count_samples):
+            current = x[i * self.MIN_SAMPLES: (i + 1) * self.MIN_SAMPLES]
             prediction = max(self._model.predict(current)[self.model_name], prediction)
 
         return prediction > threshold
