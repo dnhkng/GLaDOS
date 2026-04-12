@@ -27,8 +27,8 @@ class Model:
     """
     AUDIO_SAMPLE_RATE = 16000  # audio/microphone sample rate
     MIN_SAMPLES = 1280 # minimum amount of audio samples needed
-    DEFAULT_MELSPEC_MODEL_PATH = resource_path(f"models/openwakeword/melspec.onnx")  # Model path to melspectogram model
-    DEFAULT_EMBEDDING_MODEL_PATH = resource_path(f"models/openwakeword/embedding.onnx")  # Model path to embedding model
+    DEFAULT_MELSPEC_MODEL_PATH = resource_path("models/openwakeword/melspec.onnx")  # Model path to melspectogram model
+    DEFAULT_EMBEDDING_MODEL_PATH = resource_path("models/openwakeword/embedding.onnx")  # Model path to embedding model
     DEFAULT_THRESHOLD = 0.7 # Default threshold for a successful prediction
 
     def __init__(self, wakeword_model_path: Path, melspec_model_path: Path | None = None, embedding_model_path: Path | None = None):
@@ -94,16 +94,16 @@ class Model:
             }
 
         if threshold is None:
-            threshold = {}
+            threshold_param = {}
         else:
-            threshold = {
+            threshold_param = {
                 self.model_name: threshold,
             }
 
         if debounce_time is None:
             debounce_time = 0.0
 
-        return self._model.predict(x, patience=patience, debounce_time=debounce_time, threshold=threshold)[self.model_name] > threshold
+        return self._model.predict(x, patience=patience, debounce_time=debounce_time, threshold=threshold_param)[self.model_name] > threshold
 
     def predict_multi_sample(self, x: np.ndarray, threshold: float | None = None) -> bool:
         """
