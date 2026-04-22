@@ -124,12 +124,13 @@ class GladosConfig(BaseModel):
     mcp_servers: list[MCPServerConfig] | None = None
 
     @classmethod
-    def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
+    def from_yaml(cls, paths: str | Path | list[str] | list[Path], key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
         """
-        Load a GladosConfig instance from a YAML configuration file.
+        Load a GladosConfig instance from one or more configuration files.
+        Explicitly specified options in later configuration files override options specified in earlier files.
 
         Parameters:
-            path: Path to the YAML configuration file
+            paths: Path to one or multiple YAML configuration files
             key_to_config: Tuple of keys to navigate nested configuration
 
         Returns:
@@ -137,26 +138,55 @@ class GladosConfig(BaseModel):
 
         Raises:
             ValueError: If the YAML content is invalid
-            OSError: If the file cannot be read
+            OSError: If a file cannot be read
             pydantic.ValidationError: If the configuration is invalid
         """
-        path = Path(path)
 
-        # Try different encodings
-        for encoding in ["utf-8", "utf-8-sig"]:
-            try:
-                data = yaml.safe_load(path.read_text(encoding=encoding))
-                break
-            except UnicodeDecodeError:
-                if encoding == "utf-8-sig":
-                    raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
+        # if config is a single path, create a single-element list
+        if isinstance(paths, str) or isinstance(paths, Path):
+            paths = [paths]
 
-        # Navigate through nested keys
-        config = data
-        for key in key_to_config:
-            config = config[key]
+        config = dict()
+
+        for path in paths:
+            path = Path(path)
+
+            # Try different encodings
+            for encoding in ["utf-8", "utf-8-sig"]:
+                try:
+                    data = yaml.safe_load(path.read_text(encoding=encoding))
+                    break
+                except UnicodeDecodeError:
+                    if encoding == "utf-8-sig":
+                        raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
+
+            data = data or dict()
+
+            # Navigate through nested keys
+            for key in key_to_config:
+                data = data[key]
+
+            # Update config dict - config from later paths overrides earlier config
+            config = GladosConfig._dict_deep_merge(config, data)
 
         return cls.model_validate(config)
+
+    @staticmethod
+    def _dict_deep_merge(a: dict, b: dict) -> dict:
+        """
+        Recursively merge two dictionaries into one.
+        Values from the second dictionary override values from the first.
+        Note: mutates the first dictionary.
+
+        Returns:
+            The merged dictionary.
+        """
+        for key in b:
+            if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+                GladosConfig._dict_deep_merge(a[key], b[key])
+            else:
+                a[key] = b[key]
+        return a
 
     def to_chat_messages(self) -> list[dict[str, str]]:
         """Convert personality preprompt to chat message format."""
@@ -833,15 +863,16 @@ class Glados:
         )
 
     @classmethod
-    def from_yaml(cls, path: str) -> "Glados":
+    def from_yaml(cls, path: str | Path | list[str] | list[Path]) -> "Glados":
         """
-        Create a Glados instance from a configuration file.
+        Create a Glados instance from one or more configuration files.
+        Explicitly specified options in later configuration files override options specified in earlier files.
 
         Parameters:
-            path (str): Path to the YAML configuration file containing Glados settings.
+            path: One or multiple paths to the YAML configuration file(s) containing Glados settings.
 
         Returns:
-            Glados: A new Glados instance configured with settings from the specified YAML file.
+            Glados: A new Glados instance configured with settings from the specified YAML file(s).
 
         Example:
             glados = Glados.from_yaml('config/default.yaml')
