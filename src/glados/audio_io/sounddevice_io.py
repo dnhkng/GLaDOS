@@ -2,6 +2,8 @@ import queue
 import threading
 from typing import Any
 
+import soxr
+
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
@@ -44,7 +46,11 @@ class SoundDeviceAudioIO:
 
         self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
         self.input_stream: sd.InputStream | None = None
+        self._output_stream: sd.OutputStream | None = None
         self._is_playing = False
+        self._playback_position = 0
+        self._playback_audio: NDArray[np.float32] = np.array([], dtype=np.float32)
+        self._playback_done = threading.Event()
         self._playback_thread = None
         self._stop_event = threading.Event()
 
@@ -137,22 +143,53 @@ class SoundDeviceAudioIO:
 
         # Stop any existing playback
         self.stop_speaking()
-
-        # Reset the stop event
         self._stop_event.clear()
 
-        logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio_data)} samples")
+        # Ensure mono float32
+        audio = np.asarray(audio_data, dtype=np.float32)
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+
+        # Resample to device native rate if needed to avoid low-quality SRC in PortAudio
+        device_rate = int(sd.query_devices(kind="output")["default_samplerate"])
+        if sample_rate != device_rate:
+            audio = soxr.resample(audio, sample_rate, device_rate, quality="HQ")
+            sample_rate = device_rate
+
+        self._playback_audio = audio
+        self._playback_sample_rate = sample_rate
+        self._playback_position = 0
+        self._playback_done = threading.Event()
         self._is_playing = True
-        sd.play(audio_data, sample_rate)
+
+        def _callback(outdata: NDArray[np.float32], frames: int, t: Any, status: sd.CallbackFlags) -> None:
+            if status:
+                logger.debug(f"Playback callback status: {status}")
+            pos = self._playback_position
+            chunk = self._playback_audio[pos : pos + frames]
+            if len(chunk) < frames:
+                outdata[: len(chunk), 0] = chunk
+                outdata[len(chunk) :, 0] = 0
+                self._playback_position += len(chunk)
+                self._playback_done.set()
+                raise sd.CallbackStop
+            else:
+                outdata[:, 0] = chunk
+                self._playback_position += frames
+
+        self._output_stream = sd.OutputStream(
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            callback=_callback,
+            finished_callback=self._playback_done.set,
+        )
+        logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio)} samples")
+        self._output_stream.start()
 
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]:
         """
-        Monitor audio playback progress and return completion status with interrupt detection.
-
-        Streams audio samples through PortAudio and actively tracks the number of samples
-        that have been played. The playback can be interrupted by setting self.processing
-        to False or self.shutdown_event. Uses a non-blocking callback system with a completion event for
-        synchronization.
+        Wait for playback to complete or be interrupted, returning progress.
 
         Args:
             total_samples (int): Total number of samples in the audio data being played.
@@ -165,43 +202,28 @@ class SoundDeviceAudioIO:
             sample_rate = self.SAMPLE_RATE
 
         interrupted = False
-        progress = 0
-        completion_event = threading.Event()
-
-        def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time: dict[str, Any], status: sd.CallbackFlags
-        ) -> None:
-            nonlocal progress, interrupted
-            progress += frames
-            if self._is_playing is False:
-                interrupted = True
-                completion_event.set()
-            if progress >= total_samples:
-                completion_event.set()
-            outdata.fill(0)
 
         try:
-            logger.debug(f"Using sample rate: {sample_rate} Hz, total samples: {total_samples}")
-            stream = sd.OutputStream(
-                callback=stream_callback,
-                samplerate=sample_rate,
-                channels=1,
-                finished_callback=completion_event.set,
-            )
-            with stream:
-                # Add a reasonable maximum timeout to prevent indefinite blocking
-                max_timeout = total_samples / sample_rate
-                completed = completion_event.wait(max_timeout + 1)  # Add a small buffer to ensure completion
-                if not completed:
-                    # If the event timed out, force interruption
-                    self._is_playing = False
+            poll_interval = 0.01
+
+            while True:
+                if self._is_playing is False:
                     interrupted = True
-                    logger.debug("Audio playback timed out, forcing interruption")
+                    break
+                done = self._playback_done.wait(timeout=poll_interval)
+                if done:
+                    break
 
-        except (sd.PortAudioError, RuntimeError):
-            logger.debug("Audio stream already closed or invalid")
+            # Wait a tiny bit to let the stream finish cleanly
+            if not interrupted and hasattr(self, "_output_stream") and self._output_stream is not None:
+                self._output_stream.stop()
 
-        percentage_played = min(int(progress / total_samples * 100), 100)
+        except Exception as e:
+            logger.debug(f"measure_percentage_spoken error: {e}")
+
+        progress = getattr(self, "_playback_position", total_samples)
+        self._is_playing = False
+        percentage_played = min(int(progress / total_samples * 100), 100) if total_samples > 0 else 100
         return interrupted, percentage_played
 
     def check_if_speaking(self) -> bool:
@@ -213,17 +235,19 @@ class SoundDeviceAudioIO:
         return self._is_playing
 
     def stop_speaking(self) -> None:
-        """Stop audio playback and clean up resources.
-
-        Interrupts any ongoing audio playback and waits for the playback thread
-        to terminate. This ensures clean resource management and prevents
-        multiple overlapping playbacks.
-        """
+        """Stop audio playback and clean up resources."""
         if self._is_playing:
-            self._stop_event.set()
-            sd.stop()
-
             self._is_playing = False
+            self._stop_event.set()
+            if hasattr(self, "_playback_done"):
+                self._playback_done.set()
+        if hasattr(self, "_output_stream") and self._output_stream is not None:
+            try:
+                self._output_stream.stop()
+                self._output_stream.close()
+            except Exception:
+                pass
+            self._output_stream = None
 
     def get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
         """Get the queue containing audio samples and VAD confidence.

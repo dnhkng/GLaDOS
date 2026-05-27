@@ -20,6 +20,7 @@ dependencies = [
     "rich>=14.0.0",
     "threadpoolctl>=3.0.0",
     "mcp>=1.25.0",
+    "soxr>=0.3.0",
 ]
 
 [project.optional-dependencies]
