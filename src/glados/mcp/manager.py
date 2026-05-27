@@ -3,6 +3,7 @@ import fnmatch
 import subprocess
 import threading
 import time
+import traceback
 from collections.abc import Iterable
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
@@ -24,6 +25,37 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     StdioServerParameters = None  # type: ignore[assignment]
     stdio_client = None  # type: ignore[assignment]
     streamable_http_client = None  # type: ignore[assignment]
+
+
+def _leaf_exceptions(exc: BaseException, depth: int = 0, max_depth: int = 8) -> list[str]:
+    """Recursively descend ExceptionGroup chains to surface leaf exceptions.
+
+    anyio task groups wrap failures in one or more ``ExceptionGroup`` layers,
+    so logging the top-level exception only shows "unhandled errors in a
+    TaskGroup". This flattens that tree to the underlying causes.
+
+    Args:
+        exc: The exception to unwrap. Any object exposing an ``exceptions``
+            attribute (e.g. ``ExceptionGroup``) is treated as a group and
+            descended; anything else is treated as a leaf.
+        depth: Current recursion depth (internal; callers use the default).
+        max_depth: Safety bound on recursion. Beyond it, descent stops and the
+            current node is reported with an "(unwrap depth exceeded)" prefix
+            rather than recursing further.
+
+    Returns:
+        A flat list of ``"<ExceptionType>: <message>"`` strings, one per leaf
+        exception (or one entry if ``exc`` is not a group).
+    """
+    if depth > max_depth:
+        return [f"(unwrap depth exceeded) {type(exc).__name__}: {exc}"]
+    subs = getattr(exc, "exceptions", None)
+    if subs:
+        out: list[str] = []
+        for sub in subs:
+            out.extend(_leaf_exceptions(sub, depth + 1, max_depth))
+        return out
+    return [f"{type(exc).__name__}: {exc}"]
 
 
 class MCPError(RuntimeError):
@@ -208,7 +240,15 @@ class MCPManager:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
-                logger.warning(f"MCP: server '{config.name}' connection failed: {exc}")
+                # Recursively unwrap nested ExceptionGroups (Python 3.11+) so the
+                # actual leaf exception(s) are visible.
+                leaves = _leaf_exceptions(exc)
+                logger.warning(
+                    f"MCP: server '{config.name}' connection failed: leaves={leaves}"
+                )
+                # Full traceback to WARNING so we don't need DEBUG level enabled.
+                tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                logger.warning(f"MCP: full traceback for '{config.name}':\n{tb}")
                 if self._observability_bus:
                     self._observability_bus.emit(
                         source="mcp",
