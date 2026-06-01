@@ -1402,18 +1402,22 @@ class GladosUI(App[None]):
 
         glados_config = GladosConfig.from_yaml(str(config_path))
         updates: dict[str, object] = {}
-        if self._input_mode_override:
-            if self._input_mode_override == "text":
-                # In TUI text mode, use "none" so neither audio stream nor TextListener
-                # is started. The TUI Input widget handles all text input, avoiding
-                # both high CPU from audio and stdin contention with TextListener.
-                updates["input_mode"] = "none"
-            elif self._input_mode_override == "both":
-                # In TUI+both mode, keep audio ASR active; the TUI Input widget handles
-                # text input, so TextListener is not needed (avoids stdin contention).
-                updates["input_mode"] = "audio"
-            else:
-                updates["input_mode"] = self._input_mode_override
+        # Use the CLI override when supplied, otherwise fall back to whatever
+        # input_mode is in the YAML config. Both paths must remap "text"→"none"
+        # and "both"→"audio" for TUI to avoid stdin contention with TextListener
+        # and unnecessary audio stream startup.
+        effective_input_mode = self._input_mode_override or glados_config.input_mode
+        if effective_input_mode == "text":
+            # In TUI text mode, use "none" so neither audio stream nor TextListener
+            # is started. The TUI Input widget handles all text input, avoiding
+            # both high CPU from audio and stdin contention with TextListener.
+            updates["input_mode"] = "none"
+        elif effective_input_mode == "both":
+            # In TUI+both mode, keep audio ASR active; the TUI Input widget handles
+            # text input, so TextListener is not needed (avoids stdin contention).
+            updates["input_mode"] = "audio"
+        elif self._input_mode_override:
+            updates["input_mode"] = self._input_mode_override
         if self._tts_enabled_override is not None:
             updates["tts_enabled"] = self._tts_enabled_override
         if self._asr_muted_override is not None:
