@@ -203,7 +203,7 @@ class SpeechSynthesizer:
         audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids) for phoneme_ids in phoneme_ids_list]
 
         if audio_chunks:
-            audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T
+            audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).ravel()
             return audio
         return np.array([], dtype=np.float32)
 
