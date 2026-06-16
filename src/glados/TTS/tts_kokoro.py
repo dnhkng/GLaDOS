@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..onnx_utils import create_session_options, get_provider_priority_list
 from ..utils.resources import resource_path
 from .phonemizer import Phonemizer
 
@@ -57,15 +58,11 @@ class SpeechSynthesizer:
 
         self.set_voice(voice)
 
-        providers = ort.get_available_providers()
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
+        providers = get_provider_priority_list()
 
         self.ort_sess = ort.InferenceSession(
             model_path,
-            sess_options=ort.SessionOptions(),
+            sess_options=create_session_options(),
             providers=providers,
         )
         self.phonemizer = Phonemizer()

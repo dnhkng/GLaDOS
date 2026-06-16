@@ -12,6 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..onnx_utils import create_session_options, get_provider_priority_list
 from ..utils.resources import resource_path
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
@@ -170,15 +171,11 @@ class Phonemizer:
         self.token_to_idx = self._load_pickle(self.config.TOKEN_TO_IDX_PATH)
         self.idx_to_token = self._load_pickle(self.config.IDX_TO_TOKEN_PATH)
 
-        providers = ort.get_available_providers()
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
+        providers = get_provider_priority_list()
 
         self.ort_session = ort.InferenceSession(
             self.config.MODEL_PATH,
-            sess_options=ort.SessionOptions(),
+            sess_options=create_session_options(),
             providers=providers,
         )
 
