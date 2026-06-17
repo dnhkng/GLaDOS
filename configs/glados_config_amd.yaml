@@ -10,7 +10,7 @@ Glados:
   tui_theme: "aperture"
   asr_engine: "tdt"
   llm_headers: null
-  wake_word: "jew"
+  wake_word: ""
   voice: "glados"
   announcement: "All neural network modules are now loaded. System Operational."
   
