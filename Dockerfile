@@ -28,4 +28,4 @@ RUN uv sync --extra api --extra cpu --no-dev \
   && uv run glados download
 
 EXPOSE 5050
-CMD ["uv", "run", "litestar", "--app", "glados.api.app:app", "run", "--host", "0.0.0.0", "--port", "5050"]
+CMD ["uv", "run", "litestar", "--app", "glados.api.app:create_app", "run", "--host", "0.0.0.0", "--port", "5050"]

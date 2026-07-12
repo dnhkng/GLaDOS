@@ -1,14 +1,26 @@
-import io
 from functools import lru_cache
+import io
 
 import soundfile as sf
 
-from glados.TTS import get_speech_synthesizer
+from glados.TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from glados.utils import spoken_text_converter
+
+from .config import ApiConfig
+
+_api_config = ApiConfig()
+
+
+def configure_tts(config: ApiConfig) -> None:
+    """Apply API TTS settings and warm models when reuse is enabled."""
+    global _api_config
+    _api_config = config
+    if config.reuse_tts:
+        warm_tts()
 
 
 @lru_cache(maxsize=1)
-def _get_synthesizer():
+def _get_synthesizer() -> SpeechSynthesizerProtocol:
     return get_speech_synthesizer("glados")
 
 
@@ -31,8 +43,13 @@ def write_glados_audio_file(f: str | io.BytesIO, text: str, *, format: str) -> N
         text: Text to convert to speech
         format: Audio format (e.g., "mp3", "wav", "ogg")
     """
-    glados_tts = _get_synthesizer()
-    converted_text = _get_text_converter().text_to_spoken(text)
+    if _api_config.reuse_tts:
+        glados_tts = _get_synthesizer()
+        converted_text = _get_text_converter().text_to_spoken(text)
+    else:
+        glados_tts = get_speech_synthesizer("glados")
+        converted_text = spoken_text_converter.SpokenTextConverter().text_to_spoken(text)
+
     audio = glados_tts.generate_speech_audio(converted_text)
     sf.write(
         f,

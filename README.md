@@ -506,6 +506,19 @@ Or Docker:
 docker compose up -d --build
 ```
 
+By default the API reuses one `SpeechSynthesizer` across requests (`reuse_tts: true` in `configs/api_config.yaml`). Disable it to restore per-request model loading:
+
+```yaml
+Api:
+  reuse_tts: false
+```
+
+Environment override:
+
+```bash
+GLADOS_API_REUSE_TTS=false ./scripts/serve
+```
+
 Generate speech:
 ```bash
 curl -X POST http://localhost:5050/v1/audio/speech \
