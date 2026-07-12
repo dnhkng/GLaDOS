@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import io
 from typing import Literal
@@ -6,7 +7,7 @@ from litestar import Litestar, post
 from litestar.response import Stream
 
 from .log import structlog_plugin
-from .tts import write_glados_audio_file
+from .tts import warm_tts, write_glados_audio_file
 
 Voice = Literal["glados"]
 ResponseFormat = Literal["mp3", "wav", "ogg"]
@@ -49,4 +50,10 @@ async def create_speech(data: RequestData) -> Stream:
     )
 
 
-app = Litestar([create_speech], plugins=[structlog_plugin])
+@asynccontextmanager
+async def lifespan(app: Litestar):
+    warm_tts()
+    yield
+
+
+app = Litestar([create_speech], plugins=[structlog_plugin], lifespan=[lifespan])
