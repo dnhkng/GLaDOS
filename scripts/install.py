@@ -4,6 +4,7 @@ from pathlib import Path
 import platform
 from shutil import which
 import subprocess
+import sys
 
 
 def is_uv_installed() -> bool:
@@ -16,6 +17,23 @@ def is_uv_installed() -> bool:
     return which("uv") is not None
 
 
+def uv_command() -> list[str]:
+    """
+    Resolve the best way to invoke 'uv' on this system.
+
+    Prefers the 'uv' executable on PATH, but falls back to the uv Python module
+    ("python -m uv"). A Windows pip user-install can place uv on a directory that
+    is not on PATH, which would otherwise crash every later 'uv' call with
+    FileNotFoundError (WinError 2).
+
+    Returns:
+        list[str]: The argv to invoke uv, e.g. ['uv'] or [sys.executable, '-m', 'uv'].
+    """
+    if which("uv") is not None:
+        return ["uv"]
+    return [sys.executable, "-m", "uv"]
+
+
 def install_uv() -> None:
     """
     Install the UV package management tool across different platforms.
@@ -25,7 +43,7 @@ def install_uv() -> None:
     - On other platforms, it uses a curl-based installation script from Astral.sh
 
     Raises:
-        subprocess.CalledProcessError: If the installation or update commands fail
+        subprocess.CalledProcessError: If the pip-based installation fails
     """
     if is_uv_installed():
         print("UV is already installed")
@@ -33,13 +51,16 @@ def install_uv() -> None:
 
     print("Installing UV...")
     if platform.system() == "Windows":
-        subprocess.run(["pip", "install", "uv"])
-        subprocess.run(["uv", "self", "update"])
+        subprocess.run([sys.executable, "-m", "pip", "install", "uv"], check=True)
     elif platform.system() == "PotatOS":
         raise Exception("Oh no. Not again.")
     else:
         subprocess.run("curl -LsSf https://astral.sh/uv/install.sh | sh", shell=True)
-        subprocess.run(["uv", "self", "update"])
+
+    try:
+        subprocess.run([*uv_command(), "self", "update"])
+    except FileNotFoundError:
+        print("WARNING: 'uv' executable is not available on PATH; subsequent commands will use 'python -m uv'.")
 
 
 def main() -> None:
@@ -73,14 +94,9 @@ def main() -> None:
     install_uv()
 
     # Create virtual environment
-    subprocess.run(["uv", "venv", "--python", "3.12.8"])
+    subprocess.run([*uv_command(), "venv", "--python", "3.12.8"])
 
-    # Determine if CUDA is available
-    if platform.system() == "Windows":
-        venv_python = ".venv/bin/python"
-    else:
-        venv_python = ".venv/bin/python"
-        os.environ["PATH"] = f"{os.path.dirname(venv_python)}:{os.environ['PATH']}"
+    venv_bin = ".venv\\Scripts" if os.name == "nt" else ".venv/bin"
 
     try:
         has_cuda = subprocess.run(["nvcc", "--version"], capture_output=True, check=False).returncode == 0
@@ -93,12 +109,12 @@ def main() -> None:
 
     # Install project in editable mode
     env = os.environ.copy()
-    env["PATH"] = f"{os.path.abspath('.venv/bin')}:{env['PATH']}"
+    env["PATH"] = f"{os.path.abspath(venv_bin)}:{env['PATH']}"
     os.environ["VIRTUAL_ENV"] = os.path.abspath(".venv")
-    os.system(f"uv pip install -e .[{','.join(extras)}]")
+    subprocess.run([*uv_command(), "pip", "install", "-e", f".[{','.join(extras)}]"], env=env)
 
     # Download and verify model files
-    os.system("uv run glados download")
+    subprocess.run([*uv_command(), "run", "glados", "download"], env=env)
 
 
 if __name__ == "__main__":
