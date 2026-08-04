@@ -8,10 +8,11 @@ from numpy.typing import NDArray
 import sounddevice as sd  # type: ignore
 
 from . import VAD
+from .base import AudioIO
 from .resample import resample as resample_audio
 
 
-class SoundDeviceAudioIO:
+class SoundDeviceAudioIO(AudioIO):
     """Audio I/O implementation using sounddevice for both input and output.
 
     This class provides an implementation of the AudioIO interface using the

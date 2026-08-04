@@ -108,6 +108,7 @@ class GladosConfig(BaseModel):
     api_key: str | None
     interruptible: bool
     audio_io: str
+    audio_io_options: dict[str, Any] | None = None
     input_mode: Literal["audio", "text", "both"] = "audio"
     tts_enabled: bool = True
     asr_muted: bool = False
@@ -848,7 +849,10 @@ class Glados:
         tts_model: SpeechSynthesizerProtocol
         tts_model = get_speech_synthesizer(config.voice)
 
-        audio_io = get_audio_system(backend_type=config.audio_io)
+        audio_io = get_audio_system(
+            backend_type=config.audio_io,
+            backend_options=config.audio_io_options,
+        )
 
         return cls(
             asr_model=asr_model,
