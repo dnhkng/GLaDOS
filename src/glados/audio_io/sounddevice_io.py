@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 import sounddevice as sd  # type: ignore
 
 from . import VAD
+from .resample import resample as resample_audio
 
 
 class SoundDeviceAudioIO:
@@ -145,6 +146,21 @@ class SoundDeviceAudioIO:
         self.stop_speaking()
         self._stop_event = threading.Event()
 
+        # Resample to the output device's native sample rate so PortAudio's
+        # low-quality built-in sample-rate converter is never used. This avoids
+        # the audible crackling/distortion that occurs when the TTS rate differs
+        # from the device rate (e.g. 22050 Hz TTS out, 44100 Hz device).
+        try:
+            device_rate = int(sd.query_devices(kind="output")["default_samplerate"])
+        except Exception as e:
+            device_rate = 0
+            logger.debug(f"Could not query output device sample rate: {e}")
+
+        if device_rate > 0 and sample_rate != device_rate:
+            logger.debug(f"Resampling audio {sample_rate} Hz -> {device_rate} Hz")
+            audio_data = resample_audio(audio_data, sample_rate, device_rate)
+            sample_rate = device_rate
+
         logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio_data)} samples")
         self._is_playing = True
         self._pending_audio = audio_data
@@ -170,10 +186,15 @@ class SoundDeviceAudioIO:
         if audio_data is None:
             return False, 100
 
-        if sample_rate is None:
+        # Prefer the sample rate stored by start_speaking() -- that reflects any
+        # device-rate resampling that happened, so the stream opens at the true
+        # playback rate and the timeout arithmetic stays correct.
+        if self._pending_sample_rate and self._pending_sample_rate > 0:
+            sample_rate = self._pending_sample_rate
+        elif sample_rate is None:
             sample_rate = self._pending_sample_rate
 
-        if sample_rate <= 0:
+        if sample_rate is None or sample_rate <= 0:
             logger.warning(f"Invalid sample rate {sample_rate}; skipping playback")
             if self._pending_audio is audio_data:
                 self._pending_audio = None
