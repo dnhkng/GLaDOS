@@ -6,6 +6,7 @@ configuration management, and component coordination.
 """
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import queue
 import sys
@@ -14,7 +15,7 @@ import time
 from typing import Any, Callable, Literal
 
 from loguru import logger
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, model_validator
 import yaml
 
 from ..ASR import TranscriberProtocol, get_audio_transcriber
@@ -123,13 +124,23 @@ class GladosConfig(BaseModel):
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
 
+    @model_validator(mode="after")
+    def _resolve_api_key_from_env(self) -> "GladosConfig":
+        """Fall back to MINIMAX_API_KEY environment variable when api_key is not set."""
+        if self.api_key is None:
+            env_key = os.environ.get("MINIMAX_API_KEY")
+            if env_key:
+                self.api_key = env_key
+        return self
+
     @classmethod
-    def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
+    def from_yaml(cls, paths: str | Path | list[str] | list[Path], key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
         """
-        Load a GladosConfig instance from a YAML configuration file.
+        Load a GladosConfig instance from one or more configuration files.
+        Explicitly specified options in later configuration files override options specified in earlier files.
 
         Parameters:
-            path: Path to the YAML configuration file
+            paths: Path to one or multiple YAML configuration files
             key_to_config: Tuple of keys to navigate nested configuration
 
         Returns:
@@ -137,26 +148,55 @@ class GladosConfig(BaseModel):
 
         Raises:
             ValueError: If the YAML content is invalid
-            OSError: If the file cannot be read
+            OSError: If a file cannot be read
             pydantic.ValidationError: If the configuration is invalid
         """
-        path = Path(path)
 
-        # Try different encodings
-        for encoding in ["utf-8", "utf-8-sig"]:
-            try:
-                data = yaml.safe_load(path.read_text(encoding=encoding))
-                break
-            except UnicodeDecodeError:
-                if encoding == "utf-8-sig":
-                    raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
+        # if config is a single path, create a single-element list
+        if isinstance(paths, str) or isinstance(paths, Path):
+            paths = [paths]
 
-        # Navigate through nested keys
-        config = data
-        for key in key_to_config:
-            config = config[key]
+        config = dict()
+
+        for path in paths:
+            path = Path(path)
+
+            # Try different encodings
+            for encoding in ["utf-8", "utf-8-sig"]:
+                try:
+                    data = yaml.safe_load(path.read_text(encoding=encoding))
+                    break
+                except UnicodeDecodeError:
+                    if encoding == "utf-8-sig":
+                        raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
+
+            data = data or dict()
+
+            # Navigate through nested keys
+            for key in key_to_config:
+                data = data[key]
+
+            # Update config dict - config from later paths overrides earlier config
+            config = GladosConfig._dict_deep_merge(config, data)
 
         return cls.model_validate(config)
+
+    @staticmethod
+    def _dict_deep_merge(a: dict, b: dict) -> dict:
+        """
+        Recursively merge two dictionaries into one.
+        Values from the second dictionary override values from the first.
+        Note: mutates the first dictionary.
+
+        Returns:
+            The merged dictionary.
+        """
+        for key in b:
+            if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+                GladosConfig._dict_deep_merge(a[key], b[key])
+            else:
+                a[key] = b[key]
+        return a
 
     def to_chat_messages(self) -> list[dict[str, str]]:
         """Convert personality preprompt to chat message format."""
@@ -522,6 +562,9 @@ class Glados:
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
+            # Wire emotion agent to autonomy loop for vision events
+            if self._emotion_agent is not None:
+                self.autonomy_loop.set_emotion_agent(self._emotion_agent)
             if not self.vision_config:
                 self.autonomy_ticker_thread = threading.Thread(
                     target=self._run_autonomy_ticker,
@@ -710,7 +753,7 @@ class Glados:
         self.subagent_manager.register(emotion_agent)
         self._emotion_agent = emotion_agent  # Keep reference for event pushing
         # Wire emotion agent to autonomy loop for vision events
-        if self.autonomy_config.enabled and hasattr(self, "autonomy_loop"):
+        if self.autonomy_config.enabled and self.autonomy_loop:
             self.autonomy_loop.set_emotion_agent(emotion_agent)
 
         # Compaction agent - monitors conversation size and compacts when needed
@@ -830,15 +873,16 @@ class Glados:
         )
 
     @classmethod
-    def from_yaml(cls, path: str) -> "Glados":
+    def from_yaml(cls, path: str | Path | list[str] | list[Path]) -> "Glados":
         """
-        Create a Glados instance from a configuration file.
+        Create a Glados instance from one or more configuration files.
+        Explicitly specified options in later configuration files override options specified in earlier files.
 
         Parameters:
-            path (str): Path to the YAML configuration file containing Glados settings.
+            path: One or multiple paths to the YAML configuration file(s) containing Glados settings.
 
         Returns:
-            Glados: A new Glados instance configured with settings from the specified YAML file.
+            Glados: A new Glados instance configured with settings from the specified YAML file(s).
 
         Example:
             glados = Glados.from_yaml('config/default.yaml')

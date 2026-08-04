@@ -3,7 +3,8 @@ import fnmatch
 import subprocess
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
+from contextlib import asynccontextmanager
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from typing import Any
@@ -17,13 +18,29 @@ try:
     from mcp import ClientSession
     from mcp.client.sse import sse_client
     from mcp.client.stdio import StdioServerParameters, stdio_client
-    from mcp.client.streamable_http import streamable_http_client
+    from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 except ImportError:  # pragma: no cover - handled in runtime checks
     ClientSession = None  # type: ignore[assignment]
     sse_client = None  # type: ignore[assignment]
     StdioServerParameters = None  # type: ignore[assignment]
     stdio_client = None  # type: ignore[assignment]
+    create_mcp_http_client = None  # type: ignore[assignment]
     streamable_http_client = None  # type: ignore[assignment]
+
+
+@asynccontextmanager
+async def _http_transport(url: str, headers: dict[str, str]) -> AsyncIterator[Any]:
+    """Open a streamable-HTTP MCP transport, applying ``headers`` for auth.
+
+    The canonical ``streamable_http_client`` takes a pre-built
+    ``httpx.AsyncClient`` (via ``http_client=``) rather than a ``headers``
+    argument, and it does *not* manage the lifecycle of a caller-supplied
+    client. So we build one here with MCP defaults plus the auth headers and
+    close it when the transport context exits.
+    """
+    async with create_mcp_http_client(headers=headers) as client:
+        async with streamable_http_client(url, http_client=client) as streams:
+            yield streams
 
 
 class MCPError(RuntimeError):
@@ -191,7 +208,9 @@ class MCPManager:
         retry_delay = 2.0
         while not self._shutdown_event.is_set() and self._shutdown_async:
             try:
-                async with self._open_transport(config) as (read_stream, write_stream):
+                # streamable_http_client yields 3 values (read, write, get_session_id);
+                # sse_client and stdio_client yield 2. *_ absorbs the extra trailing value.
+                async with self._open_transport(config) as (read_stream, write_stream, *_):
                     async with ClientSession(read_stream, write_stream) as session:
                         await session.initialize()
                         self._sessions[config.name] = session
@@ -229,6 +248,25 @@ class MCPManager:
                     )
 
     def _open_transport(self, config: MCPServerConfig):
+        """Return an *un-entered* async transport context manager for ``config``.
+
+        The caller is expected to ``async with`` the returned object inside
+        ``_session_runner``. Selection is by ``config.transport``:
+
+        - ``stdio``: ``stdio_client`` (yields a 2-tuple of read/write streams).
+        - ``http``: ``streamable_http_client`` via ``_http_transport`` (yields a
+          3-tuple: read, write, and a ``get_session_id`` callable — the runner
+          absorbs the extra value with ``*_``).
+        - ``sse``: ``sse_client`` (yields a 2-tuple of read/write streams).
+
+        For ``http``/``sse``, ``config.headers`` are forwarded and, if
+        ``config.token`` is set, an ``Authorization: Bearer <token>`` header is
+        added unless the caller already supplied one.
+
+        Raises:
+            MCPError: if a required ``command``/``url`` is missing for the
+                transport, or the transport is unsupported.
+        """
         if config.transport == "stdio":
             if not config.command:
                 raise MCPError(f"MCP server '{config.name}' requires a command for stdio transport.")
@@ -244,7 +282,10 @@ class MCPManager:
             headers.setdefault("Authorization", f"Bearer {config.token}")
 
         if config.transport == "http":
-            return streamable_http_client(str(config.url), headers=headers)
+            # Unified path: always build our own auth-bearing client. For an
+            # empty header set this is behaviourally identical to the SDK's
+            # default (create_mcp_http_client(headers={}) == its no-arg client).
+            return _http_transport(str(config.url), headers)
         if config.transport == "sse":
             return sse_client(str(config.url), headers=headers)
 

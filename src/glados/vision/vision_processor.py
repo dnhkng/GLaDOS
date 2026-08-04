@@ -129,16 +129,16 @@ class VisionProcessor:
         if self._capture is not None:
             self._capture.release()
 
-        self._capture = cv2.VideoCapture(self.config.camera_index)
+        self._capture = cv2.VideoCapture(self.config.camera_spec)
         if not self._capture.isOpened():
             logger.error(
-                "VisionProcessor: Unable to open camera index {}. Retrying in {:.1f}s.",
-                self.config.camera_index,
+                "VisionProcessor: Unable to open camera spec {}. Retrying in {:.1f}s.",
+                self.config.redacted_camera_spec_for_log(),
                 self.config.capture_interval_seconds,
             )
             return False
 
-        logger.success("VisionProcessor: Camera {} opened successfully.", self.config.camera_index)
+        logger.success("VisionProcessor: Camera {} opened successfully.", self.config.redacted_camera_spec_for_log())
         return True
 
     def _grab_frame(self) -> NDArray[np.uint8] | None:
@@ -150,7 +150,7 @@ class VisionProcessor:
         assert self._capture is not None
         ret, frame = self._capture.read()
         if not ret or frame is None:
-            logger.warning("VisionProcessor: Failed to capture frame from camera {}.", self.config.camera_index)
+            logger.warning("VisionProcessor: Failed to capture frame from camera {}.", self.config.redacted_camera_spec_for_log())
             return None
         return frame
 

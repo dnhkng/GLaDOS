@@ -255,6 +255,8 @@ class ToolExecutor:
                     item = {**item, "autonomy": True}
                 if "_enqueued_at" not in item:
                     item = {**item, "_enqueued_at": time.time(), "_lane": "autonomy"}
+                if item.get("role") == "tool" and "_allow_tools" not in item:
+                    item = {**item, "_allow_tools": False}
                 try:
                     self._base_queue.put_nowait(item)
                 except queue.Full:

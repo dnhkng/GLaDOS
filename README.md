@@ -341,13 +341,35 @@ Works without GPU, just slower.
 
 GLaDOS needs an LLM. Options:
 1. [Ollama](https://github.com/ollama/ollama) (easiest): `ollama pull llama3.2`
-2. Any OpenAI-compatible API
+2. Any OpenAI-compatible API (OpenAI, [MiniMax](https://platform.minimaxi.com/), OpenRouter, etc.)
 
 Configure in `glados_config.yaml`:
 ```yaml
 completion_url: "http://localhost:11434/v1/chat/completions"
 model: "llama3.2"
 api_key: ""  # if needed
+```
+
+#### Cloud LLM Providers
+
+You can use any OpenAI-compatible cloud API. Example configs are provided in `configs/`:
+
+**MiniMax** — high-performance models with 512K context and built-in reasoning:
+```yaml
+llm_model: "MiniMax-M3"
+completion_url: "https://api.minimax.io/v1/chat/completions"
+api_key: "your-minimax-api-key"
+```
+See `configs/minimax_config.yaml` for a complete configuration. Models: `MiniMax-M3` (latest flagship, default), `MiniMax-M2.7` (previous generation), `MiniMax-M2.7-highspeed` (low-latency).
+
+**OpenRouter** — access multiple models through one API:
+```yaml
+llm_model: "openai/gpt-4o"
+completion_url: "https://openrouter.ai/api/v1/chat/completions"
+api_key: "your-openrouter-api-key"
+llm_headers:
+  HTTP-Referer: "https://github.com/dnhkng/GLaDOS"
+  X-Title: "GLaDOS"
 ```
 
 ### Platform Notes
@@ -408,16 +430,21 @@ Press `Ctrl+P` to open the command palette. Available commands:
 
 ### Change the LLM
 
+**Local (Ollama):**
 ```bash
 ollama pull mistral
 ```
-
 Then in `glados_config.yaml`:
 ```yaml
 model: "mistral"
 ```
-
 Browse models: [ollama.com/library](https://ollama.com/library)
+
+**Cloud (MiniMax, OpenRouter, etc.):**
+```bash
+uv run glados start --config configs/minimax_config.yaml
+```
+Or edit `glados_config.yaml` with your provider's `completion_url`, `llm_model`, and `api_key`. See [LLM Backend](#llm-backend) for details.
 
 ### Change the Voice
 > *“I'm speaking in an accent that is beyond her range of hearing.”  -  Wheatley*
@@ -507,15 +534,3 @@ jupyter notebook demo.ipynb
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=dnhkng/GlaDOS&type=Date)](https://star-history.com/#dnhkng/GlaDOS&Date)
-
-## Sponsors
-
-<div align="center">
-
-### [Wispr Flow](https://ref.wisprflow.ai/qbHPGg8)
-
-[![Sponsor](https://raw.githubusercontent.com/dnhkng/assets/refs/heads/main/Flow-symbol.svg)](https://ref.wisprflow.ai/qbHPGg8)
-
-[**Talk to code, stay in the Flow.**](https://ref.wisprflow.ai/qbHPGg8)
-
-</div>

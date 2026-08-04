@@ -165,13 +165,35 @@ Tools will be available as:
 
 ### Home Assistant
 
+Home Assistant exposes its MCP server at the `/api/mcp` endpoint. Configure it using
+the Streamable HTTP transport (`http`):
+
 ```yaml
 mcp_servers:
   - name: "home_assistant"
     transport: "http"
-    url: "http://homeassistant.local:8123/mcp"
+    url: "http://homeassistant.local:8123/api/mcp"
     token: "YOUR_LONG_LIVED_TOKEN"
 ```
+
+> **Note**: Older versions of the Home Assistant MCP integration may not support the
+> Streamable HTTP transport directly. In that case, use
+> [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) as a `stdio` bridge:
+>
+> ```yaml
+> mcp_servers:
+>   - name: "home_assistant"
+>     transport: "stdio"
+>     command: "mcp-proxy"
+>     args:
+>       - "--transport=streamablehttp"
+>       - "--stateless"
+>       - "http://homeassistant.local:8123/api/mcp"
+>     env:
+>       API_ACCESS_TOKEN: "YOUR_LONG_LIVED_TOKEN"
+> ```
+>
+> Install mcp-proxy with: `pip install mcp-proxy`
 
 ### With Headers
 
@@ -197,7 +219,7 @@ Only expose specific tools:
 mcp_servers:
   - name: "home_assistant"
     transport: "http"
-    url: "http://homeassistant.local:8123/mcp"
+    url: "http://homeassistant.local:8123/api/mcp"
     token: "YOUR_TOKEN"
     allowed_tools:
       - "light.*"        # All light tools
@@ -228,7 +250,7 @@ MCP servers can provide **resources** - contextual data injected into the LLM co
 mcp_servers:
   - name: "home_assistant"
     transport: "http"
-    url: "http://homeassistant.local:8123/mcp"
+    url: "http://homeassistant.local:8123/api/mcp"
     token: "YOUR_TOKEN"
     context_resources:
       - "ha://config"
