@@ -1,6 +1,7 @@
+"""Local microphone and speaker backend implemented with sounddevice."""
+
 import queue
 import threading
-from typing import Any
 
 from loguru import logger
 import numpy as np
@@ -8,10 +9,11 @@ from numpy.typing import NDArray
 import sounddevice as sd  # type: ignore
 
 from . import VAD
+from .base import AudioIO
 from .resample import resample as resample_audio
 
 
-class SoundDeviceAudioIO:
+class SoundDeviceAudioIO(AudioIO):
     """Audio I/O implementation using sounddevice for both input and output.
 
     This class provides an implementation of the AudioIO interface using the
@@ -217,8 +219,9 @@ class SoundDeviceAudioIO:
         stop_event = self._stop_event
 
         def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time_info: Any, status: sd.CallbackFlags
+            outdata: NDArray[np.float32], frames: int, time_info: object, status: sd.CallbackFlags
         ) -> None:
+            """Fill the next output block and track completion or interruption."""
             nonlocal position, interrupted
 
             if stop_event.is_set():
@@ -296,3 +299,8 @@ class SoundDeviceAudioIO:
                         (audio_sample, vad_confidence)
         """
         return self._sample_queue
+
+    def close(self) -> None:
+        """Release local input and output resources."""
+        self.stop_speaking()
+        self.stop_listening()
