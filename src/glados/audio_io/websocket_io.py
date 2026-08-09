@@ -1,3 +1,5 @@
+"""WebSocket-backed microphone capture and synchronized speaker playback."""
+
 import asyncio
 import concurrent.futures
 from dataclasses import dataclass
@@ -42,6 +44,7 @@ class MicState:
     silence_chunks: int = 0
 
     def inactive(self, max_silence_chunks: int) -> bool:
+        """Return whether this microphone has been silent long enough to yield."""
         return self.silence_chunks >= max_silence_chunks
 
 
@@ -162,6 +165,7 @@ class WebsocketAudioIO(AudioIO):
         port: int,
         result_future: concurrent.futures.Future[None],
     ) -> None:
+        """Run the asynchronous server and report startup errors to the caller."""
         try:
             asyncio.run(self._run_server(server, port, result_future))
         except Exception as ex:
@@ -337,14 +341,21 @@ class WebsocketAudioIO(AudioIO):
                 logger.warning("WebSocket audio server thread did not stop within 5 seconds")
 
     def _track_is_active(self, track_id: uuid.UUID) -> bool:
+        """Return whether track_id is still the currently published track."""
         with self._audio_lock:
             return self._is_playing and self._audio_data is not None and self._audio_data.track_id == track_id
 
     def _playback_should_stop(self) -> bool:
+        """Return whether the active track has received an interruption request."""
         with self._audio_lock:
             return self._stop_playback
 
-    async def _run_server(self, server: str, port: int, result_future: concurrent.futures.Future) -> None:
+    async def _run_server(
+        self,
+        server: str,
+        port: int,
+        result_future: concurrent.futures.Future[None],
+    ) -> None:
         """Runs the websocket server.
 
         Args:
@@ -355,7 +366,10 @@ class WebsocketAudioIO(AudioIO):
 
         # re-route logging of websockets
         class LogAdapter(logging.Handler):
+            """Forward standard WebSocket logs to Loguru."""
+
             def emit(self, record: logging.LogRecord) -> None:
+                """Forward one standard logging record at its original level."""
                 msg = self.format(record)
                 level = record.levelname.lower()
                 getattr(logger, level)(msg)
@@ -392,12 +406,17 @@ class WebsocketAudioIO(AudioIO):
         Args:
             websocket: Websocket connection
         """
-        if websocket.request.path == "/speaker":
+        request = websocket.request
+        if request is None:
+            logger.error("WebSocket connection has no request path")
+            return
+
+        if request.path == "/speaker":
             await self._server_speaker(websocket)
-        elif websocket.request.path == "/microphone":
+        elif request.path == "/microphone":
             await self._server_microphone(websocket)
         else:
-            logger.error(f"Unknown websocket path: '{websocket.request.path}'")
+            logger.error(f"Unknown websocket path: '{request.path}'")
 
     async def _server_speaker(self, websocket: websockets.ServerConnection) -> None:
         """
@@ -535,6 +554,7 @@ class WebsocketAudioIO(AudioIO):
         room = self._default_room_tag
 
         async def relinquish() -> None:
+            """Release ownership only when this connection currently owns it."""
             async with self._mic_state_lock:
                 if self._mic_state.current_id == client_id:
                     self._mic_state.current_id = None
@@ -544,6 +564,13 @@ class WebsocketAudioIO(AudioIO):
             await websocket.send("sampleRate:" + str(self.SAMPLE_RATE))
         except websockets.exceptions.ConnectionClosed:
             return
+
+        # The default mode is deliberately single-source: the first connected
+        # microphone owns input until it disconnects or listening stops.
+        if not self._rooms:
+            async with self._mic_state_lock:
+                if self._mic_state.current_id is None:
+                    self._mic_state.current_id = client_id
 
         while True:
             # wait for audio
@@ -585,6 +612,13 @@ class WebsocketAudioIO(AudioIO):
                             elif self._mic_state.inactive(self._mic_max_silence_chunks) and vad_confidence:
                                 self._mic_state.current_id = client_id
 
+                            has_control = self._mic_state.current_id == client_id
+
+                        else:
+                            # Reclaim ownership after a stop/start cycle. Only
+                            # one connected microphone may feed the queue.
+                            if self._mic_state.current_id is None:
+                                self._mic_state.current_id = client_id
                             has_control = self._mic_state.current_id == client_id
 
                         # If we have control, put sample on queue

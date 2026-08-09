@@ -28,6 +28,7 @@ async def mic_client(host: str, port: int, timeout: float) -> None:
     out: asyncio.Queue[bytes] = asyncio.Queue(maxsize=8)
 
     def enqueue(data: bytes) -> None:
+        """Enqueue a microphone block while keeping capture latency bounded."""
         if out.full():
             # Keep latency bounded: discard the oldest unsent microphone block.
             out.get_nowait()
@@ -40,10 +41,12 @@ async def mic_client(host: str, port: int, timeout: float) -> None:
         _time_info: object,
         _status: object,
     ) -> None:
+        """Bridge a PortAudio callback safely into the asyncio event loop."""
         data = np.ascontiguousarray(indata[:, 0], dtype=np.float32).tobytes()
         loop.call_soon_threadsafe(enqueue, data)
 
     async def sender() -> None:
+        """Send queued microphone blocks in capture order."""
         while True:
             data = await out.get()
             try:
@@ -66,6 +69,7 @@ async def speaker_client(host: str, port: int, timeout: float) -> None:
     playback_task: asyncio.Task[None] | None = None
 
     async def stop_playback() -> None:
+        """Cancel pending playback and stop the output device."""
         nonlocal playback_task
         if playback_task is None:
             return
@@ -77,6 +81,7 @@ async def speaker_client(host: str, port: int, timeout: float) -> None:
     async with websockets.connect(f"ws://{host}:{port}/speaker") as ws:
 
         async def play(data: bytes, scheduled_time: float, sample_rate: int) -> None:
+            """Play one scheduled track and acknowledge its completion."""
             await asyncio.sleep(max(0.0, scheduled_time - time.time()))
             sd.play(np.frombuffer(data, dtype=np.float32), sample_rate)
             await asyncio.to_thread(sd.wait)
@@ -103,6 +108,7 @@ async def speaker_client(host: str, port: int, timeout: float) -> None:
 
 
 def main() -> None:
+    """Run the selected microphone or speaker reference client."""
     ap = argparse.ArgumentParser(description="GLADOS websocket audio client")
     sub = ap.add_subparsers(dest="mode", required=True)
 

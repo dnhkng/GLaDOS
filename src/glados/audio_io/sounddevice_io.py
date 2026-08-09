@@ -1,6 +1,7 @@
+"""Local microphone and speaker backend implemented with sounddevice."""
+
 import queue
 import threading
-from typing import Any
 
 from loguru import logger
 import numpy as np
@@ -218,8 +219,9 @@ class SoundDeviceAudioIO(AudioIO):
         stop_event = self._stop_event
 
         def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time_info: Any, status: sd.CallbackFlags
+            outdata: NDArray[np.float32], frames: int, time_info: object, status: sd.CallbackFlags
         ) -> None:
+            """Fill the next output block and track completion or interruption."""
             nonlocal position, interrupted
 
             if stop_event.is_set():
