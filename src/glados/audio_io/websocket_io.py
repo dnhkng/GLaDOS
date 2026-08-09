@@ -63,6 +63,7 @@ class WebsocketAudioIO(AudioIO):
     PORT: int = 5051  # websockets server port
     SPEAKER_SYNC_DELAY_MS: int = 250  # Milliseconds to add to start time to account for speaker synchronisation
     MIC_MAX_SILENCE_CHUNKS: int = 10  # how many VAD chunks must be silent for a mic to relinquish control
+    MIC_QUEUE_MAX_CHUNKS: int = 256  # 8.2 seconds of 32 ms VAD chunks
     DEFAULT_ROOM_TAG: str = "office"  # default room tag
     ROOMS: bool = False  # enable multi-microphone room choreography / segregation
     SEGREGATE_SPEAKERS: bool = False  # default value for speaker segregation.
@@ -79,6 +80,8 @@ class WebsocketAudioIO(AudioIO):
                 time for speaker synchronisation (default: 250)
               - mic_max_silence_chunks: Consecutive silent VAD chunks before the
                 current microphone relinquishes control (default: 10)
+              - mic_queue_max_chunks: Buffered 32 ms chunks before the oldest
+                chunk is dropped (default: 256)
 
         Raises:
             ValueError: If invalid parameters are provided
@@ -95,6 +98,7 @@ class WebsocketAudioIO(AudioIO):
         port: int = self.PORT
         self._speaker_sync_delay_ms: int = self.SPEAKER_SYNC_DELAY_MS
         self._mic_max_silence_chunks: int = self.MIC_MAX_SILENCE_CHUNKS
+        self._mic_queue_max_chunks: int = self.MIC_QUEUE_MAX_CHUNKS
         self._default_room_tag: str = self.DEFAULT_ROOM_TAG
         self._segregate_speakers: bool = self.SEGREGATE_SPEAKERS
         self._rooms: bool = self.ROOMS
@@ -111,6 +115,8 @@ class WebsocketAudioIO(AudioIO):
                         self._speaker_sync_delay_ms = int(val)
                     case "mic_max_silence_chunks":
                         self._mic_max_silence_chunks = int(val)
+                    case "mic_queue_max_chunks":
+                        self._mic_queue_max_chunks = int(val)
                     case "default_room_tag":
                         self._default_room_tag = str(val)
                     case "rooms":
@@ -126,8 +132,14 @@ class WebsocketAudioIO(AudioIO):
                     case _:
                         raise ValueError(f"Websocket backend: unsupported option '{key}'")
 
+        if self._mic_queue_max_chunks <= 0:
+            raise ValueError("mic_queue_max_chunks must be greater than zero")
+
         # Sample queue
-        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
+        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue(
+            maxsize=self._mic_queue_max_chunks
+        )
+        self._dropped_mic_chunks = 0
 
         # if audio is currently playing
         self._is_playing = False
@@ -183,8 +195,30 @@ class WebsocketAudioIO(AudioIO):
         self._is_listening = True
 
     def stop_listening(self) -> None:
-        """Stop capturing audio"""
+        """Stop capture and release microphone ownership on the server loop."""
         self._is_listening = False
+
+        loop = self._server_loop
+        if loop is None or not loop.is_running():
+            self._clear_microphone_ownership()
+            return
+
+        if threading.current_thread() is self._server_thread:
+            loop.create_task(self._reset_microphone_ownership())
+            return
+
+        reset_coro = self._reset_microphone_ownership()
+        try:
+            reset_future = asyncio.run_coroutine_threadsafe(reset_coro, loop)
+        except RuntimeError:
+            reset_coro.close()
+            logger.warning("WebSocket server stopped before microphone ownership could be reset")
+            return
+
+        try:
+            reset_future.result(timeout=1)
+        except (TimeoutError, concurrent.futures.CancelledError):
+            logger.warning("Timed out while resetting WebSocket microphone ownership")
 
     def start_speaking(
         self,
@@ -315,6 +349,46 @@ class WebsocketAudioIO(AudioIO):
                         (audio_sample, vad_confidence)
         """
         return self._sample_queue
+
+    def _clear_microphone_ownership(self) -> None:
+        """Clear owner and silence state when no server task can be concurrent."""
+        self._mic_state.current_id = None
+        self._mic_state.silence_chunks = 0
+
+    async def _reset_microphone_ownership(self) -> None:
+        """Clear microphone ownership under the server-loop state lock."""
+        async with self._mic_state_lock:
+            self._clear_microphone_ownership()
+
+    def _enqueue_microphone_sample(self, vad_data: NDArray[np.float32], vad_confidence: bool) -> None:
+        """Enqueue recent audio while bounding memory and capture latency."""
+        item = (vad_data, vad_confidence)
+        try:
+            self._sample_queue.put_nowait(item)
+            return
+        except queue.Full:
+            pass
+
+        dropped_chunks = 0
+        try:
+            self._sample_queue.get_nowait()
+            dropped_chunks = 1
+        except queue.Empty:
+            pass
+
+        try:
+            self._sample_queue.put_nowait(item)
+        except queue.Full:
+            # A consumer cannot refill the queue, but retain a fail-closed guard
+            # if another producer is introduced later.
+            dropped_chunks += 1
+
+        self._dropped_mic_chunks += dropped_chunks
+        if dropped_chunks and (self._dropped_mic_chunks == 1 or self._dropped_mic_chunks % 100 == 0):
+            logger.warning(
+                "Dropped {} stale microphone chunks because the consumer is behind",
+                self._dropped_mic_chunks,
+            )
 
     def close(self) -> None:
         """Stop playback and release the listening socket and server thread."""
@@ -557,7 +631,7 @@ class WebsocketAudioIO(AudioIO):
             """Release ownership only when this connection currently owns it."""
             async with self._mic_state_lock:
                 if self._mic_state.current_id == client_id:
-                    self._mic_state.current_id = None
+                    self._clear_microphone_ownership()
 
         # send sample rate
         try:
@@ -623,7 +697,7 @@ class WebsocketAudioIO(AudioIO):
 
                         # If we have control, put sample on queue
                         if has_control:
-                            self._sample_queue.put((vad_data, bool(vad_confidence)))
+                            self._enqueue_microphone_sample(vad_data, bool(vad_confidence))
                             # always update room; a message could change it at any time
                             if self._rooms:
                                 self._mic_state.room = room

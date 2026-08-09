@@ -122,6 +122,28 @@ def test_startup_propagates_non_oserror(monkeypatch: pytest.MonkeyPatch) -> None
     assert time.monotonic() - started < 1
 
 
+def test_microphone_queue_drops_oldest_chunk() -> None:
+    """Overflow must retain recent audio without allowing memory growth."""
+    backend = object.__new__(WebsocketAudioIO)
+    backend._sample_queue = queue.Queue(maxsize=2)
+    backend._dropped_mic_chunks = 0
+
+    for value in (1.0, 2.0, 3.0):
+        backend._enqueue_microphone_sample(np.full(512, value, dtype=np.float32), True)
+
+    first, _ = backend.get_sample_queue().get_nowait()
+    second, _ = backend.get_sample_queue().get_nowait()
+    assert np.all(first == 2.0)
+    assert np.all(second == 3.0)
+    assert backend._dropped_mic_chunks == 1
+
+
+def test_microphone_queue_size_must_be_positive() -> None:
+    """Reject a queue configuration that cannot retain any audio."""
+    with pytest.raises(ValueError, match="mic_queue_max_chunks"):
+        WebsocketAudioIO(options={"mic_queue_max_chunks": 0})
+
+
 def test_malformed_microphone_frame_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     """Malformed float32 frames must not enter the sample queue."""
 
@@ -218,9 +240,13 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
         first = FakeWebsocket(np.ones(512, dtype=np.float32), release)
         second = FakeWebsocket(np.full(512, 2.0, dtype=np.float32), release)
 
+        async def wait_for_first_sample() -> None:
+            """Wait until the owner has produced its first queue entry."""
+            while backend.get_sample_queue().qsize() < 1:
+                await asyncio.sleep(0)
+
         first_task = asyncio.create_task(backend._server_microphone(first))  # type: ignore[arg-type]
-        while backend.get_sample_queue().qsize() < 1:
-            await asyncio.sleep(0)
+        await asyncio.wait_for(wait_for_first_sample(), timeout=1)
 
         second_task = asyncio.create_task(backend._server_microphone(second))  # type: ignore[arg-type]
         await asyncio.sleep(0.05)
@@ -235,3 +261,59 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
     assert np.array_equal(samples, np.ones(512, dtype=np.float32))
     assert confidence
     assert backend._mic_state.current_id is None
+
+
+def test_stop_start_releases_idle_microphone_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stopping capture must let an active second client own the next session."""
+
+    class FakeVAD:
+        """Classify every complete test frame as speech."""
+
+        def __call__(self, _samples: NDArray[np.float32]) -> float:
+            """Return deterministic voice activity."""
+            return 1.0
+
+        def reset_states(self) -> None:
+            """Satisfy the VAD reset interface."""
+            return None
+
+    monkeypatch.setattr("glados.audio_io.websocket_io.VAD", FakeVAD)
+    port = _unused_port()
+    backend = WebsocketAudioIO(options={"port": port})
+
+    async def wait_for_owner() -> None:
+        """Wait until a connected microphone owns the input session."""
+        while backend._mic_state.current_id is None:
+            await asyncio.sleep(0)
+
+    async def wait_for_sample() -> None:
+        """Wait until the active microphone reaches the shared queue."""
+        while backend.get_sample_queue().empty():
+            await asyncio.sleep(0)
+
+    async def run_session() -> None:
+        """Keep the first client idle while the second takes the restarted session."""
+        backend.start_listening()
+        async with websockets.connect(f"ws://127.0.0.1:{port}/microphone") as first:
+            assert await first.recv() == "sampleRate:16000"
+            await asyncio.wait_for(wait_for_owner(), timeout=1)
+            backend._mic_state.silence_chunks = 7
+
+            await asyncio.to_thread(backend.stop_listening)
+            assert backend._mic_state.current_id is None
+            assert backend._mic_state.silence_chunks == 0
+
+            backend.start_listening()
+            async with websockets.connect(f"ws://127.0.0.1:{port}/microphone") as second:
+                assert await second.recv() == "sampleRate:16000"
+                await second.send(np.full(512, 2.0, dtype=np.float32).tobytes())
+                await asyncio.wait_for(wait_for_sample(), timeout=1)
+
+                samples, confidence = backend.get_sample_queue().get_nowait()
+                assert np.all(samples == 2.0)
+                assert confidence
+
+    try:
+        asyncio.run(run_session())
+    finally:
+        backend.close()

@@ -10,6 +10,7 @@ Glados:
     rooms: false          # multi-microphone room choreography (off by default)
     segregate_speakers: false
     default_room_tag: "office"
+    mic_queue_max_chunks: 256  # 8.2 seconds; oldest audio is dropped on overflow
   input_mode: "audio"  # audio, text, or both
   tts_enabled: true
   asr_muted: false

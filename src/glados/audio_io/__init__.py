@@ -81,6 +81,7 @@ def get_audio_system(
                 - default_room_tag: room tag fallback (default: "office")
                 - speaker_sync_delay_ms: add to start time for speaker sync (default: 250)
                 - mic_max_silence_chunks: silent chunks before a mic yields (default: 10)
+                - mic_queue_max_chunks: buffered 32 ms chunks before dropping oldest (default: 256)
         vad_threshold (float | None): Optional threshold for voice activity detection
 
     Returns:
