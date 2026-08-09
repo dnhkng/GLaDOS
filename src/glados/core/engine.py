@@ -31,6 +31,7 @@ from ..autonomy.llm_client import LLMConfig
 from ..autonomy.summarization import estimate_tokens
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
+from ..webapp.config import WebappConfig
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
 from .audio_data import AudioMessage
@@ -124,6 +125,7 @@ class GladosConfig(BaseModel):
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
+    webapp: WebappConfig | None = None
 
     @model_validator(mode="after")
     def _resolve_api_key_from_env(self) -> "GladosConfig":
@@ -132,6 +134,25 @@ class GladosConfig(BaseModel):
             env_key = os.environ.get("MINIMAX_API_KEY")
             if env_key:
                 self.api_key = env_key
+        return self
+
+    @model_validator(mode="after")
+    def _apply_webapp_env(self) -> "GladosConfig":
+        """Apply optional ``GLADOS_WEBAPP_*`` environment overrides."""
+        flag = os.environ.get("GLADOS_WEBAPP_ENABLED")
+        host = os.environ.get("GLADOS_WEBAPP_HOST")
+        port = os.environ.get("GLADOS_WEBAPP_PORT")
+        if flag is None and host is None and port is None:
+            return self
+
+        webapp = self.webapp or WebappConfig()
+        self.webapp = WebappConfig.model_validate(
+            {
+                "enabled": webapp.enabled if flag is None else flag,
+                "host": host or webapp.host,
+                "port": port or webapp.port,
+            }
+        )
         return self
 
     @classmethod

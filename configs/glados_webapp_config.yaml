@@ -1,0 +1,65 @@
+# GLaDOS configuration with the webapp observability console enabled.
+#
+# Start it with: `uv run glados webapp --config configs/glados_webapp_config.yaml`
+# Then open http://127.0.0.1:8050/ in a browser.
+#
+# The console is an in-process HTTP server (stdlib only) that streams the
+# engine's live state - minds/slots/subagents/MCP/emotion/audio/lanes and the
+# ObservabilityBus event log - over Server-Sent-Events plus a JSON snapshot API.
+Glados:
+  llm_model: "llama3.2"
+  completion_url: "http://localhost:11434/api/chat"
+  api_key: null  # Add your API key here if needed!
+  interruptible: true
+  audio_io: "sounddevice"   # local hardware. For a browser-mic setup use "websocket".
+  input_mode: "audio"  # audio, text, or both
+  tts_enabled: true
+  asr_muted: false
+  tui_theme: "aperture"
+  asr_engine: "tdt"
+  llm_headers: null  # Optional extra headers (e.g., OpenRouter HTTP-Referer, X-Title)
+  wake_word: null
+  voice: "glados"
+  announcement: "All neural network modules are now loaded. System Operational."
+
+  # --- webapp observability console ---------------------------------------
+  # Default OFF. Enable here, or set GLADOS_WEBAPP_ENABLED=1 / _PORT / _HOST
+  # environment variables to switch it on without editing YAML. The demo is
+  # intentionally loopback-only because it has no authentication boundary.
+  webapp:
+    enabled: true
+    host: "127.0.0.1"   # Listen address
+    port: 8050          # Listen port; open http://127.0.0.1:8050/
+
+  autonomy:
+    enabled: true
+    tick_interval_s: 10
+    cooldown_s: 20
+    autonomy_parallel_calls: 2   # parallel autonomy LLM workers -> the console's "Autonomy" lane
+    autonomy_queue_max: null
+    coalesce_ticks: true
+    jobs:
+      enabled: true
+      poll_interval_s: 1
+      hacker_news:
+        enabled: false
+        interval_s: 1800
+        top_n: 5
+        min_score: 200
+      weather:
+        enabled: false
+        interval_s: 3600
+        latitude: null
+        longitude: null
+        timezone: "auto"
+        temp_change_c: 4
+        wind_alert_kmh: 40
+
+  mcp_servers:
+    - name: "system_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.system_info_server"]
+
+  personality_preprompt:
+    - system: "You are GLaDOS, a sarcastic AI assistant."
