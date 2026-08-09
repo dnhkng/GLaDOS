@@ -34,8 +34,12 @@ The server exposes two WebSocket paths:
 | `/microphone`   | client → server: stream mic audio for VAD/ASR     |
 | `/speaker`      | server → client: stream TTS audio for playback    |
 
-Audio is raw `float32` PCM at 16 kHz. Text frames are UTF-8; audio frames are
-binary.
+Audio is raw `float32` PCM. Microphone input is fixed at 16 kHz; speaker clients
+must decode each track at the rate supplied by its `sampleRate:<hz>` message.
+Text frames are UTF-8; audio frames are binary.
+
+The protocol has no authentication. Keep it bound to loopback or a trusted
+network, or place it behind an authenticated proxy before exposing it.
 
 ## Speaker protocol (`/speaker`)
 

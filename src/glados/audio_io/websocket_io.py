@@ -1,17 +1,17 @@
 import asyncio
 import concurrent.futures
+from dataclasses import dataclass
 import logging
 import queue
 import threading
 import time
-import uuid
-from dataclasses import dataclass
 from typing import Any
+import uuid
 
-import websockets
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
+import websockets
 
 from . import VAD
 from .base import AudioIO
@@ -22,9 +22,11 @@ class AudioData:
     """
     Audio Data. Encapsulated here for synchronization.
     """
+
     data: NDArray[np.float32]
     sample_rate: int
     play_time: float
+    play_time_monotonic: float
     track_id: uuid.UUID | None
 
 
@@ -34,11 +36,12 @@ class MicState:
     Microphone State.
     Encapsulated here for synchronization.
     """
+
     room: str
     current_id: uuid.UUID | None = None
     silence_chunks: int = 0
 
-    def inactive(self, max_silence_chunks: int):
+    def inactive(self, max_silence_chunks: int) -> bool:
         return self.silence_chunks >= max_silence_chunks
 
 
@@ -69,8 +72,10 @@ class WebsocketAudioIO(AudioIO):
             options: backend options
               - server: Websocket listening address (default: 127.0.0.1)
               - port: Websocket listening port (default: 5051)
-              - speaker_sync_delay_ms: Milliseconds to add to each speak start time to account for speaker synchronisation (default: 250)
-              - mic_max_silence_chunks: How many consecutive VAD chunks must be silent so that the current microphone relinquishes control (default: 10)
+              - speaker_sync_delay_ms: Milliseconds added to the scheduled playback
+                time for speaker synchronisation (default: 250)
+              - mic_max_silence_chunks: Consecutive silent VAD chunks before the
+                current microphone relinquishes control (default: 10)
 
         Raises:
             ValueError: If invalid parameters are provided
@@ -138,14 +143,32 @@ class WebsocketAudioIO(AudioIO):
         self._mic_state_lock: asyncio.Lock
         self._mic_state = MicState(room=self._default_room_tag)
 
+        # WebSocket server lifecycle, owned by the server thread.
+        self._server_loop: asyncio.AbstractEventLoop | None = None
+        self._server_instance: Any | None = None
+
         startup_future: concurrent.futures.Future[None] = concurrent.futures.Future()
         self._server_thread = threading.Thread(
-            target=lambda s, p, f: asyncio.run(self._run_server(s, p, f)),
+            target=self._server_thread_main,
             args=(server, port, startup_future),
-            daemon=True
+            daemon=True,
         )
         self._server_thread.start()
         startup_future.result(timeout=10)
+
+    def _server_thread_main(
+        self,
+        server: str,
+        port: int,
+        result_future: concurrent.futures.Future[None],
+    ) -> None:
+        try:
+            asyncio.run(self._run_server(server, port, result_future))
+        except Exception as ex:
+            if not result_future.done():
+                result_future.set_exception(ex)
+            else:
+                logger.debug("WebSocket audio server stopped: {}", ex)
 
     def start_listening(self) -> None:
         """Start capturing audio from the websocket.
@@ -159,7 +182,13 @@ class WebsocketAudioIO(AudioIO):
         """Stop capturing audio"""
         self._is_listening = False
 
-    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "", wait: bool = False) -> None:
+    def start_speaking(
+        self,
+        audio_data: NDArray[np.float32],
+        sample_rate: int | None = None,
+        text: str = "",
+        wait: bool = False,
+    ) -> None:
         """Play audio through the system speakers.
 
         Parameters:
@@ -182,16 +211,21 @@ class WebsocketAudioIO(AudioIO):
         # Playback is finished
         self._playback_finished_event.clear()
 
-        # Lock, set data, unlock
+        # Publish the payload and all associated state atomically. Speaker
+        # tasks use _is_playing as the final "track is ready" indicator.
         with self._audio_lock:
             # allow for network jitter, time to websocket send, etc.
-            play_time = time.time() + (self._speaker_sync_delay_ms / 1000)
-            self._audio_data = AudioData(np.copy(audio_data), sample_rate, play_time, uuid.uuid4())
-
-        # set state
-        self._stop_playback = False
-        self._is_playing = True
-        self._playback_was_interrupted = False
+            sync_delay = self._speaker_sync_delay_ms / 1000
+            self._audio_data = AudioData(
+                np.copy(audio_data),
+                sample_rate,
+                time.time() + sync_delay,
+                time.monotonic() + sync_delay,
+                uuid.uuid4(),
+            )
+            self._stop_playback = False
+            self._playback_was_interrupted = False
+            self._is_playing = True
 
         logger.debug("Scheduled audio playback")
 
@@ -221,19 +255,30 @@ class WebsocketAudioIO(AudioIO):
         # wait for finish
         max_timeout = (total_samples / sample_rate) + (self._speaker_sync_delay_ms / 1000.0) + 1.0
 
-        now = time.monotonic()
         completed = self._playback_finished_event.wait(max_timeout)
-        interrupted = self._playback_was_interrupted
-        elapsed = time.monotonic() - now
+
+        with self._audio_lock:
+            interrupted = self._playback_was_interrupted
+            play_time_monotonic = (
+                self._audio_data.play_time_monotonic if self._audio_data is not None else time.monotonic()
+            )
 
         if interrupted:
             logger.debug("Playback was interrupted in Server thread")
 
         if not completed:
             logger.debug("Audio playback timed out, forcing interruption")
-            # Assume nothing was played because no speaker was there
+            with self._audio_lock:
+                self._stop_playback = True
+                self._is_playing = False
+                self._playback_was_interrupted = True
+                if self._audio_data is not None:
+                    self._audio_data.track_id = None
+                self._playback_finished_event.set()
+            # Assume nothing was played because no speaker acknowledged it.
             return True, 0
 
+        elapsed = max(0.0, time.monotonic() - play_time_monotonic)
         played_samples = elapsed * sample_rate
         percentage_played = min(int(played_samples * 100 / total_samples), 100)
         return interrupted, percentage_played
@@ -244,7 +289,8 @@ class WebsocketAudioIO(AudioIO):
         Returns:
             bool: True if audio is currently playing, False otherwise
         """
-        return self._is_playing
+        with self._audio_lock:
+            return self._is_playing
 
     def stop_speaking(self) -> None:
         """Stop audio playback and clean up resources.
@@ -254,7 +300,8 @@ class WebsocketAudioIO(AudioIO):
         multiple overlapping playbacks.
         """
         logger.debug("Stopping speaker...")
-        self._stop_playback = True
+        with self._audio_lock:
+            self._stop_playback = True
 
     def get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
         """Get the queue containing audio samples and VAD confidence.
@@ -264,6 +311,38 @@ class WebsocketAudioIO(AudioIO):
                         (audio_sample, vad_confidence)
         """
         return self._sample_queue
+
+    def close(self) -> None:
+        """Stop playback and release the listening socket and server thread."""
+        self.stop_listening()
+        with self._audio_lock:
+            self._stop_playback = True
+            self._is_playing = False
+            self._playback_was_interrupted = True
+            if self._audio_data is not None:
+                self._audio_data.track_id = None
+            self._playback_finished_event.set()
+
+        loop = self._server_loop
+        server_instance = self._server_instance
+        if loop is not None and loop.is_running() and server_instance is not None:
+            try:
+                loop.call_soon_threadsafe(server_instance.close)
+            except RuntimeError:
+                logger.exception("Failed to close WebSocket audio server cleanly")
+
+        if self._server_thread.is_alive() and threading.current_thread() is not self._server_thread:
+            self._server_thread.join(timeout=5)
+            if self._server_thread.is_alive():
+                logger.warning("WebSocket audio server thread did not stop within 5 seconds")
+
+    def _track_is_active(self, track_id: uuid.UUID) -> bool:
+        with self._audio_lock:
+            return self._is_playing and self._audio_data is not None and self._audio_data.track_id == track_id
+
+    def _playback_should_stop(self) -> bool:
+        with self._audio_lock:
+            return self._stop_playback
 
     async def _run_server(self, server: str, port: int, result_future: concurrent.futures.Future) -> None:
         """Runs the websocket server.
@@ -288,14 +367,23 @@ class WebsocketAudioIO(AudioIO):
         ws_logger.addHandler(ws_log_handler)
         ws_logger.propagate = False
 
+        self._server_loop = asyncio.get_running_loop()
         try:
-            server = await websockets.serve(self._server_listen, host=server, port=port)
-            result_future.set_result(None)
-        except OSError as ex:
-            result_future.set_exception(ex)
-            raise
+            try:
+                server_instance = await websockets.serve(self._server_listen, host=server, port=port)
+                self._server_instance = server_instance
+                if not result_future.done():
+                    result_future.set_result(None)
+            except Exception as ex:
+                if not result_future.done():
+                    result_future.set_exception(ex)
+                raise
 
-        await server.serve_forever()
+            await server_instance.wait_closed()
+        finally:
+            ws_logger.removeHandler(ws_log_handler)
+            self._server_instance = None
+            self._server_loop = None
 
     async def _server_listen(self, websocket: websockets.ServerConnection) -> None:
         """
@@ -345,7 +433,7 @@ class WebsocketAudioIO(AudioIO):
             assert track_id is not None
 
             with self._audio_lock:
-                if self._audio_data.track_id == track_id:
+                if self._audio_data is not None and self._audio_data.track_id == track_id:
                     self._playback_was_interrupted = was_interrupted
                     self._is_playing = False
                     self._playback_finished_event.set()
@@ -354,12 +442,12 @@ class WebsocketAudioIO(AudioIO):
 
         while True:
             # 1. IDLE LOOP: Check for play state, but listen for sync pings in the meantime!
-            while not self._is_playing:
+            while not self.check_if_speaking():
                 try:
                     # Wait for a message, but timeout quickly to check self._is_playing again
                     message = await asyncio.wait_for(websocket.recv(), timeout=0.05)
                     await handle_default_msg(message)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue  # Timeout expected, loop back to check `self._is_playing`
                 except websockets.exceptions.ConnectionClosed:
                     return  # Client disconnected, exit the handler safely
@@ -370,11 +458,11 @@ class WebsocketAudioIO(AudioIO):
                     target_room = self._mic_state.room
                 if target_room != room:
                     # wait for the current playback to finish, but don't send Audio
-                    while self._is_playing:
+                    while self.check_if_speaking():
                         try:
                             message = await asyncio.wait_for(websocket.recv(), timeout=0.05)
                             await handle_default_msg(message)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             continue
                         except websockets.exceptions.ConnectionClosed:
                             return
@@ -383,6 +471,8 @@ class WebsocketAudioIO(AudioIO):
             # 2. AUDIO SEND PHASE
             # We acquire the lock just long enough to grab the data safely.
             with self._audio_lock:
+                if self._audio_data is None:
+                    continue
                 play_time = self._audio_data.play_time
                 sample_rate = self._audio_data.sample_rate
                 audio_data_bytes = self._audio_data.data.tobytes()
@@ -405,20 +495,19 @@ class WebsocketAudioIO(AudioIO):
                 return
 
             # 3. WAITING PHASE
-            while not self._stop_playback:
+            while self._track_is_active(current_track_id) and not self._playback_should_stop():
                 try:
                     message = await asyncio.wait_for(websocket.recv(), timeout=0.05)
                     if await handle_default_msg(message) and message == "played":
                         logger.debug("Websocket: Audio played fully")
                         set_flags_once(current_track_id, False)
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 except websockets.exceptions.ConnectionClosed:
                     set_flags_once(current_track_id, True)
                     return
-            else:
-                # self._stop_playback is true
+            if self._playback_should_stop():
                 try:
                     await websocket.send("reset")
                     logger.debug("Sent audio reset")
@@ -445,7 +534,7 @@ class WebsocketAudioIO(AudioIO):
         # room of the mic
         room = self._default_room_tag
 
-        async def relinquish():
+        async def relinquish() -> None:
             async with self._mic_state_lock:
                 if self._mic_state.current_id == client_id:
                     self._mic_state.current_id = None
@@ -466,6 +555,9 @@ class WebsocketAudioIO(AudioIO):
             if isinstance(msg, str) and msg.startswith("room:"):
                 room = msg.split(":", maxsplit=1)[1]
             elif isinstance(msg, bytes) and self._is_listening:
+                if len(msg) % np.dtype(np.float32).itemsize != 0:
+                    logger.warning("Ignoring microphone frame with invalid float32 byte length: {}", len(msg))
+                    continue
                 # append to current_data
                 data = np.frombuffer(msg, dtype=np.float32)
                 current_data = np.append(current_data, data)

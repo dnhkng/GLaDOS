@@ -76,19 +76,26 @@
     let userHasInteracted = false;
 
     // Browsers block audio until the user interacts with the document
-    startBtn.addEventListener('click', () => {
+    startBtn.addEventListener('click', async () => {
         userHasInteracted = true;
         startBtn.disabled = true;
         startBtn.innerText = "Audio Enabled";
 
-        // Start microphone
-        if (!micWs || micWs.readyState === WebSocket.CLOSED) {
-            micConnect();
+        try {
+            if (!micStream) {
+                micStream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
+            }
+            if (!micWs || micWs.readyState === WebSocket.CLOSED) {
+                micConnect();
+            }
+        } catch (err) {
+            console.error("Failed to acquire microphone:", err);
+            micStatus("Microphone permission denied");
+            userHasInteracted = false;
+            startBtn.disabled = false;
+            startBtn.innerText = "Enable Mic & Connect";
         }
     });
-    startBtn.addEventListener('click', async () => {
-        micStream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
-    })
 
     // connect microphone websocket
     function micConnect() {

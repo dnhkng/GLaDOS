@@ -854,27 +854,41 @@ class Glados:
             backend_options=config.audio_io_options,
         )
 
-        return cls(
-            asr_model=asr_model,
-            tts_model=tts_model,
-            audio_io=audio_io,
-            completion_url=config.completion_url,
-            llm_model=config.llm_model,
-            api_key=config.api_key,
-            interruptible=config.interruptible,
-            wake_word=config.wake_word,
-            announcement=config.announcement,
-            personality_preprompt=tuple(config.to_chat_messages()),
-            tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
-            tool_timeout=config.tool_timeout,
-            vision_config=config.vision,
-            autonomy_config=config.autonomy,
-            mcp_servers=config.mcp_servers,
-            input_mode=config.input_mode,
-            tts_enabled=config.tts_enabled,
-            asr_muted=config.asr_muted,
-            llm_headers=config.llm_headers,
-        )
+        try:
+            return cls(
+                asr_model=asr_model,
+                tts_model=tts_model,
+                audio_io=audio_io,
+                completion_url=config.completion_url,
+                llm_model=config.llm_model,
+                api_key=config.api_key,
+                interruptible=config.interruptible,
+                wake_word=config.wake_word,
+                announcement=config.announcement,
+                personality_preprompt=tuple(config.to_chat_messages()),
+                tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
+                tool_timeout=config.tool_timeout,
+                vision_config=config.vision,
+                autonomy_config=config.autonomy,
+                mcp_servers=config.mcp_servers,
+                input_mode=config.input_mode,
+                tts_enabled=config.tts_enabled,
+                asr_muted=config.asr_muted,
+                llm_headers=config.llm_headers,
+            )
+        except Exception:
+            cls._close_audio_backend(audio_io)
+            raise
+
+    @staticmethod
+    def _close_audio_backend(audio_io: AudioProtocol) -> None:
+        """Close a backend without breaking legacy structural implementations."""
+        close = getattr(audio_io, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.exception("Failed to close audio I/O backend")
 
     @classmethod
     def from_yaml(cls, path: str | Path | list[str] | list[Path]) -> "Glados":
@@ -960,6 +974,8 @@ class Glados:
         if self.mcp_manager:
             logger.debug("Shutting down MCP manager...")
             self.mcp_manager.shutdown()
+
+        self._close_audio_backend(self.audio_io)
 
         # Log any failed shutdowns
         failed = [r for r in results if not r.success]

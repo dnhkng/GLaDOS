@@ -297,3 +297,8 @@ class SoundDeviceAudioIO(AudioIO):
                         (audio_sample, vad_confidence)
         """
         return self._sample_queue
+
+    def close(self) -> None:
+        """Release local input and output resources."""
+        self.stop_speaking()
+        self.stop_listening()

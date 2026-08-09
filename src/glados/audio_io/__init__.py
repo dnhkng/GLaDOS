@@ -12,14 +12,33 @@ Functions:
     get_audio_system: Factory that returns an AudioIO instance by name
 """
 
-from typing import Any
+import queue
+from typing import Any, Protocol
+
+import numpy as np
+from numpy.typing import NDArray
 
 from .base import AudioIO
 from .vad import VAD
 
-# Backwards-compatible alias: AudioProtocol now refers to the AudioIO ABC.
-AudioProtocol = AudioIO
-"""Alias for :class:`AudioIO` kept for callers that previously used a Protocol."""
+
+class AudioProtocol(Protocol):
+    """Legacy structural interface accepted by the engine.
+
+    Implementations don't have to inherit :class:`AudioIO`; the ABC is
+    available to new in-tree and third-party backends as a convenience.
+    """
+
+    def start_listening(self) -> None: ...
+    def stop_listening(self) -> None: ...
+    def start_speaking(
+        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = ""
+    ) -> None: ...
+    def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]: ...
+    def check_if_speaking(self) -> bool: ...
+    def stop_speaking(self) -> None: ...
+    def get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]: ...
+
 
 # Factory function
 def get_audio_system(
