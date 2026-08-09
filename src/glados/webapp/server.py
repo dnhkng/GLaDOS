@@ -235,6 +235,7 @@ class _Handler(BaseHTTPRequestHandler):
         single-consumer ``drain()`` queue.
         """
         import queue as _queue
+        import time
 
         bus = engine.observability_bus
         self.send_response(200)
@@ -252,24 +253,22 @@ class _Handler(BaseHTTPRequestHandler):
             replayed = {id(event) for event in history}
             for event in history:
                 self._send_sse("obs", serialize_event(event))
-            import time as _time
-            last_state_time = _time.time()
+            last_state_time = time.time()
             while not engine.shutdown_event.is_set():
                 try:
                     event = sub.get(timeout=0.5)
                 except _queue.Empty:
                     self._send_sse("state", build_state(engine))
-                    last_state_time = _time.time()
+                    last_state_time = time.time()
                     continue
                 if id(event) in replayed:
                     replayed.remove(id(event))
                     continue
                 self._send_sse("obs", serialize_event(event))
-                # Emit state frame if at least 0.5 seconds have elapsed
-                now = _time.time()
-                if now - last_state_time >= 0.5:
+                # Emit state frame if 0.5 seconds have elapsed since last state send
+                if time.time() - last_state_time >= 0.5:
                     self._send_sse("state", build_state(engine))
-                    last_state_time = now
+                    last_state_time = time.time()
         except (BrokenPipeError, ConnectionResetError, OSError):  # pragma: no cover
             pass
         except Exception:  # pragma: no cover - stream already has HTTP headers
