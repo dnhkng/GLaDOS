@@ -13,6 +13,7 @@ from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
+from .webapp import WebappServer
 
 # Type aliases for clarity
 type FileHash = str
@@ -272,6 +273,53 @@ def tui(
         sys.exit()
 
 
+def run_webapp(
+    config_path: str | Path | list[str] | list[Path] = "glados_config.yaml",
+    input_mode: str | None = None,
+    tts_enabled: bool | None = None,
+    asr_muted: bool | None = None,
+) -> None:
+    """Run GLaDOS with its browser-based observability console."""
+    from loguru import logger
+
+    glados_config = GladosConfig.from_yaml(config_path)
+    updates: dict[str, object] = {}
+    if input_mode:
+        updates["input_mode"] = input_mode
+    if tts_enabled is not None:
+        updates["tts_enabled"] = tts_enabled
+    if asr_muted is not None:
+        updates["asr_muted"] = asr_muted
+    if updates:
+        glados_config = glados_config.model_copy(update=updates)
+
+    webapp_config = glados_config.webapp
+    if webapp_config is None or not webapp_config.enabled:
+        logger.error(
+            "The webapp console is disabled. Enable webapp.enabled or set "
+            "GLADOS_WEBAPP_ENABLED=1."
+        )
+        raise SystemExit(1)
+
+    glados = Glados.from_config(glados_config)
+    server = WebappServer(glados, host=webapp_config.host, port=webapp_config.port)
+    server.start()
+    if not server.is_running:
+        logger.error(
+            "Webapp console could not bind {}:{} - aborting.",
+            webapp_config.host,
+            webapp_config.port,
+        )
+        raise SystemExit(1)
+
+    try:
+        if glados.announcement:
+            glados.play_announcement()
+        glados.run()
+    finally:
+        server.shutdown()
+
+
 def parser_add_config(parser: argparse.ArgumentParser) -> None:
     """
     Add the '--config' argument to the given parser.
@@ -389,6 +437,11 @@ def main() -> int:
         help="Override TUI theme (aperture, ice, matrix, mono, ember)",
     )
 
+    webapp_parser = subparsers.add_parser(
+        "webapp", help="Start GLaDOS with the browser observability console"
+    )
+    parser_add_common_tui_cli_args(webapp_parser)
+
     # Say command
     say_parser = subparsers.add_parser("say", help="Make GLaDOS speak text")
     say_parser.add_argument("text", type=str, help="Text for GLaDOS to speak")
@@ -418,6 +471,13 @@ def main() -> int:
                 tts_enabled=args.tts_enabled,
                 asr_muted=args.asr_muted,
                 theme=args.theme,
+            )
+        elif args.command == "webapp":
+            run_webapp(
+                args.config,
+                input_mode=args.input_mode,
+                tts_enabled=args.tts_enabled,
+                asr_muted=args.asr_muted,
             )
         else:
             # Default to start if no command specified
