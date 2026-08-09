@@ -546,4 +546,10 @@ jupyter notebook demo.ipynb
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=dnhkng/GlaDOS&type=Date)](https://star-history.com/#dnhkng/GlaDOS&Date)
+<a href="https://www.star-history.com/?type=date&repos=dnhkng%2FGlaDOS">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=dnhkng/GlaDOS&type=date&theme=dark&legend=top-left&sealed_token=wz3BtFPmpev1enV3lx54OE7oAguBcNxMVv3U4UD2DCASYteez6FcWu2Z89KF-NjylbRASn6V-NX1ihZuL1MNFCJKBkftl-zua7MAt9uE_QWJXGhKPhO5bkKUIy_s3IZysfxGLpPEgobqltkT6VM1f4IRpCOr6i9-KqfyJ0i6o9_hUSPWHQ8jaefmMwmn" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=dnhkng/GlaDOS&type=date&legend=top-left&sealed_token=wz3BtFPmpev1enV3lx54OE7oAguBcNxMVv3U4UD2DCASYteez6FcWu2Z89KF-NjylbRASn6V-NX1ihZuL1MNFCJKBkftl-zua7MAt9uE_QWJXGhKPhO5bkKUIy_s3IZysfxGLpPEgobqltkT6VM1f4IRpCOr6i9-KqfyJ0i6o9_hUSPWHQ8jaefmMwmn" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=dnhkng/GlaDOS&type=date&legend=top-left&sealed_token=wz3BtFPmpev1enV3lx54OE7oAguBcNxMVv3U4UD2DCASYteez6FcWu2Z89KF-NjylbRASn6V-NX1ihZuL1MNFCJKBkftl-zua7MAt9uE_QWJXGhKPhO5bkKUIy_s3IZysfxGLpPEgobqltkT6VM1f4IRpCOr6i9-KqfyJ0i6o9_hUSPWHQ8jaefmMwmn" />
+ </picture>
+</a>
