@@ -485,7 +485,7 @@ function seedLog(){
 }
 function renderFullWire(){
   const host=$("full-wire"); host.innerHTML="";
-  [...eventLog].forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
+  eventLog.forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
 }
 function buildFilters(){
   $("wfilters").innerHTML="";
