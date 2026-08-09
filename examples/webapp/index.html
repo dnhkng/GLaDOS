@@ -475,9 +475,9 @@ function seedLog(){
     {o:-2.1,  src:"llm",    kind:"inference.start",level:"info", msg:"Priority lane dispatch", meta:{tokens:"~340"}},
     {o:-3.6,  src:"autonomy",kind:"slot.update", level:"info", msg:"morning weather -> done", meta:{slot:"s_weather", confidence:0.94}},
     {o:-5.2,  src:"vision",kind:"scene.change", level:"info", msg:"Scene changed: lighting dimmed", meta:{score:0.31}},
-    {o:-8.0,  src:"autonomy",kind:"tick", level:"debug", msg:"tick coalesced 2 events", meta:{}},
+    {o:-8.0,  src:"autonomy",kind:"tick", level:"debg", msg:"tick coalesced 2 events", meta:{}},
     {o:-18.9, src:"mcp",   kind:"server.status", level:"ok", msg:"MCP home-assistant online", meta:{tools:14}},
-    {o:-45.2, src:"engine",kind:"audio.vad", level:"debug", msg:"VAD active", meta:{rms:-31.2}},
+    {o:-45.2, src:"engine",kind:"audio.vad", level:"debg", msg:"VAD active", meta:{rms:-31.2}},
   ];
   seeds.forEach(s => { const ev={t:Date.now()+s.o*1000, src:s.src,kind:s.kind,level:s.level,msg:s.msg,meta:s.meta||{}}; track(ev); });
   renderFullWire();
@@ -485,7 +485,7 @@ function seedLog(){
 }
 function renderFullWire(){
   const host=$("full-wire"); host.innerHTML="";
-  [...eventLog].reverse().forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
+  [...eventLog].forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
 }
 function buildFilters(){
   $("wfilters").innerHTML="";
@@ -583,7 +583,7 @@ function meter(label, val, color){
 function renderSlots(){
   $("slots").innerHTML="";
   SLOTS.forEach(s => {
-    const c = el("div","slot");
+    const c = el("slot","");
     c.style.borderTopColor = barColor[s.status]||"var(--orange)";
     c.innerHTML =
       "<div class=\"shead\"><span class=\"stitle\">"+esc(s.title)+"</span>"+
@@ -663,8 +663,8 @@ function tick(){
     const k=Math.random();
     if(k<0.25) emit("vision","scene.change","info","Scene changed: light toggled",{score:+(Math.random()*0.5).toFixed(2)});
     else if(k<0.5) emit("autonomy","slot.update","info","s_hydrate updated",{slot:"s_hydrate"});
-    else if(k<0.7) emit("mcp","server.request","debug","home-assistant.get_entity",{entity:"climate.living"});
-    else emit("mind.m1","memory.write","debug","Forecast Mind persisted observation",{key:"last_observation"});
+    else if(k<0.7) emit("mcp","server.request","debg","home-assistant.get_entity",{entity:"climate.living"});
+    else emit("mind.m1","memory.write","debg","Forecast Mind persisted observation",{key:"last_observation"});
   }
 
   // spawn priority inference occasionally

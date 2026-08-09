@@ -57,7 +57,7 @@ class ObservabilityBus:
                         subscriber.put_nowait(event)
                     except (queue.Empty, queue.Full):
                         pass
-        self._queue.put(event)
+            self._queue.put(event)
 
     def subscribe(self) -> queue.Queue[ObservabilityEvent]:
         """Return a bounded queue which receives every future event."""

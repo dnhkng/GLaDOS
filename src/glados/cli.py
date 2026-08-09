@@ -310,6 +310,7 @@ def run_webapp(
             webapp_config.host,
             webapp_config.port,
         )
+        glados._graceful_shutdown()
         raise SystemExit(1)
 
     try:

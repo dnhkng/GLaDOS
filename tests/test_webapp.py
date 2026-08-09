@@ -257,7 +257,7 @@ def test_server_rejects_cross_origin_browser_request() -> None:
 
 def test_server_refuses_non_loopback_bind() -> None:
     with pytest.raises(ValueError, match="loopback-only"):
-        WebappServer(_FakeEngine(), host="0.0.0.0", port=8050)
+        WebappServer(_FakeEngine(), host="0.0.0.0", port=8050)  # noqa: S104
 
 
 # --------------------------------------------------------------------------- env override

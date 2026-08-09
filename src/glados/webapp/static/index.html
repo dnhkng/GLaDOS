@@ -304,7 +304,7 @@
               <div class="lane-head">
                 <span class="dot-pulse" style="color:var(--orange)"></span>
                 <div><div class="lname">Priority Lane</div><div class="lsub">direct user agent &middot; 1 lane</div></div>
-                <div class="right" id="priQ">0 in-flight</div>
+                <div class="right" id="priQ">0 queued</div>
               </div>
               <div class="lane-track" id="priotrack"></div>
             </div>
@@ -452,7 +452,7 @@ function entry(ev){
 function emit(src, kind, level, msg, meta){ entry({src,kind,level,msg,meta:meta||{}}); }
 function renderFullWire(){
   const host=$("full-wire"); host.innerHTML="";
-  [...eventLog].reverse().forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
+  [...eventLog].forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
 }
 function renderFilters(){
   if(!$("wfilters")) return;
@@ -588,8 +588,8 @@ function updateBadges(){
 }
 function renderLaneMeta(){
   if(!$("priQ")) return;
-  $("priQ").textContent = (S.prioInflight||0)+" in-flight";
-  $("nc-prio").textContent = S.prioInflight? "1 active":"idle";
+  $("priQ").textContent = (S.prioInflight||0)+" queued";
+  $("nc-prio").textContent = S.prioInflight? S.prioInflight+" queued":"idle";
   const pool=$("autoQ"); if(pool) pool.textContent=(S.lanes.workers||1)+" workers · "+S.lanes.autoInflight+" in-flight";
   $("nc-auto").textContent = S.lanes.autoInflight+" active";
   $("ncNow").textContent = (S.lanes.autoInflight+(S.prioInflight||0))+" active · "+timeStr(Date.now());
@@ -632,14 +632,14 @@ function applySnapshot(j){
   S.mcpServers=(j.mcp&&j.mcp.servers)||[];
   if(j.emotion) S.emo=[j.emotion.pleasure,j.emotion.arousal,j.emotion.dominance];
   S.lanes = Object.assign({prioQ:0,autoQ:0,autoInflight:0,workers:0,enabled:false}, j.lanes||{});
-  S.prioInflight = prioOf(j.lanes)>0 ? 1 : 0;
+  S.prioInflight = prioOf(j.lanes);
   S.speaking=!!j.speaking;
   S.audio=Object.assign({}, j.audio||{}, {speaking:S.speaking});
   if(j.interaction){ if(j.interaction.seconds_since_user!=null) S.sinceUser=j.interaction.seconds_since_user; if(j.interaction.seconds_since_assistant!=null) S.sinceAsst=j.interaction.seconds_since_assistant; }
 }
 function applyState(st){
   if(st.emotion) S.emo=[st.emotion.pleasure,st.emotion.arousal,st.emotion.dominance];
-  if(st.lanes){ S.lanes=st.lanes; S.prioInflight=prioOf(st.lanes)>0?1:0; }
+  if(st.lanes){ S.lanes=st.lanes; S.prioInflight=prioOf(st.lanes); }
   if(st.audio) S.audio=Object.assign({}, st.audio, {speaking: st.speaking});
   if(st.interaction){ if(st.interaction.seconds_since_user!=null) S.sinceUser=st.interaction.seconds_since_user; if(st.interaction.seconds_since_assistant!=null) S.sinceAsst=st.interaction.seconds_since_assistant; }
   if(st.speaking!==undefined) S.speaking=!!st.speaking;
