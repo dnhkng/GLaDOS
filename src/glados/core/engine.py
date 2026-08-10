@@ -21,6 +21,7 @@ import yaml
 from ..ASR import TranscriberProtocol, get_audio_transcriber
 from ..audio_io import AudioProtocol, get_audio_system
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
+from ..onnx_config import OnnxRuntimeConfig
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
 from ..autonomy import AutonomyConfig, AutonomyLoop, ConstitutionalState, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
@@ -124,6 +125,7 @@ class GladosConfig(BaseModel):
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
+    onnx_runtime: OnnxRuntimeConfig = OnnxRuntimeConfig()
 
     @model_validator(mode="after")
     def _resolve_api_key_from_env(self) -> "GladosConfig":
