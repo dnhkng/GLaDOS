@@ -165,7 +165,7 @@ class Phonemizer:
         self.config = config
         self.phoneme_dict: dict[str, str] = self._load_pickle(self.config.PHONEME_DICT_PATH)
 
-        self.phoneme_dict["glados"] = "ɡlˈɑːdɑːs"  # Add GLaDOS to the phoneme dictionary!
+        self.phoneme_dict["glados"] = "ɡlˈædoʊs"  # Add GLaDOS to the phoneme dictionary!
 
         self.token_to_idx = self._load_pickle(self.config.TOKEN_TO_IDX_PATH)
         self.idx_to_token = self._load_pickle(self.config.IDX_TO_TOKEN_PATH)
