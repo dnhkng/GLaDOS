@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..onnx_utils import get_provider_priority_list
 from ..utils.resources import resource_path
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
@@ -25,19 +26,12 @@ class VAD:
             - Sets up inference session with the specified model
             - Initializes internal state variables for processing audio chunks
         """
-        providers = ort.get_available_providers()
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
+        providers = get_provider_priority_list()
 
-        # Limit to 1 thread to prevent ONNX Runtime from spawning many threads
-        # for each small inference call (~31/sec). On high core-count machines this
-        # causes excessive CPU usage; Silero VAD is small enough that single-threaded
-        # inference has negligible latency impact. (Fixes #187)
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = 1
         sess_options.inter_op_num_threads = 1
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
         self.ort_sess = ort.InferenceSession(
             model_path,

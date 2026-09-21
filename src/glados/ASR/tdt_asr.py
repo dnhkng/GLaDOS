@@ -9,6 +9,7 @@ import onnxruntime as ort  # type: ignore
 import soundfile as sf  # type: ignore
 import yaml
 
+from ..onnx_utils import create_session_options, get_provider_priority_list
 from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
@@ -42,11 +43,7 @@ class _OnnxTDTModel:
             decoder_model_path: Path to the decoder ONNX model file.
             joiner_model_path: Path to the joiner ONNX model file.
         """
-        session_opts = ort.SessionOptions()
-
-        # Enable memory pattern optimization for potential speedup
-        session_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        session_opts.enable_mem_pattern = True  # Can uncomment if beneficial
+        session_opts = create_session_options()
 
         logger.info(f"Using ONNX providers: {providers}")
         self.encoder = self._init_session(encoder_model_path, session_opts, providers)
@@ -287,19 +284,7 @@ class AudioTranscriber:
                 raise ValueError(f"Error parsing YAML file {config_path}: {e}") from e
 
         # 2. Configure ONNX Runtime session
-        providers = ort.get_available_providers()
-
-        # Exclude providers known to cause issues or not desired
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
-
-        # Prioritize CUDA if available, otherwise CPU
-        if "CUDAExecutionProvider" in providers:
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            providers = ["CPUExecutionProvider"]
+        providers = get_provider_priority_list()
 
         # Initialize the internal ONNX model handler
         self.model = _OnnxTDTModel(providers)

@@ -13,6 +13,7 @@ import regex as re
 from loguru import logger
 from numpy.typing import NDArray
 
+from ..onnx_utils import create_session_options, get_provider_priority_list
 from ..utils.resources import resource_path
 
 # Suppress ONNX verbose logging
@@ -215,20 +216,9 @@ class FastVLM:
 
         logger.info(f"Loading FastVLM from {model_dir}")
 
-        # Configure providers (same pattern as ASR)
-        providers = ort.get_available_providers()
-        for excluded in ["TensorrtExecutionProvider", "CoreMLExecutionProvider"]:
-            if excluded in providers:
-                providers.remove(excluded)
+        self._providers = get_provider_priority_list()
 
-        if "CUDAExecutionProvider" in providers:
-            self._providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            self._providers = ["CPUExecutionProvider"]
-
-        session_opts = ort.SessionOptions()
-        session_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        session_opts.enable_mem_pattern = True
+        session_opts = create_session_options()
 
         if vision_encoder_path is None:
             vision_encoder_path = (
