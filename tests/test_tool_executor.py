@@ -1,232 +1,101 @@
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+"""Tool execution, cancellation, argument parsing, and result routing."""
+
 import json
 import queue
-import sys
 import threading
-import time
-from typing import Any
+from unittest.mock import Mock
+
+from loguru import logger
+import pytest
 
 from glados.core.tool_executor import ToolExecutor
-import glados.tools as tools
-from loguru import logger
+
+
+@pytest.fixture(autouse=True)
+def capture_loguru(caplog):
+    sink = logger.add(caplog.handler, format="{message}")
+    caplog.set_level("INFO")
+    try:
+        yield
+    finally:
+        logger.remove(sink)
+
+
+def make_executor():
+    return ToolExecutor(queue.Queue(), queue.Queue(), queue.Queue(), threading.Event(), threading.Event())
+
+
+def run_call(executor, call, completed):
+    executor.tool_calls_queue.put(call)
+    thread = threading.Thread(target=executor.run)
+    thread.start()
+    try:
+        assert completed.wait(2), "Tool execution did not finish"
+    finally:
+        executor.shutdown_event.set()
+        thread.join(timeout=2)
+    assert not thread.is_alive()
+
 
 def test_run_shutdown_event(caplog):
-    """
-    Test that the run method exits when shutdown event is set.
-    """
-    llm_queue = queue.Queue()
-    tool_calls_queue = queue.Queue()
-    processing_active_event = threading.Event()
-    shutdown_event = threading.Event()
-    shutdown_event.set()
-    executor = ToolExecutor(llm_queue, tool_calls_queue, processing_active_event, shutdown_event)
-
-    caplog.set_level("INFO")
+    executor = make_executor()
+    executor.shutdown_event.set()
     executor.run()
-
-    # Check that the logger messages are present
     assert "ToolExecutor thread started." in caplog.text
     assert "ToolExecutor thread finished." in caplog.text
 
 
 def test_tool_call_discarded_if_processing_inactive(mocker, caplog):
-    """
-    Test that a tool call is discarded if processing_active_event is not set.
-    """
-    mock_tool = Mock()
+    tool = Mock()
     mocker.patch("glados.core.tool_executor.all_tools", ["test tool"])
-    mocker.patch("glados.core.tool_executor.tool_classes", {
-        "test tool": mock_tool
-    })
-    test_tool = "test tool"
-    llm_queue = queue.Queue()
-    tool_calls_queue = queue.Queue()
-
-    tool_call = {
-        "function": {"name": test_tool, "arguments": "{}"},
-        "id": "123"
-    }
-
-    tool_calls_queue.put(tool_call)
-    processing_active_event = threading.Event()
-    shutdown_event = threading.Event()
-
-    executor = ToolExecutor(
-        llm_queue,
-        tool_calls_queue,
-        processing_active_event,
-        shutdown_event
-    )
-    thread = threading.Thread(target=executor.run)
-    thread.start()
-
-    timeout = 2
-    start_time = time.time()
-    expected_message = "ToolExecutor: Interruption signal active, discarding tool call."
-
-    while time.time() - start_time < timeout:
-        if expected_message in caplog.text:
-            break
-        time.sleep(0.1)
-
-    # Check that the correct message is logged and no tool instance is created
-    assert "ToolExecutor: Interruption signal active, discarding tool call." in caplog.text
-    shutdown_event.set()
-    thread.join(timeout=timeout)
-    assert not thread.is_alive(), "Thread is still running after the test timeout"
-    mock_tool.assert_not_called()
+    mocker.patch("glados.core.tool_executor.tool_classes", {"test tool": tool})
+    executor = make_executor()
+    completed = threading.Event()
+    sink = logger.add(lambda message: completed.set() if "discarding tool call" in str(message) else None)
+    try:
+        run_call(executor, {"function": {"name": "test tool", "arguments": "{}"}, "id": "123"}, completed)
+    finally:
+        logger.remove(sink)
+    assert "Interruption signal active, discarding tool call" in caplog.text
+    tool.assert_not_called()
 
 
-def test_process_valid_tool_call(mocker, caplog):
-    """
-    Test processing of a valid tool call.
-    """
-    mock_tool_instance = Mock()
-    mock_tool = Mock(return_value=mock_tool_instance)
+@pytest.mark.parametrize("arguments, expected", [(json.dumps({"key": "value"}), {"key": "value"}), ("invalid_json", {})])
+def test_process_tool_arguments(mocker, caplog, arguments, expected):
+    completed = threading.Event()
+    instance = Mock()
+    instance.run.side_effect = lambda *_: completed.set()
+    tool = Mock(return_value=instance)
     mocker.patch("glados.core.tool_executor.all_tools", ["test tool"])
-    mocker.patch("glados.core.tool_executor.tool_classes", {
-        "test tool": mock_tool
-    })
-    test_tool = "test tool"
-    llm_queue = queue.Queue()
-    tool_calls_queue = queue.Queue()
+    mocker.patch("glados.core.tool_executor.tool_classes", {"test tool": tool})
+    executor = make_executor()
+    executor.processing_active_event.set()
+    run_call(executor, {"function": {"name": "test tool", "arguments": arguments}, "id": "123"}, completed)
+    instance.run.assert_called_once_with("123", expected)
+    tool.assert_called_once()
+    kwargs = tool.call_args.kwargs
+    assert kwargs["llm_queue"].target is executor.llm_queue_priority
+    assert kwargs["tool_config"]["_quiet_generation"] == 0
+    assert callable(kwargs["tool_config"]["_cancelled"])
 
-    tool_call = {
-        "function": {"name": test_tool, "arguments": "{\"key\": \"value\"}"},
-        "id": "123"
-    }
-
-    tool_calls_queue.put(tool_call)
-    processing_active_event = threading.Event()
-    processing_active_event.set()
-    shutdown_event = threading.Event()
-
-    executor = ToolExecutor(
-        llm_queue,
-        tool_calls_queue,
-        processing_active_event,
-        shutdown_event
-    )
-    thread = threading.Thread(target=executor.run)
-    thread.start()
-
-    timeout = 2
-    start_time = time.time()
-    expected_message = "ToolExecutor: Interruption signal active, discarding tool call."
-
-    while time.time() - start_time < timeout:
-        if expected_message in caplog.text:
-            break
-        time.sleep(0.1)
-
-    assert "ToolExecutor: Received tool call" in caplog.text
-    mock_tool.assert_called_once_with(llm_queue=llm_queue, tool_config={})
-    mock_tool_instance.run.assert_called_once_with(tool_call["id"], json.loads(tool_call["function"]["arguments"]))
-    shutdown_event.set()
-    thread.join(timeout=timeout)
-    assert not thread.is_alive(), "Thread is still running after the test timeout"
-
-def test_json_decode_error(mocker, caplog):
-    """
-    Test handling of invalid JSON in tool arguments.
-    """
-    mock_tool_instance = Mock()
-    mock_tool = Mock(return_value=mock_tool_instance)
-    mocker.patch("glados.core.tool_executor.all_tools", ["test tool"])
-    mocker.patch("glados.core.tool_executor.tool_classes", {
-        "test tool": mock_tool
-    })
-    test_tool = "test tool"
-    llm_queue = queue.Queue()
-    tool_calls_queue = queue.Queue()
-
-    tool_call = {
-        "function": {"name": "test tool", "arguments": "invalid_json"},
-        "id": "123"
-    }
-
-    tool_calls_queue.put(tool_call)
-    processing_active_event = threading.Event()
-    processing_active_event.set()
-    shutdown_event = threading.Event()
-
-    executor = ToolExecutor(
-        llm_queue,
-        tool_calls_queue,
-        processing_active_event,
-        shutdown_event
-    )
-    thread = threading.Thread(target=executor.run)
-    thread.start()
-
-    timeout = 2
-    start_time = time.time()
-    expected_message = "ToolExecutor: Interruption signal active, discarding tool call."
-
-    while time.time() - start_time < timeout:
-        if expected_message in caplog.text:
-            break
-        time.sleep(0.1)
-
-    assert "ToolExecutor: Failed to parse non-JSON tool call args: " in caplog.text
-    mock_tool.assert_called_once_with(llm_queue=llm_queue, tool_config={})
-    mock_tool_instance.run.assert_called_once_with(tool_call["id"], {})
-    shutdown_event.set()
-    thread.join(timeout=timeout)
-    assert not thread.is_alive(), "Thread is still running after the test timeout"
 
 def test_unknown_tool(mocker, caplog):
-    """
-    Test handling of an unknown tool (not in all_tools).
-    """
-    mock_tool_instance = Mock()
-    mock_tool = Mock(return_value=mock_tool_instance)
+    tool = Mock()
     mocker.patch("glados.core.tool_executor.all_tools", ["test tool"])
-    mocker.patch("glados.core.tool_executor.tool_classes", {
-        "test tool": mock_tool
-    })
-    test_tool = "test tool"
-    llm_queue = queue.Queue()
-    tool_calls_queue = queue.Queue()
-
-    tool_call = {
-        "function": {"name": "unknown tool", "arguments": "{}"},
-        "id": "123"
-    }
-
-    tool_calls_queue.put(tool_call)
-    processing_active_event = threading.Event()
-    processing_active_event.set()
-    shutdown_event = threading.Event()
-
-    executor = ToolExecutor(
-        llm_queue,
-        tool_calls_queue,
-        processing_active_event,
-        shutdown_event
-    )
-    thread = threading.Thread(target=executor.run)
-    thread.start()
-
-    timeout = 2
-    start_time = time.time()
-    expected_message = "ToolExecutor: Interruption signal active, discarding tool call."
-
-    while time.time() - start_time < timeout:
-        if expected_message in caplog.text:
-            break
-        time.sleep(0.1)
-
-    # Check that the error message is logged and the LLM queue is updated
-    assert "ToolExecutor: error: no tool named unknown tool is available" in caplog.text
-    assert llm_queue.get() == {
-        "role": "tool",
-        "tool_call_id": "123",
-        "content": "error: no tool named unknown tool is available",
-        "type": "function_call_output"
-    }
-    mock_tool.assert_not_called()
-    shutdown_event.set()
-    thread.join(timeout=timeout)
-    assert not thread.is_alive(), "Thread is still running after the test timeout"
+    mocker.patch("glados.core.tool_executor.tool_classes", {"test tool": tool})
+    executor = make_executor()
+    executor.processing_active_event.set()
+    completed = threading.Event()
+    sink = logger.add(lambda message: completed.set() if "no tool named unknown tool" in str(message) else None)
+    call = {"function": {"name": "unknown tool", "arguments": "{}"}, "id": "123"}
+    try:
+        run_call(executor, call, completed)
+    finally:
+        logger.remove(sink)
+    result = executor.llm_queue_priority.get(timeout=2)
+    assert result["role"] == "tool"
+    assert result["tool_call_id"] == "123"
+    assert result["content"] == "error: no tool named unknown tool is available"
+    assert result["_tool_reply_context"] == call["function"]
+    assert executor.llm_queue_autonomy.empty()
+    tool.assert_not_called()

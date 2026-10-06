@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLaDOS · Aperture Science</title>
+<style>
+  :root{
+    --bg:#0b0e12;--bg-2:#10151c;--panel:#141a22;--panel-2:#1a212b;
+    --line:#242f3b;--line-2:#32404f;
+    --text:#d7e2ec;--muted:#8fa4b6;--dim:#5d7284;
+    --orange:#ff7f2a;--orange-glow:rgba(255,127,42,.18);
+    --teal:#2ee6c8;--green:#3ddc84;--yellow:#ffd166;--red:#ff5c6c;--purple:#9d7bff;
+    --mono:"SF Mono","JetBrains Mono","Fira Code",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:radial-gradient(1200px 600px at 70% -10%,rgba(255,127,42,.05),transparent 60%),radial-gradient(900px 500px at 10% 110%,rgba(46,230,200,.05),transparent 60%),var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;overflow:hidden}
+  #app{display:grid;grid-template-columns:232px 1fr;grid-template-rows:52px 1fr;height:100vh}
+  .topbar{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#10151c,#0d1117)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px}
+  .brand .logo{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff,var(--orange) 55%,#8a3c00);box-shadow:0 0 12px var(--orange-glow),inset 0 -3px 6px rgba(0,0,0,.4)}
+  .aperture-mark{width:30px;height:30px;flex-shrink:0;fill:var(--text)}
+  .brand small{color:var(--muted);font-weight:500}
+  .topbar .spacer{flex:1}
+  .clock{font-family:var(--mono);color:var(--muted);font-size:13px}
+  .live{display:flex;align-items:center;gap:7px;font-family:var(--mono);color:var(--green);font-size:12px;letter-spacing:1px;border:1px solid rgba(61,220,132,.3);background:rgba(61,220,132,.08);padding:4px 10px;border-radius:20px}
+  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:blink 1.2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  .uptime{font-family:var(--mono);color:var(--dim);font-size:12px}
+  .sidebar{grid-row:2;border-right:1px solid var(--line);background:var(--bg-2);padding:14px 10px;overflow-y:auto}
+  .sec-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);margin:4px 10px 8px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--muted);border:1px solid transparent;user-select:none;transition:background .12s,color .12s;width:100%}
+  .nav-item .ico{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0}
+  .nav-item:hover{background:var(--panel);color:var(--text)}
+  .nav-item.active{background:var(--panel-2);color:var(--teal);border-color:var(--line);box-shadow:inset 3px 0 0 var(--teal)}
+  .nav-item .badge{margin-left:auto;font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:1px 7px;border-radius:20px}
+  .nav-hint{margin-top:22px;padding:10px;font-size:11px;line-height:1.6;color:var(--dim);border-top:1px dashed var(--line)}
+  .main{grid-row:2;overflow:hidden;display:flex;flex-direction:column}
+  .view{flex:1;overflow-y:auto;padding:22px 26px 40px;display:none}
+  .view.active{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .view-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .view-head h1{font-size:22px;font-weight:750;letter-spacing:.3px}
+  .view-head .sub{color:var(--muted);font-size:13px}
+  .view-head .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .grid{display:grid;gap:16px}.grid.cols-2{grid-template-columns:1fr 1fr}.grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .card{background:linear-gradient(180deg,var(--panel),var(--bg-2));border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card h3 .now{margin-left:auto;font-family:var(--mono);color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0}
+  .routing-map{max-height:620px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:12px 0}
+  .routing-map svg{display:block;font-family:var(--sans);font-size:13px}
+  .route-edge path{fill:none;stroke:var(--line-2);stroke-width:1.5}
+  .route-edge text{fill:var(--muted);font-family:var(--mono);font-size:10px}
+  .route-edge.selected path{stroke:var(--teal);stroke-width:2.5}
+  .route-edge.selected text{fill:var(--teal)}
+  .route-node rect{fill:var(--panel);stroke:var(--line-2)}
+  .route-node text{fill:var(--text);pointer-events:none}
+  .route-node .route-detail{fill:var(--muted);font-family:var(--mono);font-size:10px}
+  .route-node.branch{cursor:pointer}
+  .route-node.branch rect{fill:var(--panel-2)}
+  .route-node.branch:hover rect,.route-node.branch:focus rect{stroke:var(--orange);stroke-width:2}
+  .route-node.selected rect{stroke:var(--teal);stroke-width:2}
+  .route-node.uncertain rect{stroke:var(--yellow);stroke-dasharray:5 3}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:11px;border:1px solid var(--line)}
+  .chip.green{color:var(--green);border-color:rgba(61,220,132,.35);background:rgba(61,220,132,.08)}
+  .chip.amber{color:var(--yellow);border-color:rgba(255,209,102,.35);background:rgba(255,209,102,.08)}
+  .chip.teal{color:var(--teal);border-color:rgba(46,230,200,.35);background:rgba(46,230,200,.08)}
+  .dot-pulse{width:8px;height:8px;border-radius:50%;background:currentColor;animation:blink 1.2s infinite}
+  .bar{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:4px;background:var(--orange);transition:width .5s ease}
+  .mono{font-family:var(--mono)}
+  .stat .v{font-size:30px;font-weight:750;font-family:var(--mono);letter-spacing:.5px}
+  .stat .l{font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:3px}
+  .gauge-row{display:flex;gap:26px;flex-wrap:wrap}
+  .gauge{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .gauge svg{width:92px;height:92px}
+  .gauge .g-label{font-size:11px;color:var(--muted);letter-spacing:1px}
+  .gauge .g-val{font-family:var(--mono);font-size:12px}
+  .ring-bg{fill:none;stroke:var(--panel-2);stroke-width:9}
+  .ring-fg{fill:none;stroke-linecap:round;stroke-width:9;transition:stroke-dashoffset .6s ease}
+  .wire{font-family:var(--mono);font-size:12.5px;height:100%;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+  .wire-row{display:flex;gap:10px;align-items:baseline;padding:3px 8px;border-radius:5px}
+  .wire-row:hover{background:var(--panel-2)}
+  .wire-row .t{color:var(--dim);white-space:nowrap;flex-shrink:0}
+  .wire-row .lv{width:46px;font-weight:700;flex-shrink:0;text-transform:uppercase;font-size:11px}
+  .lv.info{color:var(--teal)}.lv.ok{color:var(--green)}.lv.warn{color:var(--yellow)}.lv.err{color:var(--red)}.lv.debg{color:var(--dim)}
+  .wire-row .src{color:var(--purple);white-space:nowrap;flex-shrink:0}
+  .wire-row .msg{color:var(--text);overflow-wrap:anywhere}
+  .wire-row .meta{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .fbtn{padding:5px 12px;border-radius:20px;font-size:12px;font-family:var(--mono);cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+  .fbtn.active{background:var(--teal);border-color:var(--teal);color:#062a24;font-weight:700}
+  .fbtn:hover{border-color:var(--line-2)}
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .lane{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--panel);overflow:hidden}
+  .lane.priority{border-color:rgba(255,127,42,.4)}
+  .lane.autonomy{border-color:rgba(46,230,200,.4)}
+  .lane-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .lane-head .lname{font-weight:700;font-size:15px;letter-spacing:.5px}
+  .lane-head .lsub{color:var(--muted);font-size:12px}
+  .lane-head .right{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .lane-track{display:flex;flex-direction:column;gap:10px;min-height:120px}
+  .inf{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);animation:inf-in .3s ease}
+  @keyframes inf-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+  .inf .id{font-family:var(--mono);font-size:11px;color:var(--dim);width:64px;flex-shrink:0}
+  .inf .label{font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .inf .phase{font-family:var(--mono);font-size:11px;width:74px;text-align:right}
+  .inf .spark{display:flex;gap:3px;align-items:center;margin-right:4px}
+  .inf .spark i{width:4px;height:12px;background:currentColor;border-radius:2px;animation:spark 1s infinite}
+  .inf .spark i:nth-child(2){animation-delay:.15s}.inf .spark i:nth-child(3){animation-delay:.3s}.inf .spark i:nth-child(4){animation-delay:.45s}
+  @keyframes spark{0%,100%{height:4px;opacity:.4}50%{height:14px;opacity:1}}
+  .inf.priority .phase{color:var(--orange)}.inf.priority .spark{color:var(--orange)}
+  .inf.autonomy .phase{color:var(--teal)}.inf.autonomy .spark{color:var(--teal)}
+  .planner{display:flex;flex-direction:column;gap:10px}
+  .agent-line{display:flex;align-items:center;gap:12px;font-size:13px}
+  .agent-line .adot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .agent-line .aname{min-width:150px;font-weight:600}
+  .agent-line .astill{flex:1;color:var(--dim);font-family:var(--mono);font-size:12px}
+  .minds{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .mind{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel);cursor:pointer;transition:border-color .15s,transform .15s}
+  .mind:hover{border-color:var(--teal);transform:translateY(-2px)}
+  .mind .mtop{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .mind .mtitle{font-weight:700}
+  .core-eye{width:38px;height:38px;flex-shrink:0;border-radius:50%;border:3px solid #ccd2d4;box-shadow:inset 0 0 0 4px #31383b,0 0 12px color-mix(in srgb,var(--core-color) 18%,transparent);background:radial-gradient(circle,#151a1d 0 12%,var(--core-color) 14% 25%,#242a2f 28% 42%,#687277 44% 50%,#20272d 52%)}
+  .core-activity{font-family:var(--mono);font-size:11px;color:var(--teal);margin-top:12px}
+  .core-processing{margin-top:20px}
+  .core-processing>summary{cursor:pointer;font-weight:650;letter-spacing:.5px;padding:4px 0}
+  .core-processing>summary::marker{color:var(--orange)}
+  .core-processing[open]>summary{margin-bottom:16px}
+
+  .mind .mrole{font-size:11px;color:var(--muted)}
+  .mind .mstat{margin-left:auto}
+  .mind .msum{font-size:12.5px;color:var(--muted);line-height:1.5;min-height:40px}
+  .mind .mfoot{display:flex;gap:8px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim);flex-wrap:wrap}
+  .status-pill{font-family:var(--mono);font-size:11px;padding:2px 9px;border-radius:20px;text-transform:capitalize}
+  .s-running{color:var(--teal);background:rgba(46,230,200,.1);border:1px solid rgba(46,230,200,.3)}
+  .s-idle{color:var(--muted);background:var(--panel-2);border:1px solid var(--line)}
+  .s-paused{color:var(--yellow);background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3)}
+  .s-done{color:var(--green);background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3)}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .slot{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel);border-top:3px solid var(--orange)}
+  .slot .shead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .slot .stitle{font-weight:700}
+  .slot .sstat{margin-left:auto}
+  .slot .ssum{font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 12px;min-height:36px}
+  .slot .meters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .meter .m-label{font-size:10px;color:var(--dim);letter-spacing:.5px;margin-bottom:4px;display:flex;justify-content:space-between;font-family:var(--mono)}
+  .meta-line{font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .btn-secondary{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:5px 12px;border-radius:8px;cursor:pointer;font-size:12px}
+  .btn-secondary:hover{border-color:var(--teal);color:var(--teal)}
+  .mini-queues{display:flex;flex-direction:column;gap:9px}
+  .mline{display:flex;align-items:center;gap:9px;font-size:12.5px}
+  .mline .ellipsis{flex:1}
+  .drawer{position:fixed;top:52px;right:0;bottom:0;width:min(460px,92vw);background:var(--bg-2);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .25s ease;z-index:40;display:flex;flex-direction:column;box-shadow:-20px 0 40px rgba(0,0,0,.4)}
+  .drawer.open{transform:none}
+  .drawer .d-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .drawer .d-head h2{font-size:16px;flex:1}
+  .drawer .d-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+  .mem-row{font-family:var(--mono);font-size:12.5px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+  .mem-row .mk{color:var(--teal);font-weight:700;display:block;margin-bottom:4px}
+  .slice{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-top:4px}
+  .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
+  .kv .k{color:var(--dim)}.kv .v{font-family:var(--mono);text-align:right}
+  @media(max-width:1000px){
+    .lanes,.grid.cols-2{grid-template-columns:1fr}
+    #app{grid-template-columns:64px 1fr}
+    .sec-label,.nav-item span:not(.ico),.nav-item .badge,.nav-hint{display:none}
+    .nav-item{justify-content:center}
+  }
+
+.console-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.console-actions button:disabled{opacity:.45;cursor:not-allowed}
+.console-field{display:block;width:100%;box-sizing:border-box;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:10px;border-radius:7px;font:inherit;margin:8px 0}
+textarea.console-field{min-height:110px;resize:vertical}
+button.card{text-align:left;color:inherit;font:inherit;cursor:pointer}
+button.card:hover{border-color:var(--orange)}
+.console-note{font-size:12px;color:var(--muted);line-height:1.6}
+.console-feedback{min-height:20px;color:var(--teal);font-size:13px;white-space:pre-wrap}
+.task-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.task-row button{margin-left:auto}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
+  .context-controls{margin-bottom:18px}
+  .context-controls .console-actions{align-items:end;flex-wrap:wrap}
+  .context-controls label{display:block;flex:1;min-width:220px;color:var(--dim);font-size:12px}
+  .context-search{margin-top:14px}
+  .context-overview{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .context-section{margin-bottom:12px;padding:0;overflow:hidden}
+  .context-section>summary{cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px;border-left:3px solid var(--orange)}
+  .context-section>summary::before{content:'▸';color:var(--orange)}
+  .context-section[open]>summary::before{content:'▾'}
+  .context-section>summary .console-note{margin-left:auto}
+  .context-section-copy{flex:1;min-width:180px}
+  .context-purpose{display:block;color:var(--dim);font-size:12px;line-height:1.5;margin-top:5px}
+  .context-tools h2{font-size:16px;margin:24px 0 12px}
+  .context-messages{padding:0 16px 16px}
+  .context-message{border-top:1px solid var(--line);padding-top:12px;margin-top:6px}
+  .context-message-head{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:12px}
+  .context-messages pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--text);margin:10px 0 16px}
+  .context-empty{padding:22px;border:1px dashed var(--line);color:var(--dim)}
+  .memory-fact{margin-bottom:12px}
+  .memory-content{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+</style>
+<style id="scifi">
+  :root{
+    --orange:#ff7f26; --orange-hot:#ffa14f;
+    --teal:#53e6cf; --green:#4ade80; --red:#ff5c6c;
+    --offwhite:#dfe6ee; --mach:#c9d2dc;
+  }
+  /* global Aperture backdrop: test grid + vignette + CRT scanlines */
+  body{
+    background:
+      linear-gradient(rgba(120,140,160,.045) 1px, transparent 1px) 0 0 / 100% 22px,
+      linear-gradient(90deg, rgba(120,140,160,.035) 1px, transparent 1px) 0 0 / 22px 100%,
+      radial-gradient(1100px 620px at 68% -8%, rgba(255,127,38,.10), transparent 60%),
+      radial-gradient(900px 500px at 8% 112%, rgba(83,230,207,.06), transparent 60%),
+      #07090d;
+  }
+  body::before{ /* vignette */
+    content:""; position:fixed; inset:0; z-index:58; pointer-events:none;
+    background:radial-gradient(120% 95% at 50% 0%, transparent 46%, rgba(0,0,0,.55) 100%);
+  }
+  body::after{ /* CRT scanlines */
+    content:""; position:fixed; inset:0; z-index:59; pointer-events:none; opacity:.22;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.5) 0 1px, transparent 1px 3px);
+  }
+  .hazard-bar{
+    position:fixed; top:0; left:0; right:0; height:5px; z-index:70; overflow:hidden;
+    background:repeating-linear-gradient(45deg, #f2a13c 0 14px, #0b0e12 14px 26px);
+    opacity:.92; box-shadow:0 0 12px rgba(255,127,38,.35);
+  }
+  /* topbar: machined console strip */
+  .topbar{ background:linear-gradient(180deg,#0d1118,#080b10); border-bottom:1px solid var(--line); position:relative; }
+  .topbar::after{
+    content:""; position:absolute; left:0; right:0; bottom:-1px; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(255,127,38,.6), transparent);
+  }
+  .brand .logo{
+    position:relative; width:30px; height:30px; margin-left:6px;
+    background:radial-gradient(circle at 38% 32%, #fff, var(--orange-hot) 48%, #8a3c06 82%, #3a1a04);
+    box-shadow:0 0 16px rgba(255,127,38,.22), inset 0 -3px 6px rgba(0,0,0,.5);
+  }
+  .brand .logo::after{
+    content:""; position:absolute; inset:-7px; border-radius:50%;
+    border:2px dashed rgba(255,161,79,.6); animation:spinR 11s linear infinite;
+  }
+  .brand .logo::before{
+    content:""; position:absolute; inset:-14px; border-radius:50%;
+    border:1px solid rgba(255,161,79,.18);
+  }
+  @keyframes spinR{ to{ transform:rotate(360deg); } }
+  .brand .t1{ font-weight:800; font-size:16px; letter-spacing:2px; color:var(--offwhite); line-height:1; text-shadow:0 0 12px rgba(255,161,79,.5); }
+  .brand .sub{ font-family:var(--mono); font-size:9.5px; letter-spacing:2.5px; color:var(--orange); margin-top:4px; }
+  .live{
+    color:var(--orange-hot); border-color:rgba(255,161,79,.45); background:rgba(255,127,38,.08);
+    box-shadow:0 0 16px rgba(255,127,38,.25); letter-spacing:2px; text-shadow:0 0 8px rgba(255,127,38,.6);
+  }
+  .live .dot{ background:var(--orange-hot); box-shadow:0 0 10px var(--orange-hot); }
+  .clock,.uptime{ color:var(--mach); letter-spacing:1px; }
+  .uptime::before{ content:"NODE 08 · "; color:var(--dim); }
+  /* sidebar: command deck */
+  .sidebar{ background:linear-gradient(180deg,#0f131a,#0a0d12); border-right:1px solid var(--line); }
+  .sec-label{ color:var(--orange); font-family:var(--mono); }
+  .nav-item{ font-weight:600; letter-spacing:.4px; }
+  .nav-item .ico{ color:var(--dim); }
+  .nav-item:hover{ color:var(--offwhite); }
+  .nav-item.active{
+    color:var(--offwhite); background:linear-gradient(90deg,rgba(255,127,38,.14),transparent 80%);
+    border-color:var(--line); box-shadow:inset 3px 0 0 var(--orange);
+  }
+  .nav-item.active .ico{ color:var(--orange-hot); }
+  .nav-item .badge{ color:var(--orange-hot); border-color:rgba(255,127,38,.3); background:rgba(255,127,38,.08); }
+  .nav-hint{ color:var(--mach); border-color:rgba(255,127,38,.28); }
+  /* view headers: junctive labels */
+  .view-head{ position:relative; }
+  .view-head h1{ letter-spacing:1px; color:var(--offwhite); position:relative; display:inline-block; }
+  .view-head h1::before{ content:"//"; color:var(--orange); font-weight:800; margin-right:10px; }
+  .view-head h1::after{ content:""; display:block; height:2px; margin-top:6px; background:linear-gradient(90deg, var(--orange), transparent); }
+  .view-head .sub{ color:var(--mach); font-family:var(--mono); font-size:11px; letter-spacing:.5px; }
+  /* panels: chamfered machine housing */
+  .card{
+    background:radial-gradient(30% 40% at 18% 12%, rgba(255,255,255,.05), transparent 60%), linear-gradient(180deg,#151a22,#0d1015);
+    border:1px solid #26303c; position:relative;
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 10px 24px rgba(0,0,0,.35);
+  }
+  .card::before,.card::after{
+    content:""; position:absolute; width:11px; height:11px; border:2px solid var(--orange); opacity:.55;
+  }
+  .card::before{ top:-1px; right:-1px; border-left:none; border-bottom:none; }
+  .card::after{ bottom:-1px; left:-1px; border-right:none; border-top:none; }
+  .card h3{ color:var(--mach); }
+  .card h3::before{ content:"\25B8 "; color:var(--orange); }
+  .lane{ border:1px solid #2a3542; background:radial-gradient(30% 45% at 20% 0%, rgba(255,255,255,.04), transparent 60%), #11151b; }
+  .lane.priority{ border-color:rgba(255,127,38,.55); }
+  .lane.autonomy{ border-color:rgba(83,230,207,.45); }
+  .lane-head .lname{ color:var(--offwhite); letter-spacing:.6px; text-transform:uppercase; }
+  .lane-head .lsub{ color:var(--mach); }
+  .mind,.slot{ background:linear-gradient(180deg,#151b24,#0e1218); border-color:#26303c; }
+  .mind:hover{ border-color:var(--orange-hot); box-shadow:0 0 0 1px rgba(255,161,79,.35), 0 10px 22px rgba(0,0,0,.4); }
+  .slot{ border-top-color:var(--orange); }
+  .btn-secondary{ background:#10151c; border:1px solid #2a3542; letter-spacing:.5px; text-transform:uppercase; font-size:11px; color:var(--mach); }
+  .btn-secondary:hover{ border-color:var(--orange); color:var(--orange-hot); box-shadow:0 0 10px rgba(255,127,38,.2); }
+  .status-pill{ letter-spacing:.5px; }
+  .wire-row .src{ color:var(--orange); }
+  .fbtn{ font-size:11px; letter-spacing:.5px; }
+  .fbtn:hover{ border-color:var(--orange); color:var(--mach); }
+  .stat .v{ color:var(--offwhite); text-shadow:0 0 14px rgba(255,161,79,.45); }
+  .stat .l{ color:var(--mach); letter-spacing:1.5px; }
+  .slice{ color:var(--orange); }
+  .kv .k{ color:var(--mach); }
+  .drawer{ background:linear-gradient(180deg,#0f131a,#0a0d12); border-left:1px solid var(--orange); box-shadow:-22px 0 40px rgba(0,0,0,.5); }
+  .drawer .slice{ border-left:2px solid var(--orange); padding-left:8px; }
+</style>
+
+<link rel="stylesheet" href="glados-avatar.css">
+</head>
+<body>
+<div id="app">
+  <div class="hazard-bar"></div>
+  <header class="topbar">
+    <div class="brand"><svg class="aperture-mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(0 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(45 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(90 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(135 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(180 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(225 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(270 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(315 50 50)"/></svg><div class="brand-t"><div class="t1">GLaDOS</div><div class="sub">APERTURE SCIENCE &middot; CORE CONSOLE</div></div></div>
+    <div class="spacer"></div>
+    <span class="uptime" id="uptime">UP 03:12:48</span>
+    <span class="clock" id="clock">--:--:--</span>
+    <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sec-label">Views</div>
+    <div class="nav-item active" data-view="home"><span class="ico">&#9678;</span><span>Enrichment Center</span></div>
+    <div class="nav-item" data-view="cores"><span class="ico">&#9671;</span><span>Cores</span><span class="badge" id="mindsBadge">0</span></div>
+    <div class="nav-item" data-view="memory"><span class="ico">&#9638;</span><span>Test Chamber</span></div>
+    <div class="nav-item" data-view="context"><span class="ico">&#8801;</span><span>Neural Buffer</span></div>
+    <div class="nav-item" data-view="tools"><span class="ico">⚒</span><span>Facility Tools</span><span class="badge" id="toolsBadge">0</span></div>
+    <div class="nav-item" data-view="tasks"><span class="ico">▤</span><span>Test Assignments</span><span class="badge" id="tasksBadge">0</span></div>
+    <div class="nav-item" data-view="settings"><span class="ico">⚙</span><span>Facility Settings</span></div>
+    <div class="nav-item" data-view="wire"><span class="ico">&#8776;</span><span>Observation Log</span><span class="badge" id="wireBadge">0</span></div>
+    <div class="nav-item" data-view="vitals"><span class="ico">&#9829;</span><span>Diagnostics</span></div>
+    <div class="nav-hint">Aperture Science Enrichment Center. Inspect each core’s activity, controls and reports.</div>
+  </nav>
+
+  <main class="main">
+
+    <!-- MISSION CONTROL -->
+    <section class="view active" id="view-home">
+      <div class="view-head">
+        <h1>Enrichment Center</h1>
+        <span class="sub">Facility observation and control.</span>
+        <div class="right"><span class="chip teal" id="pool-status">shared processing —</span><span class="chip amber" id="mcInflight">in-flight 0</span></div>
+      </div>
+      <section class="card avatar-card" id="avatar-card" aria-label="GLaDOS eye and optic feed">
+        <div class="avatar-stage">
+          <svg id="glados-eye" viewBox="-200 -200 400 400" role="img" aria-label="GLaDOS aperture, connecting"></svg>
+        </div>
+        <div class="avatar-optic" id="avatar-optic" hidden>
+          <canvas id="avatar-optic-view" role="img" aria-label="Live optic feed, original thermal treatment"></canvas>
+          <img id="avatar-optic-source" alt="" hidden>
+          <div class="avatar-optic-hud" aria-hidden="true"><span id="optic-subject" hidden>TEST SUBJECT</span><span id="optic-motion">MOTION 0.00</span></div>
+        </div>
+      </section>
+      <div class="card" style="margin-bottom:16px">
+        <h3>Talk to GLaDOS <span class="now" id="runtime-model">Connecting</span></h3>
+        <form id="message-form"><label for="message-text">Send a message or ask her to work on a task</label>
+          <input class="console-field" id="message-text" maxlength="8000" required placeholder="What would you like to do?">
+          <button class="btn-secondary" id="message-send" type="submit">Send message</button>
+        </form>
+        <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
+        <div class="slice">Latest reply</div><p class="console-note" id="latest-reply" aria-live="polite">Replies appear here, including when voice output is muted.</p>
+      </div>
+      <div class="grid cols-3" style="margin-bottom:16px">
+        <button type="button" class="card" data-go="tasks"><div class="stat"><div class="v" id="mc-slots">0</div><div class="l">Assignments tracked →</div></div></button>
+        <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-minds">0</div><div class="l">Online cores →</div></div></button>
+        <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-inflight">0</div><div class="l">User-facing inferences →</div></div></button>
+      </div>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Dual Lane Orchestration <span class="now" id="laneNow"></span></h3>
+          <div class="lanes">
+            <div class="lane priority">
+              <div class="lane-head">
+                <span class="dot-pulse" style="color:var(--orange)"></span>
+                <div><div class="lname">Priority Lane</div><div class="lsub">routing and conversation requests</div></div>
+                <div class="right" id="priQ">0 in-flight</div>
+              </div>
+              <div class="lane-track" id="priotrack"></div>
+            </div>
+            <div class="lane autonomy">
+              <div class="lane-head">
+                <span class="dot-pulse" style="color:var(--teal)"></span>
+                <div><div class="lname">Background Lane</div><div class="lsub">emotion and background cores</div></div>
+                <div class="right" id="autoQ">0 in-flight</div>
+              </div>
+              <div class="lane-track" id="autotrack"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Central Core <span class="now" id="brainstem-source">Engine state</span></h3>
+          <p class="console-note" id="brainstem-detail"></p>
+          <div class="console-actions">
+            <button class="btn-secondary" id="control-microphone" type="button">Microphone</button>
+            <button class="btn-secondary" id="control-voice" type="button">Voice output</button>
+            <button class="btn-secondary" id="control-camera" type="button">Camera</button>
+            <button class="btn-secondary" id="control-quiet" type="button">Quiet</button>
+          </div>
+          <p class="console-note" id="brainstem-expression"></p>
+          <p class="console-note" id="brainstem-affect"></p>
+          <div class="gauge-row">
+            <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-p" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--teal)"/></svg><div class="g-label">Pleasure</div><div class="g-val" id="g-pv">0.0</div></div>
+            <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-a" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--orange)"/></svg><div class="g-label">Arousal</div><div class="g-val" id="g-av">0.0</div></div>
+            <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-d" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--purple)"/></svg><div class="g-label">Dominance</div><div class="g-val" id="g-dv">0.0</div></div>
+          </div>
+          <div class="console-actions">
+            <button class="btn-secondary" id="edit-instructions" type="button">Edit response instructions</button>
+            <button class="btn-secondary" data-inspect-command="/context" type="button">Inspect context</button>
+            <button class="btn-secondary" data-inspect-command="/emotion" type="button">Inspect emotion</button>
+          </div>
+          <p class="console-note" id="instructions-preview"></p>
+          <div class="mini-queues" style="margin-top:16px">
+            <div class="mline"><span style="color:var(--orange)">&#9679;</span>Last user <span class="muted" id="mc-lastuser">--</span><span class="ellipsis"></span><span class="mono" id="mc-sinceuser">--</span></div>
+            <div class="mline"><span style="color:var(--teal)">&#9679;</span>Last spoke <span class="muted" id="mc-lastasst">--</span><span class="ellipsis"></span><span class="mono" id="mc-sinceasst">--</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Test assignments <button class="btn-secondary" style="margin-left:auto" id="home-new-task">Create assignment</button></h3>
+        <p class="console-note">Assignments are shared with the Central Core. Ask GLaDOS to work on an open assignment.</p>
+        <div id="home-tasks"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Observation log &middot; live stream <button class="btn-secondary" style="margin-left:auto;padding:3px 10px" data-go="wire">open inspector &rarr;</button></h3>
+        <div class="wire" id="home-wire" style="height:300px"></div>
+      </div>
+    </section>
+
+    <!-- CORES -->
+    <section class="view" id="view-cores">
+      <div class="view-head"><h1>Cores</h1><span class="sub">Dedicated functions. Shared processing.</span><div class="right"><span class="chip teal" id="inference-summary">Connecting</span><button class="btn-secondary" data-go="vitals">system diagnostics &rarr;</button></div></div>
+      <p class="console-note">The Central Core handles your requests. Other cores maintain their own functions, state and reports. Suspend a core to stop future scheduled runs; a current run may finish.</p><div class="minds" id="minds"></div>
+      <details class="card core-processing" id="core-processing"><summary>Shared processing · active requests and queues</summary><p class="console-note">Cores share the available processing channels. Routing and your replies have priority; background cores use spare capacity.</p>
+      <div class="grid cols-2" id="inference-slots"></div>
+      <div class="card" style="margin-top:16px"><h3>Facility command queue <span class="chip teal" id="command-status">Connecting</span><button class="btn-secondary" id="open-command" style="margin-left:auto">Run a task</button></h3><p class="console-note">Fixed, read-only host operations run on the CPU alongside the cores.</p><div id="command-activity"></div></div>
+      <div class="card" style="margin-top:16px"><h3>Waiting for capacity</h3><div id="inference-waiting">None</div></div>
+      <div class="card" style="margin-top:16px"><h3>Latest routing decision</h3><div id="routing-latest">No decision yet.</div></div>
+      </details>
+    </section>
+
+    <section class="view" id="view-tools"><div class="view-head"><h1>Facility Tools</h1><span class="sub">capabilities available to GLaDOS right now.</span></div><p class="console-note">Tools run when called by a core. Inspect their inputs or run a fixed host command here. Local time and date are already supplied in context.</p><div id="tools" class="minds"></div></section>
+
+    <!-- TEST ASSIGNMENTS -->
+    <section class="view" id="view-tasks">
+      <div class="view-head"><h1>Test Assignments</h1><span class="sub">saved work and results.</span><div class="right"><button class="btn-secondary" id="new-task">Create assignment</button></div></div>
+      <p class="console-note">Create an assignment, ask GLaDOS to work on it, then inspect its result. Core state and reports live in Cores.</p><div class="slots" id="slots"></div>
+    </section>
+
+    <section class="view" id="view-context">
+      <div class="view-head"><h1>Neural Buffer</h1><span class="sub">Inspect GLaDOS’s inference context.</span></div>
+      <div class="card context-controls">
+        <div class="console-actions">
+          <label>Core request<select class="console-field" id="context-mode"><option value="user">Central Core · user request</option><option value="autonomy">Autonomy Core · autonomous check</option></select></label>
+          <label>Context source<select class="console-field" id="context-view"><option value="live">Live preview</option><option value="request">Last submitted request</option></select></label>
+          <button type="button" class="btn-secondary" id="context-refresh">Refresh</button>
+          <button type="button" class="btn-secondary" id="context-live" aria-pressed="true">Live updates: ON</button>
+          <button type="button" class="btn-secondary" id="context-export" disabled>Download JSON</button>
+          <button type="button" class="btn-secondary" id="context-expand">Show all messages</button>
+          <button type="button" class="btn-secondary" id="context-collapse">Collapse all</button>
+        </div>
+        <p class="console-note" id="context-description">Messages are numbered in the order sent: reusable instructions, conversation history, live state, then the current input. Live preview shows what a new request would receive; new voice or text is added when it arrives. Last submitted request shows the actual payload. Tools are displayed separately below the messages.</p>
+        <label class="context-search">Find in context<input class="console-field" id="context-search" type="search" placeholder="Search prompts, core reports or conversation…"></label>
+        <p id="context-status" class="console-feedback" role="status" aria-live="polite">Open the Neural Buffer to inspect the connected engine.</p>
+      </div>
+      <div id="context-overview" class="context-overview"></div>
+      <div id="context-sections"></div>
+    </section>
+
+    <section class="view" id="view-memory">
+      <div class="view-head"><h1>Test Chamber</h1><span class="sub">Explore what GLaDOS remembers.</span></div>
+      <h2>Recalled for this conversation</h2>
+      <p class="console-note" id="memory-topic">Waiting for a conversation topic.</p>
+      <div id="memory-recall"></div>
+      <h2>Saved memory</h2>
+      <p class="console-note">Browse saved facts and conversation summaries. Searching here does not change what GLaDOS recalls.</p>
+      <form id="memory-filter" class="card context-controls"><div class="console-actions">
+        <label>Search memory<input class="console-field" id="memory-search" type="search" maxlength="280" placeholder="A name, preference or project…"></label>
+        <label>Show<select class="console-field" id="memory-kind"><option value="all">Facts and summaries</option><option value="fact">Facts</option><option value="summary">Summaries</option></select></label>
+        <button type="submit" class="btn-secondary">Search</button>
+        <button type="button" class="btn-secondary" id="memory-refresh">Refresh</button>
+      </div></form>
+      <p id="memory-status" class="console-feedback" role="status" aria-live="polite">Open Test Chamber to browse saved memory.</p>
+      <div id="memory-facts"></div>
+      <div class="console-actions"><button type="button" class="btn-secondary" id="memory-prev" disabled>Previous</button><button type="button" class="btn-secondary" id="memory-next" disabled>Next</button></div>
+    </section>
+    <section class="view" id="view-settings">
+      <div class="card" style="margin-bottom:16px"><h3>Internet search sources</h3><p class="console-note">News requests read these sites’ pages directly, then search if needed. Other categories guide web searches. Enter one domain or site path per line, up to eight per category. Console changes apply to the next request and save to data/search_settings.yaml. File edits apply after restart.</p><form id="search-settings-form"><div class="grid cols-2"><label>Weather<textarea class="console-field" id="search-sources-weather" rows="4" placeholder="dwd.de&#10;meteoblue.com" disabled></textarea></label><label>News<textarea class="console-field" id="search-sources-news" rows="4" placeholder="reuters.com&#10;bbc.com/news" disabled></textarea></label><label>Reddit communities<textarea class="console-field" id="search-sources-reddit" rows="4" placeholder="reddit.com/r/LocalLLaMA&#10;reddit.com/r/Munich" disabled></textarea></label><label>General sources<textarea class="console-field" id="search-sources-general" rows="4" placeholder="A favorite domain or site path" disabled></textarea></label></div><button type="submit" class="btn-secondary" id="search-settings-save" style="margin-top:12px" disabled>Save favorite sources</button></form><p id="search-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
+      <div class="view-head"><h1>Facility Settings</h1><span class="sub">autonomy, voice input and routing.</span><button class="btn-secondary" id="decision-new">Create decision list</button></div>
+      <div class="card" style="margin-bottom:16px"><h3>Facility Sensors &amp; Audio</h3><p class="console-note">Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.</p><div class="grid cols-3">
+        <label>Webcam input<select class="console-field" id="device-camera" disabled><option>Connecting…</option></select></label>
+        <label>Audio input<select class="console-field" id="device-microphone" disabled><option>Connecting…</option></select></label>
+        <label>Audio output<select class="console-field" id="device-speaker" disabled><option>Connecting…</option></select></label>
+      </div><button type="button" class="btn-secondary" id="device-refresh" style="margin-top:12px">Refresh devices</button><p class="console-feedback" id="device-feedback" role="status" aria-live="polite">Open Facility Settings to list connected devices.</p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Vision Core</h3><p class="console-note">Motion guides each image analysis delay: a still scene favours the maximum, movement favours the minimum, with some randomness. Default: 2–5 seconds. Enter whole seconds; changes apply immediately and are saved across restarts. The blink follows actual image analysis.</p><form id="vision-settings-form"><div class="grid cols-2"><label for="vision-interval-min">Minimum delay (seconds)<input class="console-field" id="vision-interval-min" type="number" min="1" max="60" step="1" required disabled></label><label for="vision-interval-max">Maximum delay (seconds)<input class="console-field" id="vision-interval-max" type="number" min="1" max="60" step="1" required disabled></label></div><button type="submit" class="btn-secondary" id="vision-settings-save" style="margin-top:12px" disabled>Save interval range</button></form><p id="vision-settings-status" class="console-note"></p><p id="vision-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Quiet mode</h3><p class="console-note">Say “go to sleep” or “be quiet” to stop replies and suspend background cores. She keeps listening for “wake up”. Background sounds and unintelligible speech are ignored.</p><button type="button" class="btn-secondary" id="settings-quiet">Quiet: connecting</button><p id="quiet-settings-feedback" class="console-feedback" role="status"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Autonomy Core</h3><p class="console-note">Reviews all core slots and recent conversation during idle pauses. Useful new alerts, completed searches and observed arrivals are passed to Central Core, which speaks in GLaDOS’s normal voice. Other cores run independently; silent checks back off automatically.</p><button type="button" class="btn-secondary" id="settings-autonomy">Autonomy: connecting</button><p class="console-note" id="autonomy-core-status"></p><p class="console-note" id="autonomy-core-handoff"></p><p id="autonomy-settings-feedback" class="console-feedback" role="status"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Capability routing</h3><p class="console-note">GLaDOS manages routing and parallel replies automatically. Choose which list describes your available actions. Scores express preference among your options, not certainty.</p><div id="decision-activation"></div><p id="settings-feedback" class="console-feedback" role="status"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Voice input</h3><p class="console-note">Optional transcripts use Gemma to keep a written version of your voice input. Routing, Emotion and replies reuse that text. Available in direct-audio mode; loads no Parakeet.</p><button class="btn-secondary" id="control-transcripts" type="button">Transcripts</button><p class="console-feedback" id="audio-settings-feedback" role="status"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Routing tree</h3><p class="console-note">Choose the capability area, then its action. MCP services add a server choice before the tool. Click a decision to expand its choices; teal marks the latest route, yellow marks uncertainty.</p><div id="routing-structure"></div></div><div class="grid cols-2" id="decision-lists"></div>
+    </section>
+
+    <!-- WIRE -->
+    <section class="view" id="view-wire">
+      <div class="view-head"><h1>Observation Log</h1><span class="sub">observability bus stream.</span></div>
+      <div class="filters" id="wfilters"></div>
+      <div class="card" style="padding:8px"><div class="wire" id="full-wire" style="height:calc(100vh - 210px)"></div></div>
+    </section>
+
+    <!-- VITALS -->
+    <section class="view" id="view-vitals">
+      <div class="view-head"><h1>Diagnostics</h1><span class="sub">engine infrastructure, inference capacity, and device health.</span></div>
+      <div class="grid cols-2">
+        <div class="card"><h3>Engine components</h3><div id="components"></div></div>
+        <div class="card"><h3>Audio</h3><div id="v-audio"></div></div>
+        <div class="card"><h3>Interaction</h3><div id="v-interaction"></div></div>
+        <div class="card"><h3>Vision</h3><div id="v-vision"></div></div>
+        <div class="card"><h3>MCP servers</h3><div id="v-mcp"></div></div>
+      </div>
+      <details class="card" style="margin-top:16px"><summary>Inference diagnostics</summary><span id="ncNow"></span>      <div class="lanes">
+        <div class="lane priority">
+          <div class="lane-head"><span class="dot-pulse" style="color:var(--orange)"></span><div><div class="lname">Priority Lane</div><div class="lsub">the routing, then conversation</div></div><div class="right" id="nc-prio">--</div></div>
+          <div class="lane-track" id="nc-priotrack"></div>
+        </div>
+        <div class="lane autonomy">
+          <div class="lane-head"><span class="dot-pulse" style="color:var(--teal)"></span><div><div class="lname">Background Lane</div><div class="lsub">background inference workers</div></div><div class="right" id="nc-auto">--</div></div>
+          <div class="lane-track" id="nc-autotrack"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h3>Worker pool <span class="now" id="worker-count"></span></h3>
+        <div class="planner" id="workers"></div>
+      </div>
+</details>
+    </section>
+  </main>
+</div>
+
+<aside class="drawer" id="drawer">
+  <div class="d-head"><h2 id="drawer-title">Inspector</h2><button class="btn-secondary" id="drawer-close">&#10005;</button></div>
+  <div class="d-body" id="drawer-body"></div>
+</aside>
+
+<script src="glados-rig.js"></script>
+<script src="glados-vision.js"></script>
+<script src="glados-avatar.js"></script>
+<script src="glados-routing.js"></script>
+<script src="glados-context.js"></script>
+<script src="glados-memory.js"></script>
+<script src="glados-devices.js"></script>
+<script>
+"use strict";
+/* GLaDOS Core Console — dual mode.
+   LIVE : /api/snapshot + /api/stream (SSE). DUMMY fallback if API is unreachable. */
+const $ = id => document.getElementById(id);
+const $$ = s => document.querySelectorAll(s);
+const el = (cls, html) => { const d=document.createElement("div"); d.className=cls; if(html) d.innerHTML=html; return d; };
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const timeStr = ms => { const d=new Date(ms); return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); };
+const ago = s => { if(s==null) return "never"; s=Math.max(0,Math.round(s||0)); if(s>3600)return (s/3600).toFixed(1)+"h"; if(s>60)return Math.round(s/60)+"m"; return s+"s"; };
+const clamp = (v,a,b) => Math.min(b,Math.max(a,v));
+const fmtNum = n => (n>=0?"+":"")+Number(n).toFixed(2);
+const CIRC = 2*Math.PI*38;
+const pill = {running:"s-running", started:"s-running", active:"s-running", idle:"s-idle", paused:"s-paused", done:"s-done", stopped:"s-idle"};
+const barColor = {running:"var(--teal)", active:"var(--teal)", done:"var(--green)", idle:"var(--orange)", paused:"var(--dim)"};
+
+/* ============ normalized state ============ */
+const S = {
+  live:false, connection:"connecting", performance:null,
+  emo:null,
+  sinceUser:null, sinceAsst:null,
+  audio:{rms:-40, vad:false, updated_at:0}, speaking:false,
+  mcpServers:[],
+  vision:"no visual feed", visionMind:null, searchSettings:null,
+  autonomyCore:null,
+  lanes:{prioQ:0, autoQ:0, autoInflight:0, workers:0, enabled:false},
+  inference:null, commandSlot:null, routing:null, decisions:null, agents:[], minds:[], agentMinds:null, tools:[], slots:[], commands:[], controls:{}, operator:null,
+  seq:100,
+};
+const avatar = window.GladosAvatar.mount(document);
+const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
+const memoryBrowser = window.GladosMemory.mount(document, () => S.live && S.connection === 'live');
+const deviceSelector = window.GladosDevices.mount(document, () => S.live && S.connection === 'live');
+let toolsRenderKey="",mindsRenderKey="",slotsRenderKey="",homeTasksRenderKey="";
+function normalizeLanes(lanes = {}){
+  return {
+    enabled: !!lanes.enabled,
+    prioQ: lanes.priority?.queue ?? 0,
+    autoQ: lanes.autonomy?.queue ?? 0,
+    autoInflight: lanes.autonomy?.inflight ?? 0,
+    workers: lanes.autonomy?.workers ?? 0,
+  };
+}
+
+/* ============ event wire ============ */
+let eventLog = [], unread = 0, wireFilter = "all", replyParts=[];
+const LEVELS = ["all","debg","info","ok","warn","err"];
+
+function addWireRow(host, ev, cap){
+  const meta = Object.keys(ev.meta||{}).map(k=>k+"="+ev.meta[k]).join(" ");
+  const row = el("wire-row",
+    "<span class=\"t\">"+timeStr(ev.t)+"</span>"+
+    "<span class=\"lv "+esc(ev.level)+"\">"+esc(ev.level)+"</span>"+
+    "<span class=\"src\">"+esc(ev.src)+"."+esc(ev.kind)+"</span>"+
+    "<span class=\"msg\">"+esc(ev.msg)+"</span>"+
+    (meta? "<span class=\"meta\">"+esc(meta)+"</span>" : ""));
+  host.prepend(row);
+  while (host.children.length > (cap||110)) host.removeChild(host.lastChild);
+}
+function track(ev){ eventLog.push(ev); if(eventLog.length>400) eventLog.shift(); }
+function wirePass(lv){ return wireFilter==="all" || lv===wireFilter; }
+function entry(ev){
+  ev.level = ({debug:"debg",success:"ok",warning:"warn",error:"err",critical:"err"})[ev.level] || ev.level;
+  if(!("t" in ev)) ev.t = Date.now();
+  if(ev.kind==='user_input'){
+    replyParts=[]; $('latest-reply').textContent='Waiting for GLaDOS…';
+  }
+  if(ev.src==='tts' && ev.kind==='synthesize'){
+    replyParts.push(ev.msg); if(replyParts.length>40) replyParts.shift();
+    $('latest-reply').textContent=replyParts.join(' ');
+  }
+  track(ev);
+  if(ev.level!=="debg") addWireRow($("home-wire"), ev, 60);
+  if(wirePass(ev.level)) addWireRow($("full-wire"), ev, false);
+  if(ev.level!=="debg") unread++;
+  updateBadges();
+}
+function emit(src, kind, level, msg, meta){ entry({src,kind,level,msg,meta:meta||{}}); }
+function renderFullWire(){
+  const host=$("full-wire"); host.innerHTML="";
+  eventLog.forEach(ev => { if(wirePass(ev.level)) addWireRow(host, ev, false); });
+}
+function renderFilters(){
+  if(!$("wfilters")) return;
+  $("wfilters").innerHTML="";
+  LEVELS.forEach(lv => {
+    const b = el("fbtn"+(wireFilter===lv?" active":""), lv);
+    b.onclick = () => { wireFilter=lv; $$(".fbtn").forEach(x=>x.classList.remove("active")); b.classList.add("active"); renderFullWire(); };
+    $("wfilters").appendChild(b);
+  });
+}
+
+/* ============ navigation ============ */
+function go(name){
+  if(name==="minds" || name==="slots") name="cores";
+  document.title=(name==="cores"?"Cores":({home:"Enrichment Center",context:"Neural Buffer",memory:"Test Chamber",tools:"Facility Tools",tasks:"Test Assignments",settings:"Facility Settings",wire:"Observation Log",vitals:"Diagnostics"})[name]||"GLaDOS")+" · GLaDOS | Aperture Science";
+  avatar.setVisible(name==="home");
+  contextInspector.setVisible(name==='context');
+  memoryBrowser.setVisible(name==='memory');
+  deviceSelector.setVisible(name==='settings');
+  $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view===name));
+  $$(".view").forEach(v => v.classList.toggle("active", v.id==="view-"+name));
+  if(name==="wire"){ renderFilters(); renderFullWire(); unread=0; updateBadges(); }
+}
+$$(".nav-item").forEach(n => {n.setAttribute("role","button");n.setAttribute("tabindex","0");n.addEventListener("click",()=>go(n.dataset.view));n.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();go(n.dataset.view);}});});
+$$("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
+
+/* ============ lanes ============ */
+function phaseLabel(dt){ const p=clamp(dt/3200,0,1); return p<0.35?"thinking":(p<0.72?"reasoning":"writing"); }
+function syncLane(id, count, lcls){
+  const host=$(id); if(!host || count==null) return;
+  while(host.children.length > count) host.lastChild.remove();
+  while(host.children.length < count){
+    const i = host.children.length;
+    const c = el("inf "+lcls);
+    c.dataset.idx = i; c.dataset.t0 = Date.now();
+    c.innerHTML = "<span class=\"id\">ACTIVE</span>"+
+      "<span class=\"label\">"+((lcls==="priority")?"priority lane worker":"autonomy pool worker")+" "+(i+1)+"</span>"+
+      "<span class=\"spark\"><i></i><i></i><i></i><i></i></span>"+
+      "<span class=\"phase\">queued</span>";
+    host.appendChild(c);
+  }
+  host.querySelectorAll(".inf .phase").forEach(p => p.textContent = S.live ? "in inference" : phaseLabel(Date.now() - Number(p.closest(".inf").dataset.t0)));
+}
+function renderWorkers(){
+  const n=S.lanes.workers;
+  $("worker-count").textContent=n+" configured";
+  $("workers").innerHTML=n ? kv("In-flight requests",S.lanes.autoInflight)+kv("Available capacity",Math.max(0,n-S.lanes.autoInflight))+kv("Queued requests",S.lanes.autoQ) : '<div class="msum">Background processing is unavailable. The Central Core and test assignments remain available.</div>';
+}
+
+/* ============ brainstem + interaction ============ */
+function setRing(id, v){ const c=$(id); const frac=(clamp(v,-1,1)+1)/2; c.style.strokeDasharray=CIRC; c.style.strokeDashoffset=CIRC*(1-frac); }
+function renderBrainstem(){
+  if(!$("g-p")) return;
+  ["p","a","d"].forEach((axis,i) => {
+    if(S.emo) setRing("g-"+axis, S.emo[i]);
+    else { $("g-"+axis).style.strokeDasharray=CIRC; $("g-"+axis).style.strokeDashoffset=CIRC; }
+    $("g-"+axis+"v").textContent = S.emo ? fmtNum(S.emo[i]) : "Off";
+  });
+  $("mc-lastuser").textContent=S.sinceUser==null ? "never" : ago(S.sinceUser)+" ago"; $("mc-sinceuser").textContent=ago(S.sinceUser);
+  $("mc-lastasst").textContent=S.sinceAsst==null ? "never" : ago(S.sinceAsst)+" ago"; $("mc-sinceasst").textContent=ago(S.sinceAsst);
+}
+
+/* ============ minds / slots / vitals ============ */
+const CORE_IDENTITIES={
+  glados:{title:'Central Core · GLaDOS',color:'#ff9a3c'},
+  vision:{title:'Vision Core',color:'#49c9f5'},
+  emotion:{title:'Emotion Core',color:'#ff6253'},
+  compaction:{title:'Memory Core',color:'#75d998'},
+  health:{title:'Health Core',color:'#8bd3ad'},
+  search:{title:'Search Core',color:'#7db9fa'},
+  router:{title:'Routing Core',color:'#ffd166'},
+  autonomy:{title:'Autonomy Core',color:'#ad9aef'}
+};
+function coreIdentity(core){
+  const id=core.id||core.agent_id;
+  const title=(core.title||id||'Background').replace(/\bMind\b/gi,'Core');
+  return CORE_IDENTITIES[id]||{title:/core$/i.test(title)?title:title+' Core',color:'#49c9f5'};
+}
+function coreOwner(owner){
+  const id=String(owner||'').toLowerCase();
+  return CORE_IDENTITIES[id]?.title || (/^routing/.test(id)?'Routing Core':/^vision/.test(id)?'Vision Core':/^glados/.test(id)||id==='draft'?'Central Core · GLaDOS':id==='emotional state'?'Emotion Core':owner);
+}
+function coreActivity(core){
+  const id=core.id||core.agent_id, owner=CORE_IDENTITIES[id]?.title;
+  const matches=r=>(owner && coreOwner(r.owner)===owner) || String(r.owner||'').toLowerCase()===String(core.title||'').toLowerCase();
+  const active=(S.inference?.active||[]).filter(matches), waiting=(S.inference?.waiting||[]).filter(matches);
+  if(core.paused || (S.controls.quiet_mode && core.kind!=='router'))return {label:'Suspended',className:'s-paused',detail:active.length?'Finishing current run · '+active.map(r=>'Channel '+(r.slot+1)).join(', '):'Waiting for resume',active,waiting};
+  if(active.length)return {label:'Working',className:'s-running',detail:active.map(r=>'Channel '+(r.slot+1)).join(' · '),active,waiting};
+  if(waiting.length)return {label:'Queued',className:'s-paused',detail:waiting.length+' request'+(waiting.length===1?'':'s')+' waiting',active,waiting};
+  if(core.research?.status==='researching')return {label:'Working',className:'s-running',detail:'Research round '+core.research.rounds+' of '+core.research.max_rounds,active,waiting};
+  if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
+  return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':'Scheduled every '+(core.interval_s||'?')+' s':'Ready for requests',active,waiting};
+}
+function renderMinds(){
+  if(!$("minds")) return;
+  const list = allMinds();
+  const key=JSON.stringify([list,S.inference,S.controls.quiet_mode]);if(key===mindsRenderKey)return;mindsRenderKey=key;
+  if(!list.length){ $("minds").innerHTML="<div class=\"msum\">No cores connected.</div>"; return; }
+  $("minds").innerHTML="";
+  list.forEach(a => {
+    const id = a.agent_id||a.id;
+    const identity=coreIdentity(a),activity=coreActivity(a);
+    const c = el("mind",
+      '<div class="mtop"><span class="core-eye" style="--core-color:'+identity.color+'" aria-hidden="true"></span>'+
+      '<span><div class="mtitle">'+esc(identity.title)+'</div><div class="mrole">'+esc((a.role||id||'core').replace(/_/g,' '))+'</div></span>'+
+      '<span class="mstat"><span class="status-pill '+activity.className+'">'+activity.label+'</span></span></div>'+
+      '<div class="msum">'+esc(a.summary||'Awaiting first report.')+'</div>'+
+      '<div class="core-activity">'+esc(activity.detail)+'</div>'+
+      '<div class="mfoot"><span>'+(a.kind==='background'?(a.tick_count||0)+' runs':'On demand')+'</span><span>'+(a.last_tick?'last run '+new Date(a.last_tick*1000).toLocaleTimeString():'')+'</span>'+
+      '<span style="margin-left:auto;color:var(--teal)">inspect core &rarr;</span></div>');
+    c.onclick = () => openMind(id);
+    c.setAttribute("role","button");c.setAttribute("tabindex","0");
+    c.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openMind(id);}});
+    $("minds").appendChild(c);
+  });
+}
+function meter(label, val, color){ if(val==null) return '<div class="meter"><div class="m-label"><span>'+label+'</span><span>Not rated</span></div></div>'; const v=Math.round(clamp(val,0,100));
+  return '<div class="meter"><div class="m-label"><span>'+label+'</span><span>'+v+'%</span></div>'+
+  '<div class="bar"><i style="width:'+v+'%;background:'+color+'"></i></div></div>'; }
+function maybeFetch(url){ return fetch(url).then(r=>{ if(!r.ok) throw new Error(url); return r.json(); }); }
+function renderSlots(){
+  if(!$("slots")) return;
+  const key=JSON.stringify(taskSlots());if(key===slotsRenderKey)return;slotsRenderKey=key;
+  if(!taskSlots().length){ $("slots").innerHTML="<div class=\"msum\">No assignments.</div>"; return; }
+  $("slots").innerHTML="";
+  taskSlots().forEach(s => {
+    const c = el("slot");
+    c.style.borderTopColor = barColor[s.status]||"var(--orange)";
+    const next = s.next_run
+      ? ("next "+Math.round(Math.max(0,(s.next_run - Date.now()/1000))/60)+"m")
+      : "no schedule";
+    c.innerHTML =
+      "<div class=\"shead\"><span class=\"stitle\">"+esc(s.title)+"</span><span class=\"sstat\"><span class=\"status-pill "+(pill[s.status]||"s-idle")+"\">"+esc(s.status)+"</span></span></div>"+
+      "<div class=\"ssum\">"+esc(s.summary||"")+"</div>"+
+      "<div class=\"meters\">"+meter("IMPORTANCE",s.importance==null?null:s.importance*100,"var(--teal)")+meter("CONFIDENCE",s.confidence==null?null:s.confidence*100,"var(--green)")+"</div>"+
+      "<div class=\"meta-line\"><span>"+next+"</span><span>"+((s.update_priority|| (s.notify_user?"important":"regular"))==="important"?"Important · review":"Regular update")+"</span>"+
+      "<span style=\"margin-left:auto\"><button class=\"btn-secondary\" data-slot=\""+esc(s.slot_id)+"\" style=\"padding:2px 8px\">report</button></span></div>";
+    if (s.owner_id && ['queued','running'].includes(s.status)) {
+      const cancel = document.createElement('button');
+      cancel.className = 'btn-secondary'; cancel.textContent = 'Cancel task';
+      cancel.onclick = async () => {
+        cancel.disabled = true;
+        try { await apiPost('/api/tasks/cancel', {slot_id:s.slot_id}); cancel.textContent = 'Cancellation requested'; }
+        catch (error) { cancel.textContent = error.message; cancel.disabled = false; }
+      };
+      c.appendChild(cancel);
+    }
+    $("slots").appendChild(c);
+  });
+  $$("[data-slot]").forEach(b => b.addEventListener("click", () => openSlot(b.dataset.slot)));
+}
+function kv(k,v){ return '<div class="kv"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>'; }
+function renderTools(){
+  const key=JSON.stringify(S.tools);if(key===toolsRenderKey)return;toolsRenderKey=key;
+  const host=$('tools');host.innerHTML='';
+  if(!S.tools.length){host.textContent='No callable tools reported. Connect to the engine to inspect capabilities.';return;}
+  S.tools.forEach(tool=>{
+    const card=el('card','<h3>'+esc(tool.name)+'</h3><p class="console-note">'+esc(tool.description||'No description')+'</p>');
+    const button=document.createElement('button');button.className='btn-secondary';button.textContent='Inspect tool';button.onclick=()=>openTool(tool);card.appendChild(button);host.appendChild(card);
+  });
+}
+function openTool(tool){
+  drawerRequest++;
+  if(tool.name==='run_safe_command'){openCommand();return;}
+  openDrawer(tool.name,'<p>'+esc(tool.description||'')+'</p><div class="slice">Inputs</div><pre class="mem-row">'+esc(JSON.stringify(tool.parameters||{},null,2))+'</pre><p class="console-note">Ask GLaDOS to use this capability from the Enrichment Center.</p>');
+}
+function commandResult(r){
+  return (r.ok?'Completed':'Failed')+(r.exit_code!==undefined?' · exit '+r.exit_code:'')+(r.elapsed_ms!==undefined?' · '+r.elapsed_ms+' ms':'')+'\n'+(r.error||r.stdout||'No output')+(r.stderr?'\n'+r.stderr:'');
+}
+function openCommand(){
+  const catalog=S.commandSlot?.catalog||[];
+  openDrawer('Command execution','<p>Choose a fixed read-only task. The assistant uses this same execution slot.</p><label>Task<select id="command-task" class="console-field">'+catalog.map(c=>'<option value="'+esc(c.task)+'">'+esc(c.label)+'</option>').join('')+'</select></label><pre id="command-preview" class="mem-row"></pre><button class="btn-secondary" id="run-command" '+(!catalog.length?'disabled':'')+'>Run command</button><pre id="command-result" class="console-feedback" style="white-space:pre-wrap" role="status"></pre>');
+  const preview=()=>{$('command-preview').textContent=(catalog.find(c=>c.task===$('command-task').value)?.command||[]).join(' ');};
+  $('command-task').onchange=preview;preview();
+  $('run-command').onclick=()=>perform(async()=>commandResult(await apiPost('/api/tools/command',{task:$('command-task').value})),'command-result');
+}
+function renderVitals(){
+  $("components").innerHTML=S.minds.filter(m=>!S.agents.some(a=>a.agent_id===m.mind_id)).map(m=>kv(esc(m.title),esc(m.status)+" · "+esc(m.summary||""))).join("")||"No engine components reported.";
+  if(!$("v-audio")) return;
+  const a = S.audio;
+  const vision = typeof S.vision === "string" ? S.vision : (S.vision&&S.vision.summary) || "—";
+  $("v-audio").innerHTML = kv("Speaking", S.speaking?"YES":"no")+kv("Microphone VAD", a.vad?"hot":"idle")+kv("RMS", a.rms.toFixed(1)+" dB")+
+    '<div style="margin-top:14px">'+meter("input level", clamp((a.rms+60)/60*100,0,100),"var(--teal)")+"</div>";
+  $("v-interaction").innerHTML = kv("Since last user", ago(S.sinceUser))+kv("Since last spoke", ago(S.sinceAsst));
+  $("v-vision").innerHTML = kv("Scene", esc(vision));
+  $("v-mcp").innerHTML = S.mcpServers.length
+    ? S.mcpServers.map(m => '<div style="display:flex;justify-content:space-between;padding:4px 0"><span>'+esc(m.name)+'</span><span>'+
+        (m.connected!==false ? '<span class="chip green">online · '+(m.tools||0)+' tools</span>' : '<span class="chip red">offline</span>')+
+        '</span></div>').join("")
+    : '<span class="chip">none configured</span>';
+}
+
+/* ============ counters + badges ============ */
+function updateBadges(){
+  if(!$("mc-inflight")) return;
+  const inflight = S.prioInflight||0;
+  $("mc-inflight").textContent = inflight;
+  $("mc-slots").textContent = taskSlots().length;
+  $("mc-minds").textContent = allMinds().filter(a=>!['Offline','Suspended'].includes(coreActivity(a).label)).length;
+  const inf=$("mcInflight"); if(inf) inf.textContent="in-flight "+inflight;
+  const mb=$("mindsBadge"); if(mb) mb.textContent=allMinds().length;
+  const sb=$("tasksBadge"); if(sb) sb.textContent=taskSlots().filter(x=>/open|running|active|queued|blocked/.test(x.status)).length;
+  const wb=$("wireBadge"); if(wb) wb.textContent=unread;
+}
+function renderLaneMeta(){
+  if(!$("priQ")) return;
+  $("priQ").textContent = (S.prioInflight||0)+" in-flight · "+S.lanes.prioQ+" queued";
+  $("nc-prio").textContent = S.prioInflight? "1 active":"idle";
+  const pool=$("autoQ"); if(pool) pool.textContent="background · "+S.lanes.autoInflight+" in-flight · "+S.lanes.autoQ+" queued";
+  $("nc-auto").textContent = S.lanes.autoInflight+" active";
+  $("ncNow").textContent = (S.lanes.autoInflight+(S.prioInflight||0))+" active · "+timeStr(Date.now());
+  $("laneNow").textContent = timeStr(Date.now());
+  if($("toolsBadge")) $("toolsBadge").textContent = S.tools.length;
+  $("pool-status").textContent = S.inference ? S.inference.active.length+" / "+S.inference.capacity+" channels active"+(S.inference.interaction_hold?" · Background inference waiting for user response":"") : "capacity unknown";
+}
+function paint(){
+  deviceSelector.updateConnection();
+  avatar.update(S);
+  renderLaneMeta();
+  syncLane("priotrack", S.prioInflight, "priority");
+  syncLane("autotrack", S.lanes.autoInflight, "autonomy");
+  syncLane("nc-priotrack", S.prioInflight, "priority");
+  syncLane("nc-autotrack", S.lanes.autoInflight, "autonomy");
+  renderConsoleControls(); renderHomeTasks(); renderBrainstem(); renderWorkers(); renderMinds(); renderTools(); renderSlots(); renderInference(); renderAutonomySettings(); renderDecisionSettings(); renderVitals(); renderVisionInspector(); updateBadges();
+}
+
+/* ============ drawer ============ */
+let inspectedSlot=null,inspectedMind=null;
+function openDrawer(title, html){ inspectedSlot=null;inspectedMind=null; if(!$("drawer"))return; $("drawer-title").textContent=title; $("drawer-body").innerHTML=html; $("drawer").classList.add("open"); }
+let drawerRequest=0;
+async function openMind(id){
+  const token=++drawerRequest, mind=allMinds().find(a=>(a.agent_id||a.id)===id);
+  if(!mind) return;
+  const title=coreIdentity(mind).title;
+  const activity=coreActivity(mind);
+  let details=kv("Function",esc(mind.role||id))+kv("Model",esc(mind.model||S.controls.model||"Unknown"))+kv("Status",activity.label)+kv("Processing",esc(activity.detail));
+  if(id==='vision'){
+    openDrawer(title,details+'<p class="console-note">Face tracking and this live preview run on the CPU. Motion biases the '+esc(S.visionMind?.interval_min_s??2)+'–'+esc(S.visionMind?.interval_max_s??5)+' second delay: shorter when moving, longer when still. E4B compares up to four timestamped observations. Change the interval in Facility Settings.</p><div class="console-actions"><button class="btn-secondary" id="mind-toggle"></button><button class="btn-secondary" id="mind-run">Run once now</button></div><p class="console-feedback" id="mind-feedback" role="status"></p><p class="console-note" id="vision-status"></p><img id="vision-preview" alt="Live webcam with face tracking" hidden style="width:100%;border-radius:8px"><div class="slice">What I see</div><div class="mem-row" id="vision-scene"></div><div class="slice">What changed since the previous image</div><div class="mem-row" id="vision-changes"></div><div class="slice">Recent events · last four observations</div><div class="mem-row" id="vision-events"></div><div class="slice">Observation timing</div><div id="vision-metrics"></div><div class="slice">Latest question</div><div class="mem-row" id="vision-question"></div>');
+    inspectedMind={id,key:JSON.stringify(mind)};
+    renderVisionInspector();
+    $('mind-toggle').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:S.visionMind?.paused?'resume':'pause'});await refreshSnapshot();return 'Camera schedule updated.';},'mind-feedback');
+    $('mind-run').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:'run'});return 'One observation queued.';},'mind-feedback');
+    return;
+  }
+  if(mind.kind==='router'){
+    openDrawer(title,details+'<p class="console-note">One output token selects an option from your active decision list. Runs on completed turns, before speech or tools.</p><button class="btn-secondary" id="router-settings">Edit decision lists</button>');
+    $('router-settings').onclick=()=>{$('drawer-close').click();go('settings');};return;
+  }
+  if(mind.kind==='autonomy'){
+    openDrawer(title,details+'<p class="console-note">Reviews independent core slots and conversation evidence, then asks Central Core to deliver useful new notifications.</p><button class="btn-secondary" id="mind-autonomy-settings">Facility settings</button>');
+    $('mind-autonomy-settings').onclick=()=>{$('drawer-close').click();go('settings');};return;
+  }
+  if(mind.kind==='primary'){
+    details+='<p class="console-note">Uses the tools listed in Facility Tools. Your response instructions apply to this core.</p><div class="console-actions"><button class="btn-secondary" id="mind-chat">Talk to GLaDOS</button><button class="btn-secondary" id="mind-tools">Facility tools</button><button class="btn-secondary" id="mind-instructions">Edit instructions</button></div>';
+    openDrawer(title,details);
+    $('mind-chat').onclick=()=>{$('drawer-close').click();go('home');$('message-text').focus();};
+    $('mind-tools').onclick=()=>{$('drawer-close').click();go('tools');};
+    $('mind-instructions').onclick=editInstructions;
+    return;
+  }
+  details+=kv("Schedule",mind.research?'On requested research':mind.interval_min_s!=null?'Motion-aware delay '+esc(mind.interval_min_s)+'–'+esc(mind.interval_max_s)+' seconds':'Every '+esc(mind.interval_s||'?')+' seconds')+(mind.research?'':kv("Completed/attempted runs",mind.tick_count||0));
+  if(mind.research){const r=mind.research;details+='<p class="console-note">Searches, reviews source evidence and follows up to resolve gaps. Citations use returned URLs; quoted findings are checked against the source excerpts.</p>'+kv('Research topic',esc(r.objective||r.query||'Waiting for a request'))+kv('Search rounds',(r.rounds||0)+' / '+r.max_rounds)+kv('Sources',r.sources||0)+kv('Cited passages',r.findings||0)+kv('Time limit',r.deadline_s+' seconds');}
+  if(mind.compaction){
+    const c=mind.compaction;
+    details+='<p class="console-note">Recalls relevant saved facts into its slot for the current topic. Keeps recent messages intact and merges older context into progressively coarser summaries. Runs quietly; it never initiates speech.</p>'+kv('Recent messages kept',c.preserve_recent)+kv('Raw messages',c.raw_messages??0)+kv('Estimated context',(c.tokens??0)+' tokens · threshold '+c.threshold)+(c.bands||[]).map(b=>kv(esc(b.label),b.summaries+' summaries · ~'+b.tokens+' tokens')).join('');
+    if(c.recall) details+=kv('Recall',c.recall.enabled?(c.recall.recalled_facts+' relevant facts · '+c.recall.indexed_facts+' indexed'):'Disabled')+kv('Recall topic',esc(c.recall.query||'Waiting for a topic'))+(c.recall.unavailable?'<p class="console-note">Some saved memory could not be read.</p>':'');
+  }
+  openDrawer(title,details+'<p>Loading latest report and memory…</p>');
+  try {
+    const memory=S.live?await maybeFetch('/api/minds/'+encodeURIComponent(id)+'/memory'):{memory:[]};
+    const slot=S.slots.find(s=>s.slot_id===id);
+    const output=slot && S.live?await maybeFetch('/api/slots/'+encodeURIComponent(id)):slot;
+    if(token!==drawerRequest) return;
+    const rows=(memory.memory||[]).map(m=>'<div class="mem-row"><span class="mk">'+esc(m.key)+'</span>'+esc(typeof m.value==='string'?m.value:JSON.stringify(m.value,null,2))+'</div>').join('');
+    const runControl=mind.research?'</div><p class="console-note">Ask GLaDOS to research a topic to start a search. Suspending this core cancels its current research.</p>':'<button class="btn-secondary" id="mind-run">Run once now</button></div><p class="console-note">Run once queues work on this core’s worker, including while paused. A current run is allowed to finish.</p>';
+    openDrawer(title,details+'<div class="console-actions"><button class="btn-secondary" id="mind-toggle">'+(mind.paused?'Resume core':'Suspend core')+'</button>'+runControl+'<p class="console-feedback" id="mind-feedback" role="status"></p><div class="slice">Latest output</div><div class="mem-row">'+esc(output?.report||output?.summary||'No output yet.')+'</div><div class="slice">Core memory</div>'+(rows||'<p>No memory entries yet.</p>'));
+    inspectedMind={id,key:JSON.stringify(mind)};
+    $('mind-toggle').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:mind.paused?'resume':'pause'});await refreshSnapshot();await openMind(id);return 'Schedule updated.';},'mind-feedback');
+    if(!mind.research)$('mind-run').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:'run'});return 'One run queued. The result will refresh when it finishes.';},'mind-feedback');
+  } catch(error){if(token===drawerRequest) openDrawer(title,details+'<p>'+esc(error.message)+'</p>');}
+}
+function renderVisionInspector(){
+  if(inspectedMind?.id!=='vision' || !$('vision-scene')) return;
+  const v=S.visionMind;
+  $('vision-scene').textContent=v?.scene||'Waiting for the first observation.';
+  $('vision-changes').textContent=v?.changes||'No previous observation yet.';
+  $('vision-events').textContent=v?.recent_events||'Waiting for timestamped observations.';
+  $('vision-status').textContent=v?.paused?(v?.camera?.enabled?'Paused schedule · observing once…':'Paused · camera released.'):v?.error|| (v?.camera?.connected?'Camera active · selecting fresh, sharp frames.':'Connecting to camera…');
+  $('mind-toggle').textContent=v?.paused?'Resume Vision Core':'Suspend Vision Core';
+  $('mind-toggle').disabled=$('mind-run').disabled=S.connection!=='live' || operationPending;
+  const image=$('vision-preview');
+  const cameraLive=v?.camera?.enabled && v?.camera?.connected && S.connection==='live';
+  if(cameraLive && !image.dataset.streaming){
+    image.dataset.streaming='true';image.src='/api/vision/live?started='+Date.now();image.hidden=false;
+    image.onerror=()=>{image.dataset.streaming='';image.hidden=true;};
+  }else if(!cameraLive){
+    image.removeAttribute('src');image.dataset.streaming='';image.hidden=true;
+  }
+  const age=v?.captured_at?Math.max(0,Date.now()/1000-v.captured_at).toFixed(1)+' s old':'No frame yet';
+  const q=v?.last_question;
+  $('vision-question').textContent=q?q.question+'\n'+q.answer+'\nEvidence: '+q.evidence:'Ask GLaDOS a specific question to inspect the camera.';
+  const faceSummary=face=>!face?.available?'Unavailable':face.present===false?'No person detected':
+    face.present!==true?'Presence unclear':Number.isFinite(face.x)&&Number.isFinite(face.y)?
+      'X '+fmtNum(face.x)+' · Y '+fmtNum(face.y):'Person present · face location unavailable';
+  $('vision-metrics').innerHTML=kv('Observed',v?.captured_at?esc(new Date(v.captured_at*1000).toLocaleTimeString())+' · '+age:age)+
+    kv('Face in caption frame',faceSummary(v?.preview_face))+
+    kv('Face tracking',esc(v?.camera?.face?.source==='e4b'?'E4B · same scene update':v?.camera?.face?.source==='haar'?'Haar · CPU':'YuNet · CPU')+' · '+faceSummary(v?.camera?.face))+
+    kv('Compared with',v?.previous_captured_at?esc(new Date(v.previous_captured_at*1000).toLocaleTimeString()):'First observation')+
+    kv('Observation window',(v?.window_capture_times?.length||0)+' / 4 images'+(v?.window_capture_times?.length>1?' · '+(v.window_capture_times.at(-1)-v.window_capture_times[0]).toFixed(1)+' s span':''))+
+    kv('Motion',Math.round((v?.camera?.motion?.activity??v?.motion_activity??0)*100)+'% · next delay '+(v?.next_delay_s??'—')+' s')+
+    kv('Caption rate',(v?.completed_hz??'—')+' Hz')+
+    kv('Webcam rate',(v?.camera?.capture_hz??'—')+' fps · faces '+(v?.camera?.face?.tracking_hz??'—')+' Hz')+
+    kv('Face detection',v?.camera?.face?.tracking_ms!==undefined?v.camera.face.tracking_ms+' ms · CPU':'—')+
+    kv('Inference',v?.inference_ms!==undefined?v.inference_ms+' ms':'—')+
+    kv('Frame selection',v?.selected_age_ms!==undefined?v.selected_age_ms+' ms old · '+v.candidates+' candidates':'—')+
+    kv('Focus score',v?.sharpness!==undefined?v.sharpness+' · scoring '+v.scoring_ms+' ms':'—');
+}
+async function openSlot(id){
+  const token=++drawerRequest;
+  openDrawer("Task",'<p>Loading task…</p>');
+  try {
+    const s=S.live?await maybeFetch("/api/slots/"+encodeURIComponent(id)):S.slots.find(x=>x.slot_id===id);
+    if(token!==drawerRequest) return;
+    const editable=S.live && id.startsWith("task_");
+    openDrawer(s.title||id,kv("ID",esc(id))+kv("Status",esc(s.status))+kv("Summary",esc(s.summary||"No summary"))+
+      '<div class="slice">Report</div><div class="mem-row">'+esc(s.report||"No report yet.")+'</div>'+
+      (editable?'<div class="console-actions"><button class="btn-secondary" id="task-ask">Ask GLaDOS to work on this</button><button class="btn-secondary" id="task-edit">Edit assignment</button><button class="btn-secondary" id="task-status">'+(s.status==='done'?'Reopen':'Mark done')+'</button></div>':'')+
+      '<p class="console-feedback" id="task-feedback" role="status"></p>');
+    inspectedSlot={id,updated_at:s.updated_at};
+    if(editable){
+      $("task-edit").onclick=()=>editTask(s);
+      $("task-ask").onclick=()=>perform(async()=>{await apiPost('/api/input',{text:'Work on shared task ['+id+'] '+s.title+'. Task: '+s.summary+'. Save the result and accurate status using manage_slot with this same slot_id; then briefly summarize.'});return 'Sent to GLaDOS. The task updates when she saves a result.';},'task-feedback');
+      $("task-status").onclick=()=>perform(async()=>{await apiPost('/api/slots',{slot_id:id,status:s.status==='done'?'open':'done'});await refreshSnapshot();await openSlot(id);return 'Task updated.';},'task-feedback');
+    }
+  } catch(error){if(token===drawerRequest) openDrawer('Task unavailable','<p>'+esc(error.message)+'</p>');}
+}
+if($("drawer-close")) $("drawer-close").addEventListener("click",()=>{drawerRequest++;inspectedSlot=null;inspectedMind=null;const preview=$("vision-preview");if(preview){preview.removeAttribute("src");preview.dataset.streaming="";}$("drawer").classList.remove("open");});
+
+/* ============ operator controls ============ */
+let operationPending=false;
+function allMinds(){
+  return S.agentMinds || S.agents.map(a=>({...a,id:a.agent_id,kind:'background'}));
+}
+function taskSlots(){return S.slots.filter(s=>!S.agents.some(a=>a.agent_id===s.slot_id));}
+async function apiPost(path,body){
+  if(S.connection!=="live") throw new Error("Reconnect to the engine before making changes.");
+  const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const data=await response.json();
+  if(!response.ok) throw new Error(data.error||"The engine rejected the request.");
+  return data;
+}
+async function refreshSnapshot(){applySnapshot(await maybeFetch('/api/snapshot'));paint();}
+async function perform(action,feedback='console-feedback'){
+  if(operationPending) return;
+  operationPending=true;renderConsoleControls();$(feedback).textContent='Working…';
+  try{$(feedback).textContent=await action()||'Updated.';}
+  catch(error){$(feedback).textContent=error.message;}
+  finally{operationPending=false;renderConsoleControls();}
+}
+let visionIntervalDirty=false;
+let searchSourcesDirty=false;
+const searchCategories=['weather','news','reddit','general'];
+searchCategories.forEach(category=>$('search-sources-'+category).oninput=()=>{searchSourcesDirty=true;});
+$('search-settings-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
+  const sources=Object.fromEntries(searchCategories.map(category=>[category,$('search-sources-'+category).value.split(/\r?\n/).map(site=>site.trim()).filter(Boolean)]));
+  if(Object.values(sources).some(sites=>sites.length>8)) throw new Error('Use at most eight sites per category.');
+  S.searchSettings=await apiPost('/api/search/settings',sources);
+  searchSourcesDirty=false;await refreshSnapshot();
+  return 'Favorite search sources saved. They apply to the next search.';
+},'search-settings-feedback');});
+['vision-interval-min','vision-interval-max'].forEach(id=>$(id).oninput=()=>{visionIntervalDirty=true;});
+$('vision-settings-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
+  const minimum=Number($('vision-interval-min').value), maximum=Number($('vision-interval-max').value);
+  if(!Number.isInteger(minimum)||!Number.isInteger(maximum)||minimum<1||maximum>60||minimum>maximum) throw new Error('Choose whole seconds from 1 to 60, with minimum no greater than maximum.');
+  S.visionMind=await apiPost('/api/vision/settings',{interval_min_s:minimum,interval_max_s:maximum});
+  visionIntervalDirty=false;await refreshSnapshot();
+  return 'Image analysis delay saved: '+minimum+'–'+maximum+' seconds.';
+},'vision-settings-feedback');});
+function renderConsoleControls(){
+  const c=S.controls, ready=S.connection==='live' && c.available && !operationPending;
+  searchCategories.forEach(category=>{
+    const field=$('search-sources-'+category);field.disabled=!ready||!S.searchSettings;
+    if(!searchSourcesDirty&&!operationPending) field.value=(S.searchSettings?.[category]||[]).join('\n');
+  });
+  $('search-settings-save').disabled=!ready||!S.searchSettings;
+  $('runtime-model').textContent=(c.model||'Engine unavailable')+' · '+(c.audio_mode||'');
+  for(const [id,label,on] of [['microphone','Microphone',!c.microphone_muted],['voice','Voice',!c.voice_muted],['transcripts','Transcripts',c.user_transcripts]]){
+    const b=$('control-'+id);b.textContent=label+': '+(on?'on':'off');b.setAttribute('aria-pressed',String(!!on));
+    b.disabled=!ready || (id==='transcripts'&&!c.native_audio) || (id==='microphone'&&c.input_mode==='text');
+  }
+  const v=S.visionMind, camera=$('control-camera'), cameraOn=!!v && !v.paused;
+  ['vision-interval-min','vision-interval-max'].forEach(id=>$(id).disabled=!ready||!v);
+  $('vision-settings-save').disabled=!ready||!v;
+  $('vision-settings-status').textContent=v?'Motion activity: '+Math.round((v.camera?.motion?.activity??v.motion_activity??0)*100)+'% · next analysis delay: '+(v.next_delay_s??'—')+' s':'Vision Core is unavailable in this profile.';
+  if(!visionIntervalDirty&&!operationPending){$('vision-interval-min').value=v?(v.interval_min_s??2):'';$('vision-interval-max').value=v?(v.interval_max_s??5):'';}
+  camera.textContent=v?'Camera: '+(cameraOn?'ON':'OFF'):'Camera: unavailable';
+  camera.setAttribute('aria-pressed',String(cameraOn));
+  camera.disabled=!ready || !v?.running || c.quiet_mode;
+  camera.title=cameraOn?'Suspend Vision Core observations and release the webcam.':'Resume Vision Core observations.';
+  ['message-send','edit-instructions','home-new-task','new-task'].forEach(id=>$(id).disabled=!ready);
+  $('brainstem-source').textContent=c.emotion_paused?'PAD schedule paused':c.emotion_running?'PAD agent active':'Speech + interaction';
+  $('brainstem-detail').textContent=c.emotion_available?'GLaDOS’s modeled mood, from −1 to +1. PAD updates before each reply and directs its tone and expression.':'Emotion tracking is disabled in this profile. Enable autonomy.emotion.enabled to use the PAD gauges.';
+  $('instructions-preview').textContent=S.operator ? (S.operator.instructions || 'No extra response instructions. The base personality and tool instructions still apply.') : 'Response instructions are unavailable until the engine connects.';
+  $('brainstem-affect').textContent=S.affectInstructions||'';
+  $('brainstem-expression').textContent='Current expression: '+(S.performance?.active?(S.performance.emotion||'neutral'):'idle');
+}
+['microphone','voice','transcripts'].forEach(action=>$('control-'+action).onclick=()=>perform(async()=>{
+  const c=S.controls;const enabled=action==='microphone'?c.microphone_muted:action==='voice'?c.voice_muted:!c.user_transcripts;
+  applyState(await apiPost('/api/control',{action,enabled}));paint();return action+' '+(enabled?'enabled.':'disabled.');
+},action==='transcripts'?'audio-settings-feedback':'console-feedback'));
+$('control-camera').onclick=()=>perform(async()=>{
+  const enable=!!S.visionMind?.paused;
+  await apiPost('/api/minds/control',{agent_id:'vision',action:enable?'resume':'pause'});
+  await refreshSnapshot();return enable?'Camera enabled.':'Camera paused and released.';
+});
+$('message-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
+  const text=$('message-text').value.trim();if(!text) throw new Error('Enter a message.');
+  await apiPost('/api/input',{text});$('message-text').value='';return 'Message sent to GLaDOS.';
+});});
+function editInstructions(){
+  drawerRequest++;
+  openDrawer('Response instructions','<p class="console-note">Applied to the next request. These session instructions reset when the engine restarts.</p><label for="operator-instructions">How should GLaDOS respond?</label><textarea class="console-field" id="operator-instructions" maxlength="4000">'+esc(S.operator?.instructions||'')+'</textarea><div class="console-actions"><button class="btn-secondary" id="save-instructions">Save instructions</button><button class="btn-secondary" id="reset-instructions">Use defaults</button></div><p class="console-feedback" id="instruction-feedback" role="status"></p>');
+  $('reset-instructions').onclick=()=>{$('operator-instructions').value=S.operator?.default_instructions||'';};
+  $('save-instructions').onclick=()=>perform(async()=>{S.operator=await apiPost('/api/instructions',{instructions:$('operator-instructions').value});return 'Saved. Applies to the next response.';},'instruction-feedback');
+}
+$('edit-instructions').onclick=editInstructions;
+$$('[data-inspect-command]').forEach(b=>b.onclick=()=>perform(async()=>{const r=await apiPost('/api/command',{command:b.dataset.inspectCommand});drawerRequest++;openDrawer(b.textContent,'<pre class="mem-row">'+esc(r.result)+'</pre>');return 'Inspector updated.';}));
+function editTask(task={}){
+  drawerRequest++;
+  openDrawer(task.slot_id?'Edit assignment':'Create assignment','<p class="console-note">Saved in this session’s shared context. Creating an assignment does not start background work.</p><form id="task-form"><label for="task-title">Title</label><input class="console-field" id="task-title" maxlength="160" required value="'+esc(task.title||'')+'"><label for="task-summary">Assignment or current summary</label><textarea class="console-field" id="task-summary" maxlength="2000">'+esc(task.summary||'')+'</textarea><button class="btn-secondary" type="submit">Save assignment</button></form><p class="console-feedback" id="task-feedback" role="status"></p>');
+  $('task-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
+    const saved=await apiPost('/api/slots',{...(task.slot_id?{slot_id:task.slot_id}:{}),title:$('task-title').value,summary:$('task-summary').value});await refreshSnapshot();await openSlot(saved.slot_id);return 'Assignment saved and shared with GLaDOS.';
+  },'task-feedback');});
+}
+$('new-task').onclick=()=>editTask();$('home-new-task').onclick=()=>editTask();
+function renderHomeTasks(){
+  const key=JSON.stringify(taskSlots());if(key===homeTasksRenderKey)return;homeTasksRenderKey=key;
+  const host=$('home-tasks');host.innerHTML='';
+  const list=[...taskSlots()].sort((a,b)=>(a.status==='done')-(b.status==='done')||b.updated_at-a.updated_at).slice(0,5);
+  if(!list.length){host.innerHTML='<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>';return;}
+  list.forEach(s=>{const row=el('task-row','<span><strong>'+esc(s.title)+'</strong><br><span class="console-note">'+esc(s.status)+' · '+esc(s.summary||'No summary')+'</span></span>');const b=document.createElement('button');b.className='btn-secondary';b.textContent='Inspect';b.onclick=()=>openSlot(s.slot_id);row.appendChild(b);host.appendChild(row);});
+}
+
+/* ============ live layer ============ */
+function applySnapshot(j){
+  S.operator=j.operator||S.operator;
+  if(j.decisions) S.decisions=j.decisions;
+  S.agentMinds=j.agent_minds||null; S.tools=j.tools||[];
+  S.agents=j.agents||[]; S.minds=j.minds||[]; S.slots=j.slots||[]; S.vision=j.vision;
+  if(inspectedSlot && !operationPending){
+    const latest=S.slots.find(s=>s.slot_id===inspectedSlot.id);
+    if(latest && latest.updated_at!==inspectedSlot.updated_at) openSlot(inspectedSlot.id);
+  }
+  if(inspectedMind && inspectedMind.id!=="vision" && !operationPending){
+    const latest=allMinds().find(m=>m.id===inspectedMind.id);
+    if(latest && JSON.stringify(latest)!==inspectedMind.key) openMind(inspectedMind.id);
+  }
+  applyState(j);
+}
+function applyPerformance(value){
+  if(value && Number.isInteger(value.revision) && (!S.performance || value.revision >= S.performance.revision)) S.performance=value;
+}
+function applyAudio(audio){
+  if(Number.isFinite(audio.updated_at) && audio.updated_at<S.audio.updated_at) return;
+  S.audio={rms:20*Math.log10(Math.max(audio.rms,1e-6)),vad:!!audio.vad_active,updated_at:audio.updated_at ?? 0};
+}
+function applyState(st){
+  if('search_settings' in st) S.searchSettings=st.search_settings;
+  if('autonomy_core' in st) S.autonomyCore=st.autonomy_core;
+  if("vision_mind" in st){
+    const incoming=st.vision_mind, current=S.visionMind;
+    // A slower snapshot fetch must not replace newer face coordinates from SSE.
+    if(incoming && current && incoming.paused===current.paused &&
+        incoming.camera?.enabled===current.camera?.enabled &&
+        Number.isFinite(incoming.camera?.face?.observed_at) &&
+        Number.isFinite(current.camera?.face?.observed_at) &&
+        incoming.camera.face.observed_at<current.camera.face.observed_at){
+      S.visionMind={...incoming,camera:current.camera};
+    }else S.visionMind=incoming;
+  }
+  if("vision" in st) S.vision=st.vision;
+  if(st.command_slot) S.commandSlot=st.command_slot;
+  if(st.controls) S.controls=st.controls;
+  if(st.inference) S.inference=st.inference;
+  if(st.routing) S.routing=st.routing;
+  if(st.performance) applyPerformance(st.performance);
+  if("emotion" in st) {S.emo=st.emotion ? [st.emotion.pleasure,st.emotion.arousal,st.emotion.dominance] : null;S.affectInstructions=st.emotion?.response_instructions||"";}
+  if(st.lanes){ S.lanes=normalizeLanes(st.lanes); S.prioInflight=st.lanes.priority?.inflight ?? 0; }
+  if(st.audio) applyAudio(st.audio);
+  if(st.interaction){ S.sinceUser=st.interaction.seconds_since_user; S.sinceAsst=st.interaction.seconds_since_assistant; }
+  if(st.speaking!==undefined) S.speaking=!!st.speaking;
+  if(st.mcp) S.mcpServers=st.mcp.servers||[];
+}
+function entryEvent(ev){ entry({t:(ev.timestamp||0)*1000, src:ev.source||"", kind:ev.kind||"", level:ev.level||"info", msg:ev.message||"", meta:ev.meta||{}}); }
+function startLive(){
+  maybeFetch("/api/snapshot").then(j => {
+    S.live=true;
+    emit("engine","console","ok","LIVE TELEMETRY LINKED",{});
+    applySnapshot(j); paint(); renderFullWire();
+    const es = new EventSource("/api/stream");
+    es.addEventListener("obs", e=>entryEvent(JSON.parse(e.data)));
+    es.addEventListener("state", e=>{ applyState(JSON.parse(e.data)); paint(); });
+    es.addEventListener("performance", e=>{ applyPerformance(JSON.parse(e.data)); avatar.update(S); });
+    es.addEventListener("audio", e=>{
+      applyAudio(JSON.parse(e.data));
+      avatar.update(S);
+    });
+    es.addEventListener("camera", e=>{
+      const tracking=JSON.parse(e.data);
+      if(tracking && S.visionMind) S.visionMind={...S.visionMind,...tracking};
+      else if(!tracking) S.visionMind=null;
+      // Face updates only drive the avatar; full console repaint and captions stay slow.
+      avatar.update(S);
+    });
+    es.addEventListener("snapshot", e=>{ applySnapshot(JSON.parse(e.data)); paint(); });
+    es.onopen = () => { S.audio.updated_at=0; S.performance=null; S.connection="live"; $("connection-status").textContent="LIVE TELEMETRY"; paint(); };
+    es.onerror = () => { S.connection="disconnected"; $("connection-status").textContent="DISCONNECTED · RETRYING"; paint(); };
+  }).catch(() => {
+    if(typeof location!=="undefined" && location.protocol!=="file:"){
+      S.connection="disconnected"; $("connection-status").textContent="DISCONNECTED · RETRYING";
+      paint(); setTimeout(startLive,3000);
+    } else startDummy();
+  });
+}
+
+/* ============ dummy simulation ============ */
+function startDummy(){
+  S.live=false; S.connection="demo";
+  S.emo=[0.6,0.4,0.5]; S.sinceUser=60; S.sinceAsst=5;
+  $("connection-status").textContent="DEMO DATA";
+  S.agents=[
+    {agent_id:"forecast",title:"Weather Core",running:true,tick_count:142,last_tick:(Date.now()/1000-22*60),summary:"Watching the sky; weather briefing queued."},
+    {agent_id:"agenda",title:"Planning Core",running:true,tick_count:9,last_tick:(Date.now()/1000-6*60),summary:"Syncing calendar; found a clash tomorrow 14:00–15:30."},
+    {agent_id:"health",title:"Maintenance Core",running:false,tick_count:45,last_tick:(Date.now()/1000-2*3600),summary:"Hydration reminder armed. 45m cooldown."},
+  ];
+  S.slots=[
+    {slot_id:"s_weather",title:"Weather brief",status:"done",importance:.7,confidence:.94,notify_user:true,summary:"Partly cloudy, 16–19 °C."},
+    {slot_id:"s_agenda",title:"Day agenda",status:"running",importance:.9,confidence:.82,notify_user:true,summary:"Clash detected: sprint sync vs. dentist at 14:00."},
+    {slot_id:"s_hydrate",title:"Hydration nudge",status:"idle",importance:.3,confidence:.75,notify_user:true,summary:"Next nudge due in ~27 min."},
+  ];
+  S.lanes={prioQ:0,autoQ:1,autoInflight:1,workers:2,enabled:true}; S.prioInflight=0;
+  S.mcpServers=[{name:"home-assistant",connected:true,tools:14},{name:"filesystem",connected:true,tools:6},{name:"calendar",connected:false,tools:0}];
+  S.vision="room lighting dimmed";
+  emit("sys","console","warn","DUMMY DATA — attach to a live engine for real telemetry",{});
+  emit("autonomy","tick","info","autonomy lane armed (2 workers)",{});
+  paint(); renderFullWire();
+  setInterval(dummyTick, 800);
+}
+function dummyTick(){
+  S.emo[0]=clamp(S.emo[0]+(Math.random()-.5)*0.02,-1,1);
+  S.emo[1]=clamp(S.emo[1]+(Math.random()-.52)*0.03,-1,1);
+  S.emo[2]=clamp(S.emo[2]+(Math.random()-.5)*0.012,-1,1);
+  S.sinceUser+=1; S.sinceAsst+=1;
+  if(Math.random()<0.15){ S.lanes.autoInflight = S.lanes.autoInflight?0:1; S.lanes.autoQ = 1-S.lanes.autoInflight; }
+  if(Math.random()<0.3) emit("autonomy","slot.update","info","s_hydrate updated",{slot:"s_hydrate"});
+  if(Math.random()<0.2) emit("mcp","server.request","debg","home-assistant.get_entity",{entity:"climate.living"});
+  S.audio.rms=clamp(S.audio.rms+(Math.random()-.5)*4,-60,-15);
+  S.audio.vad = S.audio.rms > -30;
+  paint();
+}
+
+/* ============ inference and editable decision lists ============ */
+let decisionRenderKey='',commandRenderKey='';
+function renderInference(){
+  if(!$('inference-slots'))return;
+  const commands=S.commandSlot;
+  $('open-command').disabled=!commands;$('open-command').onclick=openCommand;
+  $('command-status').textContent=commands?(commands.active?'1 / 1 active':'0 / 1 active'):'Unavailable';
+  const commandKey=JSON.stringify(commands);
+  if(commandKey!==commandRenderKey){commandRenderKey=commandKey;
+  $('command-activity').innerHTML=commands?(commands.active?kv('Running',esc(commands.active.label)):'<p class="console-note">Ready for a command.</p>')+commands.recent.slice(0,5).map(r=>'<details><summary>'+esc(r.label)+' · '+(r.ok?'Completed':'Failed')+' · '+timeStr(r.started_at*1000)+'</summary><pre class="mem-row">'+esc(r.command.join(' ')+'\n'+commandResult(r))+'</pre></details>').join(''):'Facility command queue unavailable.';
+  }
+  const state=S.inference;
+  if(!state){$('inference-summary').textContent='Capacity unavailable';return;}
+  $('inference-summary').textContent=state.active.length+' / '+state.capacity+' channels active · '+state.waiting.length+' queued';
+  $('inference-slots').innerHTML=Array.from({length:state.capacity},(_,i)=>{
+    const r=state.active.find(r=>r.slot===i);
+    return '<div class="card"><h3>Channel '+(i+1)+' <span class="chip '+(r?'amber':'teal')+'">'+(r?'Active':'Idle')+'</span></h3>'+kv('Capacity',i<state.reserved_interactive?'Reserved for interactive requests':'Shared')+(r?kv('Core',esc(coreOwner(r.owner)))+kv('Lane',esc(r.lane))+kv('Model',esc(r.model))+kv('Elapsed',Math.max(0,Date.now()/1000-r.started_at).toFixed(1)+' s'):'<p class="console-note">Ready for inference.</p>')+'</div>';
+  }).join('');
+  $('inference-waiting').innerHTML=state.waiting.map(r=>kv(esc(coreOwner(r.owner)),esc(r.lane)+' · '+(r.wait_reason==='user_response'?'Waiting for user response · ':'')+Math.max(0,Date.now()/1000-r.queued_at).toFixed(1)+' s')).join('')||'<p class="console-note">No requests waiting.</p>';
+  const latest=S.routing?.latest;
+  $('routing-latest').innerHTML=latest?decisionResult(latest):'<p class="console-note">No decision yet.</p>';
+}
+function routingDescription(o){
+  try{const value=JSON.parse(o.description);return value.tool?value.tool+' · '+value.purpose:value.server?value.server+' · '+value.capabilities:o.description;}catch(e){return o.description;}
+}
+function decisionResult(r){
+  const stages=r.stages||[{...r,name:'Single step'}];
+  return kv(r.dry_run?'Preview only':'Selected action',esc(r.action))+kv('Accepted',r.accepted?'Every routing step passed':r.action==='assist'?'Full assistant with read-only tools':'Fallback used')+kv('Time',r.elapsed_ms+' ms')+(r.category?kv('Capability',esc(r.category)):'')+(r.server?kv('MCP server',esc(r.server)):'')+(r.tool?kv('Tool',esc(r.tool)+' '+esc(JSON.stringify(r.arguments))):'')+(r.tool_scope?.length?kv('Selected tools',r.tool_scope.map(esc).join(', ')):'')+stages.map((stage,i)=>'<details open style="margin-top:12px"><summary>Step '+(i+1)+' · '+esc(stage.name)+' · '+(stage.fallback_selected?'no matching choice · fallback':stage.accepted?'selected':'uncertain')+'</summary>'+(stage.scores||[]).map(o=>'<div style="margin-top:10px">'+esc(o.label+' · '+routingDescription(o))+' · '+(o.probability*100).toFixed(2)+'%'+meter('OPTION PREFERENCE',o.probability*100,'var(--teal)')+'</div>').join('')+'</details>').join('');
+}
+let routingExpanded=new Set(),routingMapStructureKey='',routingMapLatestKey='';
+function renderAutonomySettings(){
+  const c=S.controls,b=$('settings-autonomy'),q=$('settings-quiet');
+  const core=S.autonomyCore,last=core?.last_decision;
+  $('autonomy-core-status').textContent=core ? core.status+' · '+core.pending_updates+' pending updates'+
+    (core.enabled&&core.next_check_s>0?' · idle check in '+Math.ceil(core.next_check_s)+'s':'')+
+    (last?' · Last decision: '+last.outcome+(last.reason?' — '+last.reason:''):'') : '';
+  $('autonomy-core-handoff').textContent=last?.instruction ? 'Central Core request: '+last.instruction+
+    (last.slot_ids?.length?' · Sources: '+last.slot_ids.join(', '):'') : '';
+  q.disabled=!S.live||!c.quiet_available;
+  q.textContent=c.quiet_mode?'Wake GLaDOS':'Put GLaDOS to sleep';
+  q.setAttribute('aria-pressed',String(!!c.quiet_mode));
+  const h=$('control-quiet');h.textContent=c.quiet_mode?'Wake GLaDOS':'Quiet: OFF';h.disabled=q.disabled;h.setAttribute('aria-pressed',String(!!c.quiet_mode));
+  q.onclick=()=>perform(async()=>{const state=await apiPost('/api/control',{action:'quiet',enabled:!S.controls.quiet_mode});applyState(state);paint();return S.controls.quiet_mode?'Quiet mode: listening for wake requests.':'GLaDOS is awake.';},'quiet-settings-feedback');
+  h.onclick=q.onclick;
+  b.disabled=!S.live||!c.autonomy_available;
+  b.textContent='Autonomy: '+(c.autonomy_enabled?'ON':'OFF');
+  b.setAttribute('aria-pressed',String(!!c.autonomy_enabled));
+  b.onclick=()=>perform(async()=>{const state=await apiPost('/api/control',{action:'autonomy',enabled:!S.controls.autonomy_enabled});applyState(state);paint();return S.controls.autonomy_enabled?'Autonomy enabled.':'Autonomy disabled.';},'autonomy-settings-feedback');
+}
+function renderRoutingStructure(structure){
+  if(!structure){$('routing-structure').innerHTML='<p class="console-note">The active list uses one flat choice.</p>';return;}
+  const structureKey=JSON.stringify(structure),settings=S.decisions;
+  const active=settings?.lists?.find(l=>l.id===settings.active_list);
+  const latest=active&&S.routing?.latest?.list_id===active.id&&S.routing.latest.revision===active.revision?S.routing.latest:null;
+  const latestKey=JSON.stringify(latest);
+  if(structureKey!==routingMapStructureKey){routingMapStructureKey=structureKey;routingExpanded=new Set([structure.root]);routingMapLatestKey='';}
+  if(latestKey!==routingMapLatestKey){routingMapLatestKey=latestKey;(latest?.stages||[]).forEach(stage=>routingExpanded.add(stage.list_id));}
+  const nodes=new Map(structure.nodes.map(n=>[n.id,n]));
+  function branch(id,depth){
+    const node=nodes.get(id);if(!node||depth>12)return '';
+    return '<details '+(!depth?'open':'')+' style="margin:10px 0"><summary>'+esc(node.name)+' · '+node.options.length+' choices</summary>'+node.options.map((o,i)=>'<div style="margin:8px 0 8px 12px"><span class="console-note">'+esc(String.fromCharCode(65+i)+' · '+routingDescription(o))+'</span>'+(o.next?branch(o.next,depth+1):o.action==='tool'?'<div class="console-note">Fixed: '+esc(o.tool)+' '+esc(JSON.stringify(o.arguments))+'</div>':'')+'</div>').join('')+'</details>';
+  }
+  const source=GladosRouting.mermaid(structure,latest);
+  $('routing-structure').innerHTML='<div class="console-actions"><button type="button" class="btn-secondary" id="routing-expand">Expand all</button><button type="button" class="btn-secondary" id="routing-collapse">Overview</button><button type="button" class="btn-secondary" id="routing-follow">Show latest route</button><a class="btn-secondary" download="glados-routing.mmd" href="data:text/plain;charset=utf-8,'+encodeURIComponent(source)+'">Download Mermaid</a></div><p class="console-note">'+(latest?(latest.dry_run?'Latest preview':'Latest request')+' · '+esc(latest.category||latest.action)+' · '+(latest.accepted?'accepted':'fallback'): 'No route selected yet.')+'</p><div id="routing-map" class="routing-map">'+GladosRouting.svg(structure,routingExpanded,latest)+'</div><details><summary>All choices and descriptions</summary>'+branch(structure.root,0)+'</details><details style="margin-top:12px"><summary>Mermaid source</summary><textarea class="console-field mono" rows="10" readonly aria-label="Mermaid routing diagram source">'+esc(source)+'</textarea></details>';
+  $('routing-expand').onclick=()=>{routingExpanded=new Set(nodes.keys());renderRoutingStructure(structure);};
+  $('routing-collapse').onclick=()=>{routingExpanded=new Set([structure.root]);renderRoutingStructure(structure);};
+  $('routing-follow').onclick=()=>{routingExpanded=new Set([structure.root,...(latest?.stages||[]).map(s=>s.list_id)]);renderRoutingStructure(structure);};
+  function toggle(event){
+    const target=event.target.closest?.('[data-route-node]');if(!target)return;
+    const id=target.dataset.routeNode;
+    routingExpanded.has(id)?routingExpanded.delete(id):routingExpanded.add(id);
+    const host=$('routing-map'),left=host.scrollLeft,top=host.scrollTop;
+    renderRoutingStructure(structure);
+    $('routing-map').scrollLeft=left;$('routing-map').scrollTop=top;
+    $('routing-map').querySelectorAll('[data-route-node]').forEach(node=>{if(node.dataset.routeNode===id)node.focus();});
+  }
+  $('routing-map').onclick=toggle;
+  $('routing-map').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(event);}};
+}
+function renderDecisionSettings(){
+  if(!$('decision-lists'))return;
+  const settings=S.decisions;
+  $('decision-new').disabled=!settings;
+  if(!settings)return;
+  const key=JSON.stringify(settings)+JSON.stringify(S.tools)+JSON.stringify(S.routing);
+  if(key===decisionRenderKey)return;decisionRenderKey=key;
+  renderRoutingStructure(S.routing?.structure);
+  $('decision-activation').innerHTML='<label>Active list<select id="decision-active" class="console-field">'+settings.lists.map(l=>'<option value="'+esc(l.id)+'" '+(settings.active_list===l.id?'selected':'')+' '+(!l.enabled?'disabled':'')+'>'+esc(l.name)+'</option>').join('')+'</select></label><p class="console-note">'+(settings.enabled?'Routing is automatic. Private drafts use spare capacity and are released only after routing and Emotion Core approve the reply.':'This model handles routing in its replies.')+'</p>';
+  $('decision-active').onchange=()=>perform(async()=>{S.decisions=await apiPost('/api/decisions',{action:'activate',revision:settings.revision,id:$('decision-active').value});renderDecisionSettings();return 'Active routing list saved.';},'settings-feedback');
+  $('decision-new').onclick=()=>editDecision();
+  $('decision-lists').innerHTML=settings.lists.map(l=>'<div class="card"><h3>'+esc(l.name)+' <span class="chip">'+(l.enabled?'Enabled':'Disabled')+'</span></h3><p class="console-note">'+l.options.filter(o=>o.enabled).length+' saved choices · '+(l.strategy==='flat'?'single step':'capability → action')+' · threshold '+Math.round(l.threshold*100)+'% · margin '+Math.round(l.margin*100)+'%</p><p class="console-note">'+esc(l.instructions)+'</p><div class="console-actions"><button class="btn-secondary" data-decision-edit="'+esc(l.id)+'">Edit</button><button class="btn-secondary" data-decision-test="'+esc(l.id)+'">Test without executing</button><button class="btn-secondary" data-decision-delete="'+esc(l.id)+'">Delete</button></div></div>').join('')||'<p>No decision lists. Create one to get started.</p>';
+  $$('[data-decision-edit]').forEach(b=>b.onclick=()=>editDecision(settings.lists.find(l=>l.id===b.dataset.decisionEdit)));
+  $$('[data-decision-test]').forEach(b=>b.onclick=()=>testDecision(settings.lists.find(l=>l.id===b.dataset.decisionTest)));
+  $$('[data-decision-delete]').forEach(b=>b.onclick=()=>{
+    const l=settings.lists.find(l=>l.id===b.dataset.decisionDelete);
+    openDrawer('Delete '+l.name,'<p>Delete this list and its options? If it is active, GLaDOS switches to another enabled list or restores the default list.</p><button class="btn-secondary" id="decision-delete-confirm">Delete list</button><p id="decision-feedback" role="status"></p>');
+    $('decision-delete-confirm').onclick=()=>perform(async()=>{S.decisions=await apiPost('/api/decisions',{action:'delete',revision:settings.revision,id:l.id});$('drawer-close').click();renderDecisionSettings();return 'Decision list deleted.';},'settings-feedback');
+  });
+}
+function editDecision(existing){
+  const revision=S.decisions.revision;
+  const draft=existing?JSON.parse(JSON.stringify(existing)):{name:'New decision list',strategy:'hierarchical',instructions:'Choose the option that best matches the user’s intent. Quoted and negated commands are not action requests.',enabled:true,threshold:.8,margin:.2,fallback:'assist',options:[{description:'Ordinary conversation',action:'reply',enabled:true,arguments:{}},{description:'Unclear request',action:'clarify',enabled:true,arguments:{}}]};
+  openDrawer(existing?'Edit '+existing.name:'Create decision list','<form id="decision-form"><label>Name<input id="dl-name" class="console-field" maxlength="100" required value="'+esc(draft.name)+'"></label><label>Classifier instructions<textarea id="dl-instructions" class="console-field" rows="4" maxlength="4000">'+esc(draft.instructions)+'</textarea></label><label>Routing structure<select id="dl-strategy" class="console-field"><option value="hierarchical" '+(draft.strategy!=='flat'?'selected':'')+'>Capability, then action</option><option value="flat" '+(draft.strategy==='flat'?'selected':'')+'>Single flat choice</option></select></label><label><input id="dl-enabled" type="checkbox" '+(draft.enabled?'checked':'')+'> List enabled</label><div class="grid cols-2"><label>Minimum preference (0–1)<input class="console-field" id="dl-threshold" type="number" min="0" max="1" step=".01" value="'+draft.threshold+'" required></label><label>Minimum margin (0–1)<input class="console-field" id="dl-margin" type="number" min="0" max="1" step=".01" value="'+draft.margin+'" required></label></div><label>Uncertain decision<select class="console-field" id="dl-fallback"><option value="assist" '+(draft.fallback==='assist'?'selected':'')+'>Let GLaDOS answer (read-only tools)</option><option value="clarify" '+(draft.fallback==='clarify'?'selected':'')+'>Ask a specific clarification</option><option value="ignore" '+(draft.fallback==='ignore'?'selected':'')+'>Ignore spoken input</option></select></label><div class="slice">Options · letters assigned automatically</div><div id="dl-options"></div><button type="button" class="btn-secondary" id="dl-add">Add option</button><button type="submit" class="btn-secondary" id="dl-save">Save list</button><p id="decision-feedback" class="console-feedback" role="status"></p></form>');
+  function drawOptions(){
+    const categoryFor=o=>o.action!=='tool'?'conversation':o.category||({vision_look:'vision',get_preferences:'memory',set_preference:'memory',get_time:'system',run_safe_command:'system',get_report:'tasks',manage_slot:'tasks'}[o.tool])||(o.tool?.startsWith('mcp.memory.')?'memory':o.tool?.startsWith('mcp.')?'mcp':'other');
+    const rows=draft.options.map((o,i)=>'<div class="card" style="margin:12px 0;padding:12px" data-option="'+i+'"><label><input type="checkbox" data-field="enabled" '+(o.enabled?'checked':'')+'> Option '+(i+1)+'</label><label>Description<input class="console-field" data-field="description" maxlength="1000" required value="'+esc(o.description)+'"></label><label>Action<select class="console-field" data-field="action">'+['reply','ignore','clarify','tool','plan'].map(a=>'<option '+(o.action===a?'selected':'')+'>'+a+'</option>').join('')+'</select></label>'+(o.action==='tool'?'<label>Tool<select class="console-field" data-field="tool"><option value="">Select a tool</option>'+S.tools.map(t=>'<option value="'+esc(t.name)+'" '+(o.tool===t.name?'selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select></label><label>Capability area<select class="console-field" data-field="category"><option value="" '+(!o.category?'selected':'')+'>Automatic from tool</option>'+['vision','memory','mcp','system','tasks','other'].map(c=>'<option value="'+c+'" '+(o.category===c?'selected':'')+'>'+c+'</option>').join('')+'</select></label><div class="tool-arguments"></div>':'')+'<div class="console-actions"><button type="button" class="btn-secondary" data-move="-1" '+(!i?'disabled':'')+'>Up</button><button type="button" class="btn-secondary" data-move="1" '+(i===draft.options.length-1?'disabled':'')+'>Down</button><button type="button" class="btn-secondary" data-remove>Delete option</button></div></div>');
+    const categories=[...new Set(draft.options.map(categoryFor))];
+    $('dl-options').innerHTML=categories.map(category=>'<details open><summary>'+esc(category)+' choices</summary>'+rows.filter((row,i)=>categoryFor(draft.options[i])===category).join('')+'</details>').join('');
+    $$('[data-option]').forEach(row=>{
+      const i=Number(row.dataset.option),o=draft.options[i];
+      row.querySelectorAll('[data-field]').forEach(input=>{input.onchange=()=>{
+        const key=input.dataset.field;o[key]=input.type==='checkbox'?input.checked:input.value;
+        if(key==='category'){o.category=input.value||null;drawOptions();}
+        if(key==='action'){o.tool=null;o.arguments={};o.category=null;o.context_source=null;drawOptions();}
+        if(key==='tool'){o.arguments={};o.category=null;drawOptions();}
+      }; if(input.dataset.field==='description')input.oninput=input.onchange;});
+      row.querySelector('[data-remove]').onclick=()=>{draft.options.splice(i,1);drawOptions();};
+      row.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const j=i+Number(b.dataset.move);[draft.options[i],draft.options[j]]=[draft.options[j],draft.options[i]];drawOptions();});
+      const host=row.querySelector('.tool-arguments');
+      if(host){
+        const schema=S.tools.find(t=>t.name===o.tool)?.parameters||{};
+        Object.entries(schema.properties||{}).forEach(([name,prop])=>{
+          const label=document.createElement('label');label.textContent=name+(schema.required?.includes(name)?' (required)':' (optional)');
+          const input=document.createElement(prop.enum?'select':prop.type==='object'||prop.type==='array'?'textarea':'input');input.className='console-field';
+          if(prop.enum)input.innerHTML='<option value="">Use default</option>'+prop.enum.map(v=>'<option value="'+esc(String(v))+'">'+esc(String(v))+'</option>').join('');
+          else if(prop.type==='boolean'){input.type='checkbox';input.checked=!!o.arguments[name];}
+          else if(['number','integer'].includes(prop.type)){input.type='number';input.step=prop.type==='integer'?'1':'any';}
+          if(prop.type!=='boolean')input.value=name in o.arguments?(typeof o.arguments[name]==='object'?JSON.stringify(o.arguments[name]):String(o.arguments[name])):'';
+          input.placeholder=prop.description||name;
+          input.onchange=()=>{try{if(prop.type!=='boolean' && input.value==='')delete o.arguments[name];else o.arguments[name]=prop.type==='boolean'?input.checked:prop.enum?prop.enum.find(v=>String(v)===input.value):['integer','number'].includes(prop.type)?Number(input.value):['object','array'].includes(prop.type)?JSON.parse(input.value):input.value;input.setCustomValidity('');}catch(e){input.setCustomValidity('Enter valid JSON');}};
+          input.oninput=input.onchange;
+          label.appendChild(input);host.appendChild(label);
+        });
+      }
+    });
+    $('dl-add').disabled=draft.options.length>=20;
+  }
+  $('dl-add').onclick=()=>{draft.options.push({description:'',action:'reply',enabled:true,arguments:{}});drawOptions();};
+  $('decision-form').onsubmit=e=>{e.preventDefault();perform(async()=>{
+    Object.assign(draft,{name:$('dl-name').value,instructions:$('dl-instructions').value,strategy:$('dl-strategy').value,enabled:$('dl-enabled').checked,threshold:Number($('dl-threshold').value),margin:Number($('dl-margin').value),fallback:$('dl-fallback').value});
+    S.decisions=await apiPost('/api/decisions',{action:'save',revision,list:draft});$('drawer-close').click();renderDecisionSettings();return 'Decision list saved.';
+  },'decision-feedback');};
+  drawOptions();
+}
+function testDecision(list){
+  openDrawer('Test '+list.name,'<p class="console-note">Preview only. No tool executes and no speech plays.</p><label>Input<textarea id="decision-test-text" class="console-field" rows="3" maxlength="8000" placeholder="What is the time?"></textarea></label><label><input type="checkbox" id="decision-test-spoken"> Treat text as spoken input</label><div class="console-actions"><button class="btn-secondary" id="decision-record">Record speech (max 30 s)</button><label>Or choose audio<input type="file" id="decision-audio-file" accept="audio/*"></label></div><p id="decision-audio-status" class="console-note">Text mode</p><button class="btn-secondary" id="decision-clear-audio">Clear audio</button><button class="btn-secondary" id="decision-test-run">Score options</button><p id="decision-feedback" class="console-feedback" role="status"></p><div id="decision-test-result"></div>');
+  let encoded=null,recorder=null,stream=null,timer=null;
+  async function encodeAudio(buffer){
+    const ctx=new AudioContext();let audio;
+    try{audio=await ctx.decodeAudioData(buffer);}finally{await ctx.close();}
+    if(audio.duration>30)throw new Error('Use audio of 30 seconds or less.');
+    const offline=new OfflineAudioContext(1,Math.ceil(audio.duration*16000),16000),source=offline.createBufferSource();source.buffer=audio;source.connect(offline.destination);source.start();
+    const pcm=(await offline.startRendering()).getChannelData(0),wav=new ArrayBuffer(44+pcm.length*2),view=new DataView(wav);
+    const str=(offset,value)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
+    str(0,'RIFF');view.setUint32(4,36+pcm.length*2,true);str(8,'WAVE');str(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);str(36,'data');view.setUint32(40,pcm.length*2,true);
+    pcm.forEach((v,i)=>view.setInt16(44+i*2,Math.max(-1,Math.min(1,v))*32767,true));
+    let bytes='';new Uint8Array(wav).forEach(v=>bytes+=String.fromCharCode(v));encoded=btoa(bytes);$('decision-audio-status').textContent=audio.duration.toFixed(1)+' seconds ready · audio takes precedence over text';
+  }
+  const stop=()=>{clearTimeout(timer);if(recorder?.state==='recording')recorder.stop();stream?.getTracks().forEach(t=>t.stop());};
+  const closeHandler=()=>{stop();$('drawer-close').removeEventListener('click',closeHandler);};$('drawer-close').addEventListener('click',closeHandler);
+  $('decision-audio-file').onchange=async e=>{try{const file=e.target.files[0];if(file){if(file.size>10_000_000)throw new Error('Audio file must be under 10 MB.');await encodeAudio(await file.arrayBuffer());}}catch(error){$('decision-feedback').textContent=error.message;}};
+  $('decision-record').onclick=async()=>{
+    if(recorder?.state==='recording'){stop();return;}
+    try{stream=await navigator.mediaDevices.getUserMedia({audio:true});recorder=new MediaRecorder(stream);const chunks=[];recorder.ondataavailable=e=>chunks.push(e.data);recorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());try{await encodeAudio(await new Blob(chunks).arrayBuffer());$('decision-record').textContent='Record speech (max 30 s)';}catch(error){if($('decision-feedback'))$('decision-feedback').textContent=error.message;}};recorder.start();$('decision-record').textContent='Stop recording';timer=setTimeout(stop,29000);}catch(error){stop();$('decision-feedback').textContent=error.message;}
+  };
+  $('decision-clear-audio').onclick=()=>{encoded=null;$('decision-audio-status').textContent='Text mode';};
+  $('decision-test-run').onclick=()=>perform(async()=>{const result=await apiPost('/api/decisions/test',{list_id:list.id,text:$('decision-test-text').value,audio:encoded,spoken:$('decision-test-spoken').checked});if($('decision-test-result'))$('decision-test-result').innerHTML=decisionResult(result);return 'Preview complete. Nothing executed.';},'decision-feedback');
+}
+
+/* ============ clock + boot ============ */
+let bootT=Date.now();
+function renderClock(){ const up=Math.floor((Date.now()-(S.controls.started_at?S.controls.started_at*1000:bootT))/1000);
+  $("clock").textContent=timeStr(Date.now());
+  $("uptime").textContent="UP "+pad(Math.floor(up/3600))+":"+pad(Math.floor(up%3600/60))+":"+pad(up%60); }
+renderFilters();
+startLive();
+renderClock();
+setInterval(renderClock,1000);
+
+</script>
+</body>
+</html>

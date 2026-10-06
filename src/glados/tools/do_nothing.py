@@ -6,7 +6,9 @@ tool_definition = {
     "function": {
         "name": "do_nothing",
         "description": "Explicitly do nothing.",
-        "parameters": {"type": "object", "properties": {}},
+        "parameters": {"type": "object", "properties": {
+            "reason": {"type": "string", "description": "Brief reason this update does not merit a response."},
+        }},
     },
 }
 

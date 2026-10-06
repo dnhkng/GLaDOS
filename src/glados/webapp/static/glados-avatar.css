@@ -1,0 +1,13 @@
+/* Eye and the supplied Original optic-feed treatment share one quiet stage. */
+.avatar-card{display:grid;grid-template-columns:minmax(210px,.8fr) minmax(0,1.2fr);align-items:center;gap:12px;margin-bottom:16px;padding:12px;overflow:hidden}
+.avatar-card:not(.camera-on){grid-template-columns:1fr}
+.avatar-stage{background:#0e1116;align-self:stretch;display:grid;place-items:center;min-width:0;border-radius:8px}
+.avatar-stage svg{display:block;width:100%;max-width:340px;aspect-ratio:1}
+.avatar-optic{position:relative;aspect-ratio:16/9;width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0B0E12;min-width:0}
+.avatar-optic[hidden]{display:none}
+.avatar-optic canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+.avatar-optic-hud{position:absolute;inset:0;pointer-events:none;font:500 clamp(10px,1.2vw,13px)/1.4 var(--mono);letter-spacing:1.5px;color:#E8ECEF;text-shadow:0 1px 4px #000;z-index:1}
+.avatar-optic-hud span{position:absolute;background:rgba(11,14,18,.4);padding:3px 6px;border-radius:2px}
+#optic-subject{top:6%;right:7%;color:var(--orange)}
+#optic-motion{bottom:6%;left:7%}
+@media(max-width:680px){.avatar-card{grid-template-columns:1fr;gap:12px;padding:10px}.avatar-stage svg{max-width:260px}}

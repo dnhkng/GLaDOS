@@ -1,7 +1,10 @@
+from dataclasses import replace
 import queue
 from typing import Any
 
 from loguru import logger
+
+from ..core.speech_markup import SpeechMarkupParser, SpeechText
 
 tool_definition = {
     "type": "function",
@@ -30,7 +33,10 @@ class Speak:
     ) -> None:
         self.llm_queue = llm_queue
         tool_config = tool_config or {}
-        self._tts_queue: queue.Queue[str] | None = tool_config.get("tts_queue")
+        self._tts_queue: queue.Queue[str | SpeechText] | None = tool_config.get("tts_queue")
+        self._generation = tool_config.get("_quiet_generation")
+        self._autonomy_generation = tool_config.get("_autonomy_generation")
+        self._cancelled = tool_config.get("_cancelled", lambda: False)
 
     def run(self, tool_call_id: str, call_args: dict[str, Any]) -> None:
         if self._tts_queue is None:
@@ -46,7 +52,13 @@ class Speak:
             self._send_result(tool_call_id, error_msg)
             return
 
-        self._tts_queue.put(text)
+        if self._cancelled():
+            return
+        for segment in SpeechMarkupParser().feed(text, final=True):
+            self._tts_queue.put(replace(segment, generation=self._generation,
+                                        autonomy_generation=self._autonomy_generation))
+        self._tts_queue.put(SpeechText("<EOS>", generation=self._generation,
+                                       autonomy_generation=self._autonomy_generation))
         self._send_result(tool_call_id, "success")
 
     def _send_result(self, tool_call_id: str, content: str) -> None:

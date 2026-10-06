@@ -2,7 +2,6 @@ import queue
 from typing import Any
 
 from loguru import logger
-import sounddevice as sd  # type: ignore
 import soundfile as sf
 
 tool_definition = {
@@ -57,6 +56,10 @@ class SlowClap:
         try:
             data, sample_rate = sf.read(self.audio_path)
 
+            # Loading PortAudio at module import prevents non-audio commands
+            # (including config validation) from running on headless systems.
+            import sounddevice as sd  # type: ignore
+
             for _ in range(claps):
                 sd.play(data, sample_rate)
                 sd.wait()
@@ -93,7 +96,7 @@ class SlowClap:
                 }
             )
 
-        except sd.PortAudioError as pa_err:
+        except (OSError, RuntimeError) as pa_err:
             error_msg = f"error: audio device error - {pa_err}"
             logger.error(f"SlowClap: {error_msg}")
             self.llm_queue.put(

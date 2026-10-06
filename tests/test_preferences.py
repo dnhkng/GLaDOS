@@ -1,12 +1,10 @@
-"""Tests for PreferencesStore."""
+"""Tests for saved preferences in the shared Store."""
 
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 
-import pytest
-
-from glados.autonomy.preferences import PreferencesStore
+from glados.core.store import Store, format_preferences
 
 
 class TestPreferencesStore:
@@ -14,7 +12,7 @@ class TestPreferencesStore:
 
     def test_get_set_basic(self):
         """Test basic get/set operations."""
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
 
         assert store.get("nonexistent") is None
         assert store.get("nonexistent", "default") == "default"
@@ -30,7 +28,7 @@ class TestPreferencesStore:
 
     def test_delete(self):
         """Test delete operation."""
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
 
         store.set("key", "value")
         assert store.get("key") == "value"
@@ -45,7 +43,7 @@ class TestPreferencesStore:
 
     def test_all(self):
         """Test getting all preferences."""
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
 
         assert store.all() == {}
 
@@ -61,12 +59,12 @@ class TestPreferencesStore:
 
     def test_as_prompt_empty(self):
         """Test as_prompt with no preferences."""
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
         assert store.as_prompt() is None
 
     def test_as_prompt_with_data(self):
         """Test as_prompt formatting."""
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
         store.set("theme", "dark")
         store.set("topics", ["AI", "science"])
 
@@ -83,12 +81,12 @@ class TestPreferencesStore:
 
         try:
             # Write preferences
-            store1 = PreferencesStore(path)
+            store1 = Store(path, formatter=format_preferences)
             store1.set("key1", "value1")
             store1.set("key2", [1, 2, 3])
 
             # Read back with new instance
-            store2 = PreferencesStore(path)
+            store2 = Store(path, formatter=format_preferences)
             assert store2.get("key1") == "value1"
             assert store2.get("key2") == [1, 2, 3]
 
@@ -103,7 +101,7 @@ class TestPreferencesStore:
         """Test that missing file is handled gracefully."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "nonexistent" / "prefs.json"
-            store = PreferencesStore(path)
+            store = Store(path, formatter=format_preferences)
 
             # Should work without error
             store.set("key", "value")
@@ -120,7 +118,7 @@ class TestPreferencesStore:
 
         try:
             # Should not raise, just log warning
-            store = PreferencesStore(path)
+            store = Store(path, formatter=format_preferences)
             assert store.all() == {}
 
             # Should still work
@@ -133,7 +131,7 @@ class TestPreferencesStore:
         """Test that operations are thread-safe."""
         import threading
 
-        store = PreferencesStore()
+        store = Store(formatter=format_preferences)
         errors = []
 
         def writer(n):

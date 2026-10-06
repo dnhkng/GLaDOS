@@ -1,50 +1,10 @@
 """Tests for the emotion system."""
 
-import importlib.util
-import sys
 import time
-from pathlib import Path
 
-import pytest
-
-# Load modules directly to avoid the full autonomy __init__ import chain
-_src_path = Path(__file__).parent.parent / "src"
-
-
-def _load_module(name: str, path: Path):
-    """Load a module directly from a file path."""
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-# Load config first
-_config_module = _load_module(
-    "glados.autonomy.config",
-    _src_path / "glados" / "autonomy" / "config.py",
-)
-EmotionConfig = _config_module.EmotionConfig
-HEXACOConfig = _config_module.HEXACOConfig
-
-# Load emotion_state
-_emotion_state_module = _load_module(
-    "glados.autonomy.emotion_state",
-    _src_path / "glados" / "autonomy" / "emotion_state.py",
-)
-EmotionState = _emotion_state_module.EmotionState
-EmotionEvent = _emotion_state_module.EmotionEvent
-
-# Load constitution
-_constitution_module = _load_module(
-    "glados.autonomy.constitution",
-    _src_path / "glados" / "autonomy" / "constitution.py",
-)
-Constitution = _constitution_module.Constitution
-ConstitutionalState = _constitution_module.ConstitutionalState
-PromptModifier = _constitution_module.PromptModifier
-EmotionConstitutionBridge = _constitution_module.EmotionConstitutionBridge
+from glados.autonomy.config import EmotionConfig, HEXACOConfig
+from glados.autonomy.constitution import Constitution, ConstitutionalState, EmotionConstitutionBridge
+from glados.autonomy.emotion_state import EmotionEvent, EmotionState
 
 
 class TestEmotionState:
@@ -140,9 +100,10 @@ class TestEmotionConfig:
         """Test default configuration."""
         config = EmotionConfig()
         assert config.enabled is True
-        assert config.tick_interval_s == 30.0
+        assert config.tick_interval_s == 5.0
         assert config.max_events == 20
-        assert config.baseline_dominance == 0.6  # GLaDOS feels in control
+        assert config.baseline_dominance == 0.0
+        assert config.decay_settle_s == 360.0
 
     def test_hexaco_defaults(self) -> None:
         """Test HEXACO personality defaults match GLaDOS."""

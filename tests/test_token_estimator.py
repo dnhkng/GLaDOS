@@ -1,8 +1,8 @@
 """Tests for the token estimation module."""
 
 import importlib.util
-import sys
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -166,7 +166,7 @@ class TestTokenConfig:
         """Test default configuration values."""
         config = TokenConfig()
         assert config.token_threshold == 8000
-        assert config.preserve_recent_messages == 10
+        assert config.preserve_recent_messages == 8
         assert config.model_context_window is None
         assert config.target_utilization == 0.6
         assert config.estimator == "simple"

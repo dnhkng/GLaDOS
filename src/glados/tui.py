@@ -777,7 +777,7 @@ class ObservabilityScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Container(id="observability_dialog"):
             yield Label(self.TITLE, id="observability_title")
-            yield RichLog(id="observability_log")
+            yield RichLog(id="observability_log", max_lines=500)
             yield Static("", id="observability_status")
 
     def on_mount(self) -> None:

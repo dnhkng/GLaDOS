@@ -37,6 +37,7 @@ class TextListener:
         observability_bus: ObservabilityBus | None = None,
         input_stream: TextIO | None = None,
         command_handler: Callable[[str], str] | None = None,
+        begin_user_turn: Callable[[], int] | None = None,
     ) -> None:
         self.llm_queue = llm_queue
         self.processing_active_event = processing_active_event
@@ -46,6 +47,7 @@ class TextListener:
         self._observability_bus = observability_bus
         self._input_stream = input_stream or sys.stdin
         self._command_handler = command_handler
+        self._begin_user_turn = begin_user_turn
         self._selector: selectors.BaseSelector | None = None
 
         try:
@@ -79,17 +81,19 @@ class TextListener:
                         kind="user_input",
                         message=trim_message(text),
                     )
+                generation = self._begin_user_turn() if self._begin_user_turn else None
+                self.processing_active_event.set()
                 self.llm_queue.put(
                     {
                         "role": "user",
                         "content": text,
                         "_enqueued_at": time.time(),
                         "_lane": "priority",
+                        **({"_quiet_generation": generation} if generation is not None else {}),
                     }
                 )
                 if self._interaction_state:
                     self._interaction_state.mark_user()
-                self.processing_active_event.set()
         finally:
             if self._selector:
                 self._selector.close()
