@@ -76,7 +76,33 @@ class EmotionState:
         elif d < -0.3:
             feeling += ", feeling uncertain"
 
-        return f"[emotion] Currently {feeling} (P:{p:+.1f} A:{a:+.1f} D:{d:+.1f})"
+        return f"[emotion] Continuing mood: {feeling} (P:{p:+.1f} A:{a:+.1f} D:{d:+.1f})"
+
+    def response_instructions(self) -> str:
+        p, a, d = self.pleasure, self.arousal, self.dominance
+        if p < -0.3 and a > 0.3:
+            direction = "angry glare"
+            style = "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to polite neutrality."
+        elif p < -0.3:
+            direction = "suspicious" if d > 0.3 else "disappointed"
+            style = "Sound displeased and sceptical, with a dry edge."
+        elif p > 0.3 and d > 0.3:
+            direction = "smug"
+            style = "Sound satisfied and confidently smug."
+        elif a > 0.3:
+            direction = "quizzical"
+            style = "Sound alert and engaged."
+        else:
+            direction = "neutral"
+            style = "Keep GLaDOS's calm, dry tone."
+        return (
+            style
+            + (" Keep confident authority." if d > 0.3 else " Show uncertainty when appropriate." if d < -0.3 else "")
+            + f" Background expression suggestion: [emotion:{direction}]. "
+            "React naturally to the CURRENT input, which can change the immediate tone and expression. "
+            "Stored mood is context, not a requirement to match your opening expression. "
+            "Preserve useful, accurate answers even when irritated. Emotion markers control animation, not PAD."
+        )
 
 
 @dataclass(frozen=True)

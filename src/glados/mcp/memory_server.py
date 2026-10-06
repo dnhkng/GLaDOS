@@ -11,6 +11,9 @@ import json
 import logging
 import os
 import time
+import uuid
+
+from glados.core.memory_records import append_record
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +41,7 @@ class Fact:
     source: str
     importance: float
     created_at: float = field(default_factory=time.time)
-    id: str = field(default_factory=lambda: f"fact_{int(time.time() * 1000)}")
+    id: str = field(default_factory=lambda: "fact_" + uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -57,7 +60,7 @@ class Summary:
     start_time: str  # ISO format
     end_time: str  # ISO format
     created_at: float = field(default_factory=time.time)
-    id: str = field(default_factory=lambda: f"summary_{int(time.time() * 1000)}")
+    id: str = field(default_factory=lambda: "summary_" + uuid.uuid4().hex)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -90,9 +93,7 @@ def _load_facts() -> list[Fact]:
 
 def _save_fact(fact: Fact) -> None:
     """Append a fact to storage."""
-    _ensure_storage()
-    with FACTS_FILE.open("a") as f:
-        f.write(json.dumps(fact.to_dict()) + "\n")
+    append_record(FACTS_FILE, fact.to_dict())
 
 
 def _load_summaries() -> list[Summary]:
@@ -113,9 +114,7 @@ def _load_summaries() -> list[Summary]:
 
 def _save_summary(summary: Summary) -> None:
     """Append a summary to storage."""
-    _ensure_storage()
-    with SUMMARIES_FILE.open("a") as f:
-        f.write(json.dumps(summary.to_dict()) + "\n")
+    append_record(SUMMARIES_FILE, summary.to_dict())
 
 
 @mcp.tool()

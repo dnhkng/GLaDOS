@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class MCPServerConfig(BaseModel):
     name: str
+    description: str = ""
+    routing_category: Literal["mcp", "memory"] = "mcp"
     transport: Literal["stdio", "http", "sse"] = "stdio"
     command: str | None = None
     args: list[str] = Field(default_factory=list)

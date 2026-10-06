@@ -25,3 +25,6 @@ class TaskUpdateEvent:
     importance: float | None = None
     confidence: float | None = None
     next_run: float | None = None
+    attention_key: str | None = None
+    update_priority: str | None = None
+    revision: int = 0
