@@ -6,13 +6,14 @@ Replaces: PreferencesStore, KnowledgeStore, TaskSlotStore, MindRegistry
 
 from __future__ import annotations
 
-import json
-import threading
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+import threading
 from typing import Any, Callable, Generic, TypeVar
 
 from loguru import logger
+
+from .settings_files import read_settings, settings_source, write_settings
 
 T = TypeVar("T")
 Formatter = Callable[[dict[str, T]], str | None]
@@ -20,7 +21,7 @@ Formatter = Callable[[dict[str, T]], str | None]
 
 class Store(Generic[T]):
     """
-    Thread-safe key-value store with optional JSON persistence.
+    Thread-safe key-value store with optional YAML or legacy JSON persistence.
 
     Features:
     - Generic typing for values
@@ -31,7 +32,7 @@ class Store(Generic[T]):
 
     Usage:
         # Simple key-value store
-        prefs = Store[Any](path="prefs.json")
+        prefs = Store[Any](path="preferences.yaml")
         prefs.set("theme", "dark")
 
         # Typed store with custom formatter
@@ -54,7 +55,7 @@ class Store(Generic[T]):
         Initialize the store.
 
         Args:
-            path: Optional file path for JSON persistence
+            path: Optional file path for settings persistence
             formatter: Function to format data as prompt string
             on_change: Callback invoked on set/delete with (key, new_value or None)
         """
@@ -64,18 +65,22 @@ class Store(Generic[T]):
         self._formatter = formatter
         self._on_change = on_change
 
-        if self._path and self._path.exists():
+        if self._path and settings_source(self._path).exists():
             self._load()
+        if self._path and self._path.suffix in {".yaml", ".yml"} and not self._path.exists():
+            self._save()
 
     def _load(self) -> None:
         """Load data from disk."""
         if not self._path:
             return
         try:
-            with self._path.open("r", encoding="utf-8") as f:
-                self._data = json.load(f)
+            data = read_settings(self._path)
+            if not isinstance(data, dict) or any(not isinstance(key, str) for key in data):
+                raise ValueError("Preferences must be a mapping with string keys")
+            self._data = data
             logger.debug("Store: Loaded {} entries from {}", len(self._data), self._path)
-        except (json.JSONDecodeError, OSError) as e:
+        except (ValueError, OSError) as e:
             logger.warning("Store: Failed to load from {}: {}", self._path, e)
 
     def _save(self) -> None:
@@ -83,7 +88,6 @@ class Store(Generic[T]):
         if not self._path:
             return
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
             # Convert dataclasses to dicts for serialization
             serializable = {}
             for k, v in self._data.items():
@@ -91,8 +95,7 @@ class Store(Generic[T]):
                     serializable[k] = asdict(v)
                 else:
                     serializable[k] = v
-            with self._path.open("w", encoding="utf-8") as f:
-                json.dump(serializable, f, indent=2)
+            write_settings(self._path, serializable)
         except OSError as e:
             logger.warning("Store: Failed to save to {}: {}", self._path, e)
 

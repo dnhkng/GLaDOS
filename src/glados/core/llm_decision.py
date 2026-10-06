@@ -23,7 +23,9 @@ from __future__ import annotations
 import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from contextlib import nullcontext
+
+from ..autonomy.llm_client import LLMConfig
 from typing import Any, TypeVar
 
 import httpx
@@ -36,20 +38,6 @@ T = TypeVar("T", bound=BaseModel)
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm_decide")
 
 
-@dataclass
-class LLMConfig:
-    """Configuration for LLM API calls."""
-    url: str
-    api_key: str | None = None
-    model: str = "gpt-4o-mini"
-    timeout: float = 30.0
-
-    @property
-    def headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
 
 
 async def llm_decide(
@@ -86,14 +74,15 @@ async def llm_decide(
 
     # Build the schema hint for the LLM
     schema_hint = _build_schema_hint(schema)
-    user_message = f"{formatted_prompt}\n\nRespond with JSON matching this schema:\n{schema_hint}"
+    system_prompt += f"\n\nRespond with JSON matching this schema:\n{schema_hint}"
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
+        {"role": "user", "content": formatted_prompt},
     ]
 
     data = {
+        **config.request_options,
         "model": config.model,
         "messages": messages,
         "stream": False,
@@ -101,14 +90,16 @@ async def llm_decide(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=config.timeout) as client:
-            response = await client.post(
-                config.url,
-                headers=config.headers,
-                json=data,
-            )
-            response.raise_for_status()
-            result = response.json()
+        def request():
+            guard = config.scheduler.lease(
+                config.owner, "autonomy", config.model,
+                lambda: bool(config.shutdown_event and config.shutdown_event.is_set()),
+            ) if config.scheduler else nullcontext()
+            with guard, httpx.Client(timeout=config.timeout) as client:
+                response = client.post(config.url, headers=config.headers, json=data)
+                response.raise_for_status()
+                return response.json()
+        result = await asyncio.to_thread(request)
 
         # Extract content from response
         content = _extract_content(result)
