@@ -1,0 +1,473 @@
+{
+  "note": "Actual webapp routing preview endpoints, with original background controls restored. Both time/date audio clips repeat between trials, so warm audio is not fresh speech. Original and optimized server plus prompt layouts compared together. No tools executed.",
+  "stable_prefix_before": {
+    "shared_tokens": 304,
+    "prompt_tokens": [
+      2062,
+      2062
+    ],
+    "note": "Live application preview, no tools. Clock differs between samples; camera observations may also change. No conversation or image content saved."
+  },
+  "stable_prefix_after": {
+    "shared_tokens": 2074,
+    "prompt_tokens": [
+      2146,
+      2146
+    ],
+    "note": "Live application preview, no tools. Clock differs between samples; camera observations may also change. No conversation or image content saved."
+  },
+  "summary": [
+    {
+      "phase": "before",
+      "mode": "text",
+      "median_ms": 435.84,
+      "accepted": 10,
+      "requests": 10
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "median_ms": 409.69,
+      "accepted": 10,
+      "requests": 10
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "median_ms": 272.56,
+      "accepted": 10,
+      "requests": 10
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "median_ms": 268.86,
+      "accepted": 10,
+      "requests": 10
+    }
+  ],
+  "samples": [
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 0,
+      "elapsed_ms": 168.25,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 0,
+      "elapsed_ms": 431.72,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 0,
+      "elapsed_ms": 448.71,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 0,
+      "elapsed_ms": 258.02,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 1,
+      "elapsed_ms": 632.79,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 1,
+      "elapsed_ms": 321.02,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 1,
+      "elapsed_ms": 542.88,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 1,
+      "elapsed_ms": 352.13,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 2,
+      "elapsed_ms": 408.38,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 2,
+      "elapsed_ms": 496.39,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 2,
+      "elapsed_ms": 526.57,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 2,
+      "elapsed_ms": 345.17,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 3,
+      "elapsed_ms": 439.95,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 3,
+      "elapsed_ms": 501.68,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 3,
+      "elapsed_ms": 559.02,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 3,
+      "elapsed_ms": 348.17,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 4,
+      "elapsed_ms": 445.32,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "text",
+      "repeat": 4,
+      "elapsed_ms": 296.33,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 4,
+      "elapsed_ms": 777.16,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "before",
+      "mode": "audio",
+      "repeat": 4,
+      "elapsed_ms": 370.68,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 0,
+      "elapsed_ms": 311.76,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 0,
+      "elapsed_ms": 269.16,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 0,
+      "elapsed_ms": 427.65,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 0,
+      "elapsed_ms": 198.97,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 1,
+      "elapsed_ms": 271.21,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 1,
+      "elapsed_ms": 146.33,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 1,
+      "elapsed_ms": 341.42,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 1,
+      "elapsed_ms": 191.31,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 2,
+      "elapsed_ms": 384.24,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 2,
+      "elapsed_ms": 284.94,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 2,
+      "elapsed_ms": 335.23,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 2,
+      "elapsed_ms": 181.69,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 3,
+      "elapsed_ms": 266.54,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 3,
+      "elapsed_ms": 144.86,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 3,
+      "elapsed_ms": 355.22,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 3,
+      "elapsed_ms": 202.49,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 4,
+      "elapsed_ms": 273.92,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "arguments": {},
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "text",
+      "repeat": 4,
+      "elapsed_ms": 380.34,
+      "accepted": true,
+      "action": "plan",
+      "tool": null,
+      "arguments": {},
+      "stages": 3
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 4,
+      "elapsed_ms": 338.8,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    },
+    {
+      "phase": "after",
+      "mode": "audio",
+      "repeat": 4,
+      "elapsed_ms": 196.05,
+      "accepted": true,
+      "action": "tool",
+      "tool": "get_time",
+      "stages": 2
+    }
+  ],
+  "server_pid": 252592,
+  "webapp_pid": 252640
+}

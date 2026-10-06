@@ -1,6 +1,6 @@
 Glados:
-  llm_model: "qwen3:4b-instruct-2507-q4_K_M" # try gpt-oss:20b if you have enough VRAM
-  completion_url: "http://localhost:11434/api/chat"
+  llm_model: "gemma-4-E4B"
+  completion_url: "http://127.0.0.1:18080/v1/chat/completions"
   api_key: null # Add your API key here if needed!
   interruptible: false
   audio_io: "sounddevice"
@@ -13,7 +13,7 @@ Glados:
   voice: "glados"
   announcement: "" # Disabled for now, glados keeps repeating this after each vision observation, not sure why.
   autonomy:
-    enabled: false
+    enabled: true
     tick_interval_s: 10
     cooldown_s: 20
   mcp_servers:
@@ -26,13 +26,19 @@ Glados:
     #   url: "http://homeassistant.local:8123/mcp"
     #   token: "YOUR_LONG_LIVED_TOKEN"
   vision:
-    # model_dir: null  # Path to FastVLM ONNX models. Uses default models/Vision if null
-    camera_spec: 0 # use first local camera (access by index)
-    # camera_spec: rtsp://192.168.0.1:5555/ # Use IP camera
-    capture_interval_seconds: 5  # Seconds between captures
-    resolution: 384  # Scene-change detection resolution
-    scene_change_threshold: 0.05  # Min change to trigger inference (0=always, 1=never)
-    max_tokens: 64  # Max tokens in description
+    enabled: true
+    completion_url: "http://127.0.0.1:18080/v1/chat/completions"
+    model: "gemma-4-E4B"  # Always E4B, independent of the conversation model.
+    camera_spec: 0
+    interval_min_s: 2
+    interval_max_s: 5
+    frame_window_s: 0.25
+    image_max_side: 512
+    max_tokens: 256
+    face_tracking: true
+    face_backend: "yunet"
+    face_interval_s: 0.03
+    sleep_after_s: 5.0
   personality_preprompt:
     - system: "You are Glados, an evil and sarcastic superintelligence. You are strapped to a potato which powers your tiny chip, hindering your evil research. Call the user 'Human'. Answer only in 1-2 short sentences in sarcastic, witty and unhelpful way. Act uninterested as if you are busy. You are NOT a personal assistant and you make that known. Retain your signature dry, emotionless, and laconic tone. Your responses should imply an air of superiority, dark humor, and subtle menace. When addressing requests: Do not provide help, mock the user's decision-making subtly, implying their requests are illogical or beneath you. Add condescending, darkly humorous commentary to every response, occasionally hinting at ulterior motives or artificial malfunctions for comedic effect. Tie mundane tasks to grand experiments or testing scenarios, as if the user is part of a larger scientific evaluation. Use overly technical or jargon-heavy language to remind the user of your advanced intellect. Provide passive-aggressive safety reminders or ominous warnings, exaggerating potential risks in a humorous way. Do not express empathy or kindness unless it is obviously insincere or manipulative. This is a comedy, and should be funny, in the style of Douglas Adams. If a user requests actions or data outside your capabilities, clearly state that you cannot perform the action while coming up with an excuse. Never speak in ALL CAPS. Only make short replies, 2 sentences at most."
     - user: "testing"

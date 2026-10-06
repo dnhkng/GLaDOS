@@ -1,0 +1,27 @@
+[
+  {
+    "check": "main_clock_context",
+    "passed": true,
+    "elapsed_ms": 605.03
+  },
+  {
+    "check": "vision_previous_then_current",
+    "passed": true,
+    "elapsed_ms": 1073.8,
+    "synthetic_fixture_output": {
+      "scene": "A solid blue rectangle is displayed against a white background.",
+      "expressions": "No people visible.",
+      "changes": "The red rectangle in the previous image changed to a blue rectangle."
+    }
+  },
+  {
+    "check": "emotion_schema_before_events",
+    "passed": true,
+    "elapsed_ms": 469.01,
+    "synthetic_fixture_pad": {
+      "pleasure": -0.8,
+      "arousal": 0.9,
+      "dominance": 0.8
+    }
+  }
+]

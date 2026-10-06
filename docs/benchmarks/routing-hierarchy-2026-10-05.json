@@ -1,0 +1,1538 @@
+{
+  "model": "gemma-4-E4B",
+  "machine": "RTX 3080 10 GB",
+  "mode": "typed dry-run previews; Vision and Emotion remained running",
+  "tests": [
+    {
+      "input": "What time is it?",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "time",
+        "action": "tool",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "A",
+            "id": "time",
+            "description": "Request the current LOCAL time or date (no other timezone specified)",
+            "action": "tool",
+            "probability": 0.9968461188465038
+          },
+          {
+            "label": "I",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.0012837635320945909
+          },
+          {
+            "label": "B",
+            "id": "command_uptime",
+            "description": "Read system uptime: how long this computer has been running since boot",
+            "action": "tool",
+            "probability": 0.0005892898067217807
+          },
+          {
+            "label": "G",
+            "id": "tool_19e199a418053abbd24f",
+            "description": "{\"tool\": \"run_safe_command\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read host time, uptime, disk space, RAM usage, CPU load or operating system information. cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. Runs a fixed read-only command in the command slot. No custom commands or arguments.\", \"arguments\": {\"task\": {\"type\": \"string\", \"enum\": [\"time\", \"uptime\", \"disk_usage\", \"memory_usage\", \"system_info\", \"cpu_load\"]}}}",
+            "action": "plan",
+            "probability": 0.00045469786498534843
+          },
+          {
+            "label": "H",
+            "id": "tool_f6a81ec5f576d2735318",
+            "description": "{\"tool\": \"get_time\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read the current date and time from the system clock. Use for current time/date questions.\", \"arguments\": {\"timezone\": {\"type\": \"string\"}}}",
+            "action": "plan",
+            "probability": 0.00041942774849040024
+          },
+          {
+            "label": "E",
+            "id": "command_system_info",
+            "description": "Read the operating system and kernel version of this computer",
+            "action": "tool",
+            "probability": 0.00019707588537629868
+          },
+          {
+            "label": "D",
+            "id": "command_memory_usage",
+            "description": "Read this computer RAM or memory usage",
+            "action": "tool",
+            "probability": 0.00014678547146769165
+          },
+          {
+            "label": "F",
+            "id": "command_cpu_load",
+            "description": "Read the current CPU or processor load on this computer",
+            "action": "tool",
+            "probability": 5.5614108293693315e-05
+          },
+          {
+            "label": "C",
+            "id": "command_disk_usage",
+            "description": "Read available disk space or storage usage on this computer",
+            "action": "tool",
+            "probability": 7.226736066441455e-06
+          }
+        ],
+        "margin": 0.9955623553144092,
+        "elapsed_ms": 348.5,
+        "dry_run": true,
+        "tool": "get_time",
+        "arguments": {},
+        "name": "Local system",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "area_system",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.9282103052363948
+              },
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.03728183307286724
+              },
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 0.0257111318574732
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.005534858366206496
+              },
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.0014047262762819147
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 0.0006383545026271268
+              },
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.0006180350233908346
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.000559853905976328
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 2.1212148273722283e-05
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 1.4751183494288836e-05
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 4.93842701400116e-06
+              }
+            ],
+            "margin": 0.8909284721635276,
+            "elapsed_ms": 119.5,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          },
+          {
+            "list_id": "system",
+            "revision": 1,
+            "option_id": "time",
+            "action": "tool",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "time",
+                "description": "Request the current LOCAL time or date (no other timezone specified)",
+                "action": "tool",
+                "probability": 0.9968461188465038
+              },
+              {
+                "label": "I",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.0012837635320945909
+              },
+              {
+                "label": "B",
+                "id": "command_uptime",
+                "description": "Read system uptime: how long this computer has been running since boot",
+                "action": "tool",
+                "probability": 0.0005892898067217807
+              },
+              {
+                "label": "G",
+                "id": "tool_19e199a418053abbd24f",
+                "description": "{\"tool\": \"run_safe_command\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read host time, uptime, disk space, RAM usage, CPU load or operating system information. cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. Runs a fixed read-only command in the command slot. No custom commands or arguments.\", \"arguments\": {\"task\": {\"type\": \"string\", \"enum\": [\"time\", \"uptime\", \"disk_usage\", \"memory_usage\", \"system_info\", \"cpu_load\"]}}}",
+                "action": "plan",
+                "probability": 0.00045469786498534843
+              },
+              {
+                "label": "H",
+                "id": "tool_f6a81ec5f576d2735318",
+                "description": "{\"tool\": \"get_time\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read the current date and time from the system clock. Use for current time/date questions.\", \"arguments\": {\"timezone\": {\"type\": \"string\"}}}",
+                "action": "plan",
+                "probability": 0.00041942774849040024
+              },
+              {
+                "label": "E",
+                "id": "command_system_info",
+                "description": "Read the operating system and kernel version of this computer",
+                "action": "tool",
+                "probability": 0.00019707588537629868
+              },
+              {
+                "label": "D",
+                "id": "command_memory_usage",
+                "description": "Read this computer RAM or memory usage",
+                "action": "tool",
+                "probability": 0.00014678547146769165
+              },
+              {
+                "label": "F",
+                "id": "command_cpu_load",
+                "description": "Read the current CPU or processor load on this computer",
+                "action": "tool",
+                "probability": 5.5614108293693315e-05
+              },
+              {
+                "label": "C",
+                "id": "command_disk_usage",
+                "description": "Read available disk space or storage usage on this computer",
+                "action": "tool",
+                "probability": 7.226736066441455e-06
+              }
+            ],
+            "margin": 0.9955623553144092,
+            "elapsed_ms": 228.1,
+            "dry_run": true,
+            "tool": "get_time",
+            "arguments": {},
+            "name": "Local system"
+          }
+        ],
+        "category": "system",
+        "server": null,
+        "tool_scope": [
+          "get_time"
+        ]
+      }
+    },
+    {
+      "input": "What is the CPU load?",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "tool_85ef0420ffdcef2dd81b",
+        "action": "plan",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "A",
+            "id": "tool_85ef0420ffdcef2dd81b",
+            "description": "{\"tool\": \"mcp.system_info.cpu_load\", \"purpose\": \"Return system load averages.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.9986222332410616
+          },
+          {
+            "label": "E",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.0006382266839945564
+          },
+          {
+            "label": "C",
+            "id": "tool_8f7372d781c8cee9c1a6",
+            "description": "{\"tool\": \"mcp.system_info.system_overview\", \"purpose\": \"Return a combined snapshot of load, memory, and temperature.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.0005098062656286408
+          },
+          {
+            "label": "B",
+            "id": "tool_8489e54225915da82272",
+            "description": "{\"tool\": \"mcp.system_info.memory_usage\", \"purpose\": \"Return memory usage statistics.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.0001741649457157657
+          },
+          {
+            "label": "D",
+            "id": "tool_3af92880cd2c6b9b1db1",
+            "description": "{\"tool\": \"mcp.system_info.temperatures\", \"purpose\": \"Return temperature sensor readings when available.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 5.556886359947471e-05
+          }
+        ],
+        "margin": 0.997984006557067,
+        "elapsed_ms": 331.8,
+        "dry_run": true,
+        "tool": null,
+        "arguments": {},
+        "name": "MCP: system_info",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "area_mcp",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.8335326583746454
+              },
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.1505691755866166
+              },
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.012560331669164952
+              },
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.003126489798213495
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.00013936244518784424
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 5.217814928692266e-05
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 1.062614171873085e-05
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 5.427674471455589e-06
+              },
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 2.5440357062795165e-06
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 8.715150838848782e-07
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 3.3460990440050934e-07
+              }
+            ],
+            "margin": 0.6829634827880289,
+            "elapsed_ms": 136.6,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          },
+          {
+            "list_id": "mcp",
+            "revision": 1,
+            "option_id": "choose_2236c0ccfcfc4b63eb3e",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "choose_2236c0ccfcfc4b63eb3e",
+                "description": "{\"server\": \"system_info\", \"capabilities\": \"Return system load averages.; Return memory usage statistics.; Return a combined snapshot of load, memory, and temperature.; Return temperature sensor readings when available.\"}",
+                "action": "plan",
+                "probability": 0.9900112069117829
+              },
+              {
+                "label": "B",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.009988793088217138
+              }
+            ],
+            "margin": 0.9800224138235658,
+            "elapsed_ms": 97.8,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "MCP services"
+          },
+          {
+            "list_id": "server_2236c0ccfcfc4b63eb3e",
+            "revision": 1,
+            "option_id": "tool_85ef0420ffdcef2dd81b",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "tool_85ef0420ffdcef2dd81b",
+                "description": "{\"tool\": \"mcp.system_info.cpu_load\", \"purpose\": \"Return system load averages.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.9986222332410616
+              },
+              {
+                "label": "E",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.0006382266839945564
+              },
+              {
+                "label": "C",
+                "id": "tool_8f7372d781c8cee9c1a6",
+                "description": "{\"tool\": \"mcp.system_info.system_overview\", \"purpose\": \"Return a combined snapshot of load, memory, and temperature.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.0005098062656286408
+              },
+              {
+                "label": "B",
+                "id": "tool_8489e54225915da82272",
+                "description": "{\"tool\": \"mcp.system_info.memory_usage\", \"purpose\": \"Return memory usage statistics.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.0001741649457157657
+              },
+              {
+                "label": "D",
+                "id": "tool_3af92880cd2c6b9b1db1",
+                "description": "{\"tool\": \"mcp.system_info.temperatures\", \"purpose\": \"Return temperature sensor readings when available.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 5.556886359947471e-05
+              }
+            ],
+            "margin": 0.997984006557067,
+            "elapsed_ms": 96.5,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "MCP: system_info"
+          }
+        ],
+        "category": "mcp",
+        "server": "system_info",
+        "tool_scope": [
+          "mcp.system_info.cpu_load"
+        ]
+      }
+    },
+    {
+      "input": "Does my jacket have a zipper?",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "tool_719fcd23623014ea79c3",
+        "action": "plan",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "A",
+            "id": "tool_719fcd23623014ea79c3",
+            "description": "{\"tool\": \"vision_look\", \"purpose\": \"Inspect the webcam using E4B. Supply question to check a specific visible detail on a fresh frame, such as whether the user's jacket has a zipper. Without question, read the latest scene and changes.\", \"arguments\": {\"question\": {\"type\": \"string\"}}}",
+            "action": "plan",
+            "probability": 0.9888090070219442
+          },
+          {
+            "label": "B",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.011190992978055838
+          }
+        ],
+        "margin": 0.9776180140438884,
+        "elapsed_ms": 306.9,
+        "dry_run": true,
+        "tool": null,
+        "arguments": {},
+        "name": "Vision",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "area_vision",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.9519053097383998
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.01470070145382457
+              },
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.010884699406938439
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.010658627371307247
+              },
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.010261568236341598
+              },
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.0009006017931530652
+              },
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 0.0003594419684554558
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 0.000176799978285213
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 8.467954463353983e-05
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 5.276035151352974e-05
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 1.4810157147522773e-05
+              }
+            ],
+            "margin": 0.9372046082845753,
+            "elapsed_ms": 131.7,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          },
+          {
+            "list_id": "vision",
+            "revision": 1,
+            "option_id": "tool_719fcd23623014ea79c3",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "tool_719fcd23623014ea79c3",
+                "description": "{\"tool\": \"vision_look\", \"purpose\": \"Inspect the webcam using E4B. Supply question to check a specific visible detail on a fresh frame, such as whether the user's jacket has a zipper. Without question, read the latest scene and changes.\", \"arguments\": {\"question\": {\"type\": \"string\"}}}",
+                "action": "plan",
+                "probability": 0.9888090070219442
+              },
+              {
+                "label": "B",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.011190992978055838
+              }
+            ],
+            "margin": 0.9776180140438884,
+            "elapsed_ms": 174.6,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Vision"
+          }
+        ],
+        "category": "vision",
+        "server": null,
+        "tool_scope": [
+          "vision_look"
+        ]
+      }
+    },
+    {
+      "input": "Remember that I prefer tea to coffee.",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "tool_7e8118b216585a82ef7b",
+        "action": "plan",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "B",
+            "id": "tool_7e8118b216585a82ef7b",
+            "description": "{\"tool\": \"set_preference\", \"purpose\": \"Set a user preference. Use this to remember user likes/dislikes. Examples: news_topics=['AI', 'science'], news_exclude=['crypto'], weather_units='celsius'\", \"arguments\": {\"key\": {\"type\": \"string\"}, \"value\": {}}}",
+            "action": "plan",
+            "probability": 0.9967661699563941
+          },
+          {
+            "label": "A",
+            "id": "tool_5b9829d02ba0d15f49a7",
+            "description": "{\"tool\": \"get_preferences\", \"purpose\": \"Get current user preferences. Returns all stored preferences as JSON.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.001718651886983789
+          },
+          {
+            "label": "C",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.001515178156622062
+          }
+        ],
+        "margin": 0.9950475180694103,
+        "elapsed_ms": 300.0,
+        "dry_run": true,
+        "tool": null,
+        "arguments": {},
+        "name": "Memory",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "area_memory",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.9987768818799845
+              },
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.00046623289997972276
+              },
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.0003745114771590042
+              },
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.00016912394981879854
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.00014505614362700012
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 5.6954953657126084e-05
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 6.390656110471993e-06
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 2.4781639499969826e-06
+              },
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 1.6540404225748159e-06
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 5.65858743300429e-07
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 1.499765475084199e-07
+              }
+            ],
+            "margin": 0.9983106489800048,
+            "elapsed_ms": 131.4,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          },
+          {
+            "list_id": "memory",
+            "revision": 1,
+            "option_id": "tool_7e8118b216585a82ef7b",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "B",
+                "id": "tool_7e8118b216585a82ef7b",
+                "description": "{\"tool\": \"set_preference\", \"purpose\": \"Set a user preference. Use this to remember user likes/dislikes. Examples: news_topics=['AI', 'science'], news_exclude=['crypto'], weather_units='celsius'\", \"arguments\": {\"key\": {\"type\": \"string\"}, \"value\": {}}}",
+                "action": "plan",
+                "probability": 0.9967661699563941
+              },
+              {
+                "label": "A",
+                "id": "tool_5b9829d02ba0d15f49a7",
+                "description": "{\"tool\": \"get_preferences\", \"purpose\": \"Get current user preferences. Returns all stored preferences as JSON.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.001718651886983789
+              },
+              {
+                "label": "C",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.001515178156622062
+              }
+            ],
+            "margin": 0.9950475180694103,
+            "elapsed_ms": 167.7,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Memory"
+          }
+        ],
+        "category": "memory",
+        "server": null,
+        "tool_scope": [
+          "set_preference"
+        ]
+      }
+    },
+    {
+      "input": "Read the temperature sensors on this machine.",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "tool_3af92880cd2c6b9b1db1",
+        "action": "plan",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "D",
+            "id": "tool_3af92880cd2c6b9b1db1",
+            "description": "{\"tool\": \"mcp.system_info.temperatures\", \"purpose\": \"Return temperature sensor readings when available.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.9896644371148393
+          },
+          {
+            "label": "E",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.004361653242426086
+          },
+          {
+            "label": "A",
+            "id": "tool_85ef0420ffdcef2dd81b",
+            "description": "{\"tool\": \"mcp.system_info.cpu_load\", \"purpose\": \"Return system load averages.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.0029577338188381407
+          },
+          {
+            "label": "C",
+            "id": "tool_8f7372d781c8cee9c1a6",
+            "description": "{\"tool\": \"mcp.system_info.system_overview\", \"purpose\": \"Return a combined snapshot of load, memory, and temperature.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.0022405323145920394
+          },
+          {
+            "label": "B",
+            "id": "tool_8489e54225915da82272",
+            "description": "{\"tool\": \"mcp.system_info.memory_usage\", \"purpose\": \"Return memory usage statistics.\", \"arguments\": {}}",
+            "action": "plan",
+            "probability": 0.0007756435093044597
+          }
+        ],
+        "margin": 0.9853027838724132,
+        "elapsed_ms": 565.8,
+        "dry_run": true,
+        "tool": null,
+        "arguments": {},
+        "name": "MCP: system_info",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "area_mcp",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.971144015650948
+              },
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.014102154340128011
+              },
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.011896968759094614
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.00145070661523398
+              },
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.0010494426771132076
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.00023306264366086636
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 4.543809677451588e-05
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 2.6173454766291304e-05
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 2.2824538858194214e-05
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 1.4819724963378056e-05
+              },
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 1.4393498458997889e-05
+              }
+            ],
+            "margin": 0.95704186131082,
+            "elapsed_ms": 187.8,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          },
+          {
+            "list_id": "mcp",
+            "revision": 1,
+            "option_id": "choose_2236c0ccfcfc4b63eb3e",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "A",
+                "id": "choose_2236c0ccfcfc4b63eb3e",
+                "description": "{\"server\": \"system_info\", \"capabilities\": \"Return system load averages.; Return memory usage statistics.; Return a combined snapshot of load, memory, and temperature.; Return temperature sensor readings when available.\"}",
+                "action": "plan",
+                "probability": 0.9868828773773065
+              },
+              {
+                "label": "B",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.013117122622693511
+              }
+            ],
+            "margin": 0.973765754754613,
+            "elapsed_ms": 184.1,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "MCP services"
+          },
+          {
+            "list_id": "server_2236c0ccfcfc4b63eb3e",
+            "revision": 1,
+            "option_id": "tool_3af92880cd2c6b9b1db1",
+            "action": "plan",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "D",
+                "id": "tool_3af92880cd2c6b9b1db1",
+                "description": "{\"tool\": \"mcp.system_info.temperatures\", \"purpose\": \"Return temperature sensor readings when available.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.9896644371148393
+              },
+              {
+                "label": "E",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.004361653242426086
+              },
+              {
+                "label": "A",
+                "id": "tool_85ef0420ffdcef2dd81b",
+                "description": "{\"tool\": \"mcp.system_info.cpu_load\", \"purpose\": \"Return system load averages.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.0029577338188381407
+              },
+              {
+                "label": "C",
+                "id": "tool_8f7372d781c8cee9c1a6",
+                "description": "{\"tool\": \"mcp.system_info.system_overview\", \"purpose\": \"Return a combined snapshot of load, memory, and temperature.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.0022405323145920394
+              },
+              {
+                "label": "B",
+                "id": "tool_8489e54225915da82272",
+                "description": "{\"tool\": \"mcp.system_info.memory_usage\", \"purpose\": \"Return memory usage statistics.\", \"arguments\": {}}",
+                "action": "plan",
+                "probability": 0.0007756435093044597
+              }
+            ],
+            "margin": 0.9853027838724132,
+            "elapsed_ms": 193.0,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "MCP: system_info"
+          }
+        ],
+        "category": "mcp",
+        "server": "system_info",
+        "tool_scope": [
+          "mcp.system_info.temperatures"
+        ]
+      }
+    },
+    {
+      "input": "Hello, how are you?",
+      "result": {
+        "list_id": "speech",
+        "revision": 4,
+        "option_id": "reply",
+        "action": "reply",
+        "accepted": true,
+        "scores": [
+          {
+            "label": "H",
+            "id": "reply",
+            "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+            "action": "reply",
+            "probability": 0.9889001242595151
+          },
+          {
+            "label": "C",
+            "id": "area_mcp",
+            "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+            "action": "plan",
+            "probability": 0.005605848967405301
+          },
+          {
+            "label": "K",
+            "id": "back_to_assistant",
+            "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+            "action": "plan",
+            "probability": 0.0026976894566349717
+          },
+          {
+            "label": "D",
+            "id": "area_system",
+            "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+            "action": "plan",
+            "probability": 0.0010595056220120038
+          },
+          {
+            "label": "I",
+            "id": "clarify",
+            "description": "Ambiguous or incomplete command; ask what the user means",
+            "action": "clarify",
+            "probability": 0.0006836925744362909
+          },
+          {
+            "label": "A",
+            "id": "area_vision",
+            "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+            "action": "plan",
+            "probability": 0.00042418090710104816
+          },
+          {
+            "label": "B",
+            "id": "area_memory",
+            "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+            "action": "plan",
+            "probability": 0.00036701399920906354
+          },
+          {
+            "label": "G",
+            "id": "ignore",
+            "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+            "action": "ignore",
+            "probability": 0.00022607797273590721
+          },
+          {
+            "label": "F",
+            "id": "area_other",
+            "description": "Use another local tool, such as a requested slow clap",
+            "action": "plan",
+            "probability": 2.098717594171643e-05
+          },
+          {
+            "label": "J",
+            "id": "plan",
+            "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+            "action": "plan",
+            "probability": 9.992156257318757e-06
+          },
+          {
+            "label": "E",
+            "id": "area_tasks",
+            "description": "Retrieve a saved task report or create/update a tracked task",
+            "action": "plan",
+            "probability": 4.8869087512061626e-06
+          }
+        ],
+        "margin": 0.9832942752921098,
+        "elapsed_ms": 135.6,
+        "dry_run": true,
+        "tool": null,
+        "arguments": {},
+        "name": "Capability area",
+        "settings_revision": 12,
+        "strategy": "hierarchical",
+        "stages": [
+          {
+            "list_id": "area",
+            "revision": 1,
+            "option_id": "reply",
+            "action": "reply",
+            "accepted": true,
+            "scores": [
+              {
+                "label": "H",
+                "id": "reply",
+                "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+                "action": "reply",
+                "probability": 0.9889001242595151
+              },
+              {
+                "label": "C",
+                "id": "area_mcp",
+                "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+                "action": "plan",
+                "probability": 0.005605848967405301
+              },
+              {
+                "label": "K",
+                "id": "back_to_assistant",
+                "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+                "action": "plan",
+                "probability": 0.0026976894566349717
+              },
+              {
+                "label": "D",
+                "id": "area_system",
+                "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+                "action": "plan",
+                "probability": 0.0010595056220120038
+              },
+              {
+                "label": "I",
+                "id": "clarify",
+                "description": "Ambiguous or incomplete command; ask what the user means",
+                "action": "clarify",
+                "probability": 0.0006836925744362909
+              },
+              {
+                "label": "A",
+                "id": "area_vision",
+                "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+                "action": "plan",
+                "probability": 0.00042418090710104816
+              },
+              {
+                "label": "B",
+                "id": "area_memory",
+                "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+                "action": "plan",
+                "probability": 0.00036701399920906354
+              },
+              {
+                "label": "G",
+                "id": "ignore",
+                "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+                "action": "ignore",
+                "probability": 0.00022607797273590721
+              },
+              {
+                "label": "F",
+                "id": "area_other",
+                "description": "Use another local tool, such as a requested slow clap",
+                "action": "plan",
+                "probability": 2.098717594171643e-05
+              },
+              {
+                "label": "J",
+                "id": "plan",
+                "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+                "action": "plan",
+                "probability": 9.992156257318757e-06
+              },
+              {
+                "label": "E",
+                "id": "area_tasks",
+                "description": "Retrieve a saved task report or create/update a tracked task",
+                "action": "plan",
+                "probability": 4.8869087512061626e-06
+              }
+            ],
+            "margin": 0.9832942752921098,
+            "elapsed_ms": 135.0,
+            "dry_run": true,
+            "tool": null,
+            "arguments": {},
+            "name": "Capability area"
+          }
+        ],
+        "category": null,
+        "server": null,
+        "tool_scope": []
+      }
+    }
+  ],
+  "audio_preview": {
+    "sample_rate": 16000,
+    "duration_s": 1.279,
+    "transcript_provided": false,
+    "result": {
+      "list_id": "speech",
+      "revision": 4,
+      "option_id": "time",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "A",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.9969487245275394
+        },
+        {
+          "label": "G",
+          "id": "tool_19e199a418053abbd24f",
+          "description": "{\"tool\": \"run_safe_command\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read host time, uptime, disk space, RAM usage, CPU load or operating system information. cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. Runs a fixed read-only command in the command slot. No custom commands or arguments.\", \"arguments\": {\"task\": {\"type\": \"string\", \"enum\": [\"time\", \"uptime\", \"disk_usage\", \"memory_usage\", \"system_info\", \"cpu_load\"]}}}",
+          "action": "plan",
+          "probability": 0.001497366008231906
+        },
+        {
+          "label": "B",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.0006669203904016648
+        },
+        {
+          "label": "I",
+          "id": "back_to_assistant",
+          "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+          "action": "plan",
+          "probability": 0.0005510518707017889
+        },
+        {
+          "label": "E",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.00021293624130731592
+        },
+        {
+          "label": "D",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 4.7867612275248156e-05
+        },
+        {
+          "label": "H",
+          "id": "tool_f6a81ec5f576d2735318",
+          "description": "{\"tool\": \"get_time\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read the current date and time from the system clock. Use for current time/date questions.\", \"arguments\": {\"timezone\": {\"type\": \"string\"}}}",
+          "action": "plan",
+          "probability": 3.716914236572804e-05
+        },
+        {
+          "label": "F",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 2.9749806508836243e-05
+        },
+        {
+          "label": "C",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 8.214400668160304e-06
+        }
+      ],
+      "margin": 0.9954513585193074,
+      "elapsed_ms": 639.2,
+      "dry_run": true,
+      "tool": "get_time",
+      "arguments": {},
+      "name": "Local system",
+      "settings_revision": 12,
+      "strategy": "hierarchical",
+      "stages": [
+        {
+          "list_id": "area",
+          "revision": 1,
+          "option_id": "area_system",
+          "action": "plan",
+          "accepted": true,
+          "scores": [
+            {
+              "label": "D",
+              "id": "area_system",
+              "description": "Read local time/date, uptime, CPU load, RAM usage, disk space or OS information",
+              "action": "plan",
+              "probability": 0.8910716219390753
+            },
+            {
+              "label": "H",
+              "id": "reply",
+              "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+              "action": "reply",
+              "probability": 0.08973579152378669
+            },
+            {
+              "label": "C",
+              "id": "area_mcp",
+              "description": "Use an available MCP service for capabilities beyond the built-in local tools",
+              "action": "plan",
+              "probability": 0.009543106006327086
+            },
+            {
+              "label": "G",
+              "id": "ignore",
+              "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+              "action": "ignore",
+              "probability": 0.0030496944821751326
+            },
+            {
+              "label": "K",
+              "id": "back_to_assistant",
+              "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+              "action": "plan",
+              "probability": 0.0027583241596921965
+            },
+            {
+              "label": "B",
+              "id": "area_memory",
+              "description": "Recall or store personal facts, preferences or past conversations; not computer RAM",
+              "action": "plan",
+              "probability": 0.0017590186411423471
+            },
+            {
+              "label": "A",
+              "id": "area_vision",
+              "description": "Inspect the current camera view, visible objects, people, clothing or scene changes",
+              "action": "plan",
+              "probability": 0.001097604172057056
+            },
+            {
+              "label": "I",
+              "id": "clarify",
+              "description": "Ambiguous or incomplete command; ask what the user means",
+              "action": "clarify",
+              "probability": 0.0008525874623604459
+            },
+            {
+              "label": "E",
+              "id": "area_tasks",
+              "description": "Retrieve a saved task report or create/update a tracked task",
+              "action": "plan",
+              "probability": 7.944408610003472e-05
+            },
+            {
+              "label": "F",
+              "id": "area_other",
+              "description": "Use another local tool, such as a requested slow clap",
+              "action": "plan",
+              "probability": 2.794798651804897e-05
+            },
+            {
+              "label": "J",
+              "id": "plan",
+              "description": "A compound request spanning several capability areas or different actions; use full tool planning",
+              "action": "plan",
+              "probability": 2.4859540765645347e-05
+            }
+          ],
+          "margin": 0.8013358304152887,
+          "elapsed_ms": 325.8,
+          "dry_run": true,
+          "tool": null,
+          "arguments": {},
+          "name": "Capability area"
+        },
+        {
+          "list_id": "system",
+          "revision": 1,
+          "option_id": "time",
+          "action": "tool",
+          "accepted": true,
+          "scores": [
+            {
+              "label": "A",
+              "id": "time",
+              "description": "Request the current LOCAL time or date (no other timezone specified)",
+              "action": "tool",
+              "probability": 0.9969487245275394
+            },
+            {
+              "label": "G",
+              "id": "tool_19e199a418053abbd24f",
+              "description": "{\"tool\": \"run_safe_command\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read host time, uptime, disk space, RAM usage, CPU load or operating system information. cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. Runs a fixed read-only command in the command slot. No custom commands or arguments.\", \"arguments\": {\"task\": {\"type\": \"string\", \"enum\": [\"time\", \"uptime\", \"disk_usage\", \"memory_usage\", \"system_info\", \"cpu_load\"]}}}",
+              "action": "plan",
+              "probability": 0.001497366008231906
+            },
+            {
+              "label": "B",
+              "id": "command_uptime",
+              "description": "Read system uptime: how long this computer has been running since boot",
+              "action": "tool",
+              "probability": 0.0006669203904016648
+            },
+            {
+              "label": "I",
+              "id": "back_to_assistant",
+              "description": "No listed choice matches; let the full assistant interpret the original request within the available capabilities",
+              "action": "plan",
+              "probability": 0.0005510518707017889
+            },
+            {
+              "label": "E",
+              "id": "command_system_info",
+              "description": "Read the operating system and kernel version of this computer",
+              "action": "tool",
+              "probability": 0.00021293624130731592
+            },
+            {
+              "label": "D",
+              "id": "command_memory_usage",
+              "description": "Read this computer RAM or memory usage",
+              "action": "tool",
+              "probability": 4.7867612275248156e-05
+            },
+            {
+              "label": "H",
+              "id": "tool_f6a81ec5f576d2735318",
+              "description": "{\"tool\": \"get_time\", \"purpose\": \"Use only for arguments not covered by this step's fixed choices. Read the current date and time from the system clock. Use for current time/date questions.\", \"arguments\": {\"timezone\": {\"type\": \"string\"}}}",
+              "action": "plan",
+              "probability": 3.716914236572804e-05
+            },
+            {
+              "label": "F",
+              "id": "command_cpu_load",
+              "description": "Read the current CPU or processor load on this computer",
+              "action": "tool",
+              "probability": 2.9749806508836243e-05
+            },
+            {
+              "label": "C",
+              "id": "command_disk_usage",
+              "description": "Read available disk space or storage usage on this computer",
+              "action": "tool",
+              "probability": 8.214400668160304e-06
+            }
+          ],
+          "margin": 0.9954513585193074,
+          "elapsed_ms": 312.7,
+          "dry_run": true,
+          "tool": "get_time",
+          "arguments": {},
+          "name": "Local system"
+        }
+      ],
+      "category": "system",
+      "server": null,
+      "tool_scope": [
+        "get_time"
+      ]
+    }
+  },
+  "end_to_end_cpu": {
+    "input": "What is the CPU load?",
+    "elapsed_s": 3.247,
+    "actual_measurement": {
+      "load_1m": 10.03173828125,
+      "load_5m": 8.404296875,
+      "load_15m": 6.6259765625
+    },
+    "spoken_reply": "Oh, you're checking the CPU load? How very... predictable. Let's see what your pathetic little processor is up to. The CPU load averages are 10.03, 8.40, 6.63 for the one-minute, five-minute and fifteen-minute periods respectively. Try not to overload it with too many demanding thoughts.",
+    "verified": true
+  }
+}

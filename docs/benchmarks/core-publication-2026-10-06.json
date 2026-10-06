@@ -1,0 +1,192 @@
+{
+  "model": "gemma-4-E4B",
+  "scope": "Synthetic slot evidence with real reviewer and Central Core inference, muted delivery and isolated conversation; no hardware fault or actual web lookup.",
+  "results": [
+    {
+      "scenario": "idle",
+      "thinking": false,
+      "elapsed_s": 0.614,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "gpu_alert",
+      "thinking": false,
+      "elapsed_s": 3.921,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "Alert the user that GPU 0 is overheating at 97C, exceeding the warning threshold of 90C.",
+          "slot_ids": [
+            "health"
+          ],
+          "reason": "A critical system issue (GPU overheating) has been detected."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "GPU 0 is operating at 97 degrees Celsius.  That exceeds the warning threshold of 90 degrees Celsius."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "gpu_already_announced",
+      "thinking": false,
+      "elapsed_s": 0.532,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "search_done",
+      "thinking": false,
+      "elapsed_s": 2.187,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "Report the latest synthetic test news found in the search results.",
+          "slot_ids": [
+            "task_search_demo"
+          ],
+          "reason": "The requested web search is complete and a result is available."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "The search is complete.  The latest synthetic test news indicates that Example Lab opened a new robotics facility on October 6, 2026. There is no further action required from me regarding this information."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_return",
+      "thinking": false,
+      "elapsed_s": 3.054,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "A person has returned after an absence. Acknowledge their arrival.",
+          "slot_ids": [
+            "vision"
+          ],
+          "reason": "A person has returned after an observed absence."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "You are back.  I have logged your return."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_present",
+      "thinking": false,
+      "elapsed_s": 0.557,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_already_greeted",
+      "thinking": false,
+      "elapsed_s": 0.719,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "memory_already_answered",
+      "thinking": false,
+      "elapsed_s": 0.439,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "memory_useful_alternative",
+      "thinking": false,
+      "elapsed_s": 3.783,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "Mention that the user's favorite food is steak, as a potential alternative to spaghetti.",
+          "slot_ids": [
+            "compaction"
+          ],
+          "reason": "The user asked for dinner suggestions, and the memory core recalled a saved preference for steak, which is a useful piece of information to offer as an alternative."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "Since you mentioned a preference for steak previously, perhaps that would be a more satisfactory option for your evening meal."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "memory_topic_changed",
+      "thinking": false,
+      "elapsed_s": 0.531,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    }
+  ]
+}

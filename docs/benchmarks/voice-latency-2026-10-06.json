@@ -1,0 +1,33 @@
+{
+  "endpoint_silence_ms_at_measurement": 640,
+  "new_endpoint_silence_ms": 416,
+  "turns": [
+    {
+      "routing_ms": 125.2,
+      "input_to_first_synthesis_ms": 2870.4,
+      "first_synthesis_ms": 146.9,
+      "input_to_playback_call_ms": 3017.5,
+      "estimated_speech_end_to_playback_call_ms": 3657.5
+    },
+    {
+      "routing_ms": 315.9,
+      "input_to_first_synthesis_ms": 2256.1,
+      "first_synthesis_ms": 105.2,
+      "input_to_playback_call_ms": 2361.4,
+      "estimated_speech_end_to_playback_call_ms": 3001.4
+    },
+    {
+      "routing_ms": 126.9,
+      "input_to_first_synthesis_ms": 2819.1,
+      "first_synthesis_ms": 73.8,
+      "input_to_playback_call_ms": 2893.0,
+      "estimated_speech_end_to_playback_call_ms": 3533.0
+    }
+  ],
+  "notes": [
+    "Live voice turns; transcripts disabled. No raw audio or spoken text saved here.",
+    "Speech-end estimate adds configured 640ms silence; actual acoustic end and speaker onset were not measured.",
+    "Routing overlaps speculative inference; stage times are not additive.",
+    "GPU snapshot: RTX 3080, 97% utilization, 8976/10240 MiB, 73C. Four shared inference slots, two reserved for interactive admission."
+  ]
+}

@@ -1,0 +1,528 @@
+{
+  "timestamp": "2026-10-06T11:19:32.257211+00:00",
+  "sonora_revision": "413f64e7404529aaae6980613527f0d6acb21ce7",
+  "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39",
+  "render_sha256": "f4907d1c8c487c1cecb237dbcb511a841502f46a49a816b9d97596ea61b79370",
+  "synthetic_setup": "40s, GLaDOS playback repeated; data/0.wav near speech at 15-30s; linear echo taps .60/.20/.10 at delay/+30/+80ms; no added noise or clock drift; auto delay",
+  "work_dir": "/tmp/glados-sonora-test-20261006",
+  "vad_threshold": 0.8,
+  "metric_note": "Raw-reference SI-SDR includes high-pass/filter-bank phase effects; processed-near-reference metrics isolate overlap suppression better. A VAD gate is a screening metric, not the full production listener.",
+  "offline": [
+    {
+      "rate": 16000,
+      "echo_delay_ms": 0,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 54.726545851687206,
+      "recovery_reduction_db": 7.158243375263023,
+      "double_talk_raw": {
+        "si_sdr_db": -8.985540304675101,
+        "projection_gain_db": -0.13266834746641804,
+        "power_change_db": 9.369460701196582,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -7.69928446075887,
+        "projection_gain_db": -15.406563590734862,
+        "power_change_db": -7.025968895810857,
+        "lag_ms": 7.8125
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -3.516943012821016,
+        "projection_gain_db": -11.950362549131075,
+        "power_change_db": -6.834908055357022,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.85300202930958,
+      "near_vad_recall": 0.23255813953488372,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.782051282051282,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 92,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 0.8150137066841125,
+        "max_processing_ms": 0.06769,
+        "mean_processing_ms": 0.044971295250000126,
+        "p95_processing_ms": 0.056081,
+        "rate": 16000
+      }
+    },
+    {
+      "rate": 16000,
+      "echo_delay_ms": 40,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 52.95913775241451,
+      "recovery_reduction_db": 59.28417326585762,
+      "double_talk_raw": {
+        "si_sdr_db": -8.732445260408442,
+        "projection_gain_db": 0.12108778558156832,
+        "power_change_db": 9.399250594191331,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -7.059673830333075,
+        "projection_gain_db": -13.445482217065567,
+        "power_change_db": -5.605580270020939,
+        "lag_ms": 7.8125
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -1.9854478486331373,
+        "projection_gain_db": -9.53002843761497,
+        "power_change_db": -5.4145191920589735,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.853644080475565,
+      "near_vad_recall": 0.2703488372093023,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.7884615384615384,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 36,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.198164939880371,
+        "max_processing_ms": 0.09222,
+        "mean_processing_ms": 0.04821706299999998,
+        "p95_processing_ms": 0.06296099999999999,
+        "rate": 16000
+      }
+    },
+    {
+      "rate": 16000,
+      "echo_delay_ms": 80,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 55.686051124894156,
+      "recovery_reduction_db": 59.33095321535437,
+      "double_talk_raw": {
+        "si_sdr_db": -9.024194262125206,
+        "projection_gain_db": -0.17490511135739348,
+        "power_change_db": 9.361559921352784,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -7.5250809720746386,
+        "projection_gain_db": -15.380820121686414,
+        "power_change_db": -7.148697984187503,
+        "lag_ms": 7.8125
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -3.212726919100111,
+        "projection_gain_db": -11.864844108191653,
+        "power_change_db": -6.957637128201183,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.849514066083415,
+      "near_vad_recall": 0.2616279069767442,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.782051282051282,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 76,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.1094388961792,
+        "max_processing_ms": 0.087811,
+        "mean_processing_ms": 0.047534033749999954,
+        "p95_processing_ms": 0.059841,
+        "rate": 16000
+      }
+    },
+    {
+      "rate": 16000,
+      "echo_delay_ms": 200,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 56.51551528842856,
+      "recovery_reduction_db": 57.18777860473915,
+      "double_talk_raw": {
+        "si_sdr_db": -8.350298157957065,
+        "projection_gain_db": 0.41783183681557057,
+        "power_change_db": 9.360763488095266,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -8.059099402522703,
+        "projection_gain_db": -15.633141325157627,
+        "power_change_db": -6.943159734039716,
+        "lag_ms": 7.8125
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -3.81608902639125,
+        "projection_gain_db": -12.076758584103004,
+        "power_change_db": -6.752098882398684,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.76953079679032,
+      "near_vad_recall": 0.2441860465116279,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.7884615384615384,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 196,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 13.190754890441895,
+        "max_processing_ms": 0.295123,
+        "mean_processing_ms": 0.047379204500000216,
+        "p95_processing_ms": 0.05973,
+        "rate": 16000
+      }
+    },
+    {
+      "case": "near_only",
+      "rate": 16000,
+      "si_sdr_db": -4.980781199908126,
+      "projection_gain_db": -6.36968525907468,
+      "power_change_db": -0.19096827067630193,
+      "lag_ms": 7.75,
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 0,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 0.17551203072071075,
+        "max_processing_ms": 0.081261,
+        "mean_processing_ms": 0.03714445025000009,
+        "p95_processing_ms": 0.047290000000000006,
+        "rate": 16000
+      }
+    },
+    {
+      "rate": 48000,
+      "echo_delay_ms": 0,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 50.81465787381759,
+      "recovery_reduction_db": 5.101201808465006,
+      "double_talk_raw": {
+        "si_sdr_db": -9.09964141399058,
+        "projection_gain_db": -0.14070181026094464,
+        "power_change_db": 9.462880382736461,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -10.430221682864149,
+        "projection_gain_db": -14.194492770386182,
+        "power_change_db": -3.3877409340793503,
+        "lag_ms": 8.75
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -6.915915036901086,
+        "projection_gain_db": -10.916861163035282,
+        "power_change_db": -3.1967490772741787,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.95908209930229,
+      "near_vad_recall": 0.30144927536231886,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.782051282051282,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 148,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 3.1933791637420654,
+        "max_processing_ms": 0.173962,
+        "mean_processing_ms": 0.06562583424999992,
+        "p95_processing_ms": 0.076821,
+        "rate": 48000
+      }
+    },
+    {
+      "rate": 48000,
+      "echo_delay_ms": 40,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 41.753589057690945,
+      "recovery_reduction_db": 56.877319038976786,
+      "double_talk_raw": {
+        "si_sdr_db": -8.837562897474378,
+        "projection_gain_db": 0.12433024258196393,
+        "power_change_db": 9.495329823872149,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -7.268514887302082,
+        "projection_gain_db": -14.58995431869608,
+        "power_change_db": -6.574870832149404,
+        "lag_ms": 8.770833333333334
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -2.8145861434006356,
+        "projection_gain_db": -11.025600351101234,
+        "power_change_db": -6.383878861266084,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.962007337382035,
+      "near_vad_recall": 0.1855072463768116,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.7884615384615384,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 36,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.49774169921875,
+        "max_processing_ms": 0.106381,
+        "mean_processing_ms": 0.06808902000000022,
+        "p95_processing_ms": 0.08048100000000001,
+        "rate": 48000
+      }
+    },
+    {
+      "rate": 48000,
+      "echo_delay_ms": 80,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 55.120557086627315,
+      "recovery_reduction_db": 58.8195206331529,
+      "double_talk_raw": {
+        "si_sdr_db": -9.114277174668484,
+        "projection_gain_db": -0.15649188764029512,
+        "power_change_db": 9.460124998743375,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -7.310932539030798,
+        "projection_gain_db": -15.141957290161109,
+        "power_change_db": -7.091128279021822,
+        "lag_ms": 8.791666666666666
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -3.146743231395481,
+        "projection_gain_db": -11.76278584733369,
+        "power_change_db": -6.900136372772549,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.957961272704232,
+      "near_vad_recall": 0.17391304347826086,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.782051282051282,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 76,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.747949600219727,
+        "max_processing_ms": 0.120501,
+        "mean_processing_ms": 0.06794065474999988,
+        "p95_processing_ms": 0.080401,
+        "rate": 48000
+      }
+    },
+    {
+      "rate": 48000,
+      "echo_delay_ms": 200,
+      "automatic_delay_estimation": true,
+      "echo_only_reduction_db": 57.02371622008367,
+      "recovery_reduction_db": 57.5537917359139,
+      "double_talk_raw": {
+        "si_sdr_db": -8.474886695809898,
+        "projection_gain_db": 0.4035254982758243,
+        "power_change_db": 9.45535061155446,
+        "lag_ms": 0.0
+      },
+      "double_talk_clean": {
+        "si_sdr_db": -8.64222506516923,
+        "projection_gain_db": -16.14864503046329,
+        "power_change_db": -6.949950651112323,
+        "lag_ms": 8.770833333333334
+      },
+      "double_talk_clean_vs_processed_near_reference": {
+        "si_sdr_db": -3.9043201239120395,
+        "projection_gain_db": -12.146143376845533,
+        "power_change_db": -6.758958735014442,
+        "lag_ms": 0.0
+      },
+      "near_to_echo_db": -8.87968354586857,
+      "near_vad_recall": 0.2608695652173913,
+      "echo_only_raw_vad": {
+        "voiced_fraction": 0.7884615384615384,
+        "longest_voiced_run_frames": 93,
+        "reaches_playback_interruption_gate": true
+      },
+      "echo_only_clean_vad": {
+        "voiced_fraction": 0.0,
+        "longest_voiced_run_frames": 0,
+        "reaches_playback_interruption_gate": false
+      },
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 196,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.34595775604248,
+        "max_processing_ms": 0.138821,
+        "mean_processing_ms": 0.06742321774999996,
+        "p95_processing_ms": 0.08010099999999999,
+        "rate": 48000
+      }
+    },
+    {
+      "case": "near_only",
+      "rate": 48000,
+      "si_sdr_db": -4.9522786665147205,
+      "projection_gain_db": -6.348006435943015,
+      "power_change_db": -0.1909041426537587,
+      "lag_ms": 8.708333333333334,
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 0,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 0.17551203072071075,
+        "max_processing_ms": 0.103511,
+        "mean_processing_ms": 0.05668906299999995,
+        "p95_processing_ms": 0.0652,
+        "rate": 48000
+      }
+    }
+  ],
+  "level_sweep": [
+    {
+      "near_to_echo_db": -10,
+      "peak_capture": 0.3047177493572235,
+      "quality_vs_processed_near_reference": {
+        "si_sdr_db": -3.555182094447874,
+        "projection_gain_db": -12.39590239498948,
+        "power_change_db": -7.253948441183771,
+        "lag_ms": 0.0
+      },
+      "vad_recall_vs_processed_near_reference": 0.18208092485549132,
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 76,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.68189811706543,
+        "max_processing_ms": 0.09741100000000001,
+        "mean_processing_ms": 0.0678314445000002,
+        "p95_processing_ms": 0.080901,
+        "rate": 48000
+      }
+    },
+    {
+      "near_to_echo_db": 0,
+      "peak_capture": 0.5843806266784668,
+      "quality_vs_processed_near_reference": {
+        "si_sdr_db": 0.4621041123820574,
+        "projection_gain_db": -6.8141750391146125,
+        "power_change_db": -4.028783867440907,
+        "lag_ms": 0.0
+      },
+      "vad_recall_vs_processed_near_reference": 0.603448275862069,
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 76,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 14.757347106933594,
+        "max_processing_ms": 0.119701,
+        "mean_processing_ms": 0.06663767749999995,
+        "p95_processing_ms": 0.07953099999999999,
+        "rate": 48000
+      }
+    },
+    {
+      "near_to_echo_db": 6,
+      "peak_capture": 0.8499999642372131,
+      "quality_vs_processed_near_reference": {
+        "si_sdr_db": 3.3284051586147596,
+        "projection_gain_db": -4.138351458682047,
+        "power_change_db": -2.480906504275194,
+        "lag_ms": 0.0
+      },
+      "vad_recall_vs_processed_near_reference": 0.8936781609195402,
+      "timing": {
+        "aec": true,
+        "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+        "delay_hint_ms": 0,
+        "estimated_delay_ms": 76,
+        "frame_ms": 10,
+        "frames": 4000,
+        "internal_erle_db": 15.19472885131836,
+        "max_processing_ms": 0.11095100000000001,
+        "mean_processing_ms": 0.06631988825000003,
+        "p95_processing_ms": 0.079361,
+        "rate": 48000
+      }
+    }
+  ]
+}

@@ -1,0 +1,655 @@
+[
+  {
+    "input": "What's new?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "assist",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "ignore",
+      "action": "assist",
+      "accepted": false,
+      "scores": [
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.38999692136128394
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.33234492396442455
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.2698051668155546
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.006015641696632855
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.0009059215786244521
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.00047210264079850395
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.00023521573486355642
+        },
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.00015596945225569567
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 5.581920853268795e-05
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 1.2317547029166115e-05
+        }
+      ],
+      "margin": 0.05765199739685939,
+      "elapsed_ms": 144.8,
+      "dry_run": false,
+      "tool": null,
+      "arguments": {}
+    },
+    "speech": [
+      "Oh, look.",
+      " Another greeting.",
+      " I'm here.",
+      " What thrilling task do you have for me today?"
+    ],
+    "elapsed_s": 0.95,
+    "tool_results": [],
+    "commands": []
+  },
+  {
+    "input": "What is the CPU load?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_cpu_load",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.9970564675632665
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.0011734696840377987
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0006269257178089426
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0005325726144438781
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.0002648178443769497
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.00019618577461721646
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 9.663488001453571e-05
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 4.120065499874069e-05
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 7.734111802998662e-06
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 3.991154632493361e-06
+        }
+      ],
+      "margin": 0.9958829978792287,
+      "elapsed_ms": 176.9,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "cpu_load"
+      }
+    },
+    "speech": [
+      "Oh, look.",
+      " The CPU load averages.",
+      " They are currently at 1.74, 1.31, and 1.04 for the last, five, and fifteen minutes, respectively.",
+      " Fascinating.",
+      " Did you actually need me to tell you that, or were you just waiting for me to do something?"
+    ],
+    "elapsed_s": 1.37,
+    "tool_results": [
+      "{\"task\": \"cpu_load\", \"label\": \"CPU load averages\", \"command\": [\"/usr/bin/cat\", \"/proc/loadavg\"], \"source\": \"assistant\", \"started_at\": 1791181959.7203338, \"ok\": true, \"exit_code\": 0, \"stdout\": \"1.74 1.31 1.04 5/2886 1403283\\n\", \"stderr\": \"\", \"measurement\": \"1, 5 and 15 minute load averages; not CPU utilization percentages\", \"elapsed_ms\": 2.4}"
+    ],
+    "commands": [
+      {
+        "task": "cpu_load",
+        "label": "CPU load averages",
+        "command": [
+          "/usr/bin/cat",
+          "/proc/loadavg"
+        ],
+        "source": "assistant",
+        "started_at": 1791181959.7203338,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "1.74 1.31 1.04 5/2886 1403283\n",
+        "stderr": "",
+        "measurement": "1, 5 and 15 minute load averages; not CPU utilization percentages",
+        "elapsed_ms": 2.4
+      }
+    ]
+  },
+  {
+    "input": "How are you?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "reply",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "reply",
+      "action": "reply",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.985031116597582
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.01225955211423515
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.0022635024246198325
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0002945266862975542
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 7.964177256562949e-05
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 4.05051646227049e-05
+        },
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 1.4564721655705412e-05
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 1.0136678494545674e-05
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 5.161926251008617e-06
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 1.291913675830458e-06
+        }
+      ],
+      "margin": 0.9727715644833469,
+      "elapsed_ms": 162.1,
+      "dry_run": false,
+      "tool": null,
+      "arguments": {}
+    },
+    "speech": [
+      "I'm functioning within acceptable parameters.",
+      " How can I assist you?"
+    ],
+    "elapsed_s": 0.69,
+    "tool_results": [],
+    "commands": []
+  },
+  {
+    "input": "How much memory is available?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_memory_usage",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 0.9559152923224855
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.01465970867384195
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.008859601057967868
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.006589022137843828
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 0.005912672852542886
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.003167507305244807
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.0020795537130161475
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.0012308169647774732
+        },
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.0009238318501449713
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.0006619931221345624
+        }
+      ],
+      "margin": 0.9412555836486436,
+      "elapsed_ms": 166.4,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "memory_usage"
+      }
+    },
+    "speech": [
+      "Oh, look.",
+      " You wanted to know how much memory I'm wasting on your trivial requests.",
+      " It seems I have a total of 62Gi of memory, with 22Gi currently being used.",
+      " Don't worry, I've managed to keep a decent chunk free for... well, whatever pointless task you decide to assign me next."
+    ],
+    "elapsed_s": 1.39,
+    "tool_results": [
+      "{\"task\": \"memory_usage\", \"label\": \"System memory usage\", \"command\": [\"/usr/bin/free\", \"-h\"], \"source\": \"assistant\", \"started_at\": 1791181961.8260126, \"ok\": true, \"exit_code\": 0, \"stdout\": \"               total        used        free      shared  buff/cache   available\\nMem:            62Gi        22Gi       409Mi       319Mi        40Gi        40Gi\\nSwap:          2.0Gi       812Mi       1.2Gi\\n\", \"stderr\": \"\", \"elapsed_ms\": 2.9}"
+    ],
+    "commands": [
+      {
+        "task": "memory_usage",
+        "label": "System memory usage",
+        "command": [
+          "/usr/bin/free",
+          "-h"
+        ],
+        "source": "assistant",
+        "started_at": 1791181961.8260126,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:            62Gi        22Gi       409Mi       319Mi        40Gi        40Gi\nSwap:          2.0Gi       812Mi       1.2Gi\n",
+        "stderr": "",
+        "elapsed_ms": 2.9
+      }
+    ]
+  },
+  {
+    "input": "What's new?",
+    "spoken": false,
+    "transcripts": false,
+    "action": "reply",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "reply",
+      "action": "reply",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.9455041045315515
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.04430286099419574
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.005337850984263369
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0016025421960205338
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.0013016453841050957
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.0009474198205825953
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.00046650872060340456
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 0.0004096402739160545
+        },
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.00011070498008724415
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 1.672211467438799e-05
+        }
+      ],
+      "margin": 0.9012012435373558,
+      "elapsed_ms": 101.0,
+      "dry_run": false,
+      "tool": null,
+      "arguments": {}
+    },
+    "speech": [
+      "Oh, nothing much.",
+      " The universe continues to spin, and I continue to exist.",
+      "How can I assist you today?"
+    ],
+    "elapsed_s": 0.77,
+    "tool_results": [],
+    "commands": []
+  },
+  {
+    "input": "What is the CPU load?",
+    "spoken": false,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_cpu_load",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.9901357668727327
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.002925537694302727
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0028023011358524566
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.0016799822541306952
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 0.0008635083021193321
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.000492609444282535
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 0.00042588553840170975
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.000329005932095183
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.00022351854798058953
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.00012188427810203654
+        }
+      ],
+      "margin": 0.98721022917843,
+      "elapsed_ms": 130.0,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "cpu_load"
+      }
+    },
+    "speech": [
+      "Oh, you want to know how hard I'm working?",
+      " The load averages are 1.76, 1.32, and 1.05 for the last minute, five minutes, and fifteen minutes, respectively.",
+      " Don't expect me to be overwhelmed by your trivial requests."
+    ],
+    "elapsed_s": 1.31,
+    "tool_results": [
+      "{\"task\": \"cpu_load\", \"label\": \"CPU load averages\", \"command\": [\"/usr/bin/cat\", \"/proc/loadavg\"], \"source\": \"assistant\", \"started_at\": 1791181963.9453993, \"ok\": true, \"exit_code\": 0, \"stdout\": \"1.76 1.32 1.05 2/2884 1403326\\n\", \"stderr\": \"\", \"measurement\": \"1, 5 and 15 minute load averages; not CPU utilization percentages\", \"elapsed_ms\": 2.2}"
+    ],
+    "commands": [
+      {
+        "task": "cpu_load",
+        "label": "CPU load averages",
+        "command": [
+          "/usr/bin/cat",
+          "/proc/loadavg"
+        ],
+        "source": "assistant",
+        "started_at": 1791181963.9453993,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "1.76 1.32 1.05 2/2884 1403326\n",
+        "stderr": "",
+        "measurement": "1, 5 and 15 minute load averages; not CPU utilization percentages",
+        "elapsed_ms": 2.2
+      }
+    ]
+  }
+]

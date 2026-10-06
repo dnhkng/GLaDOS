@@ -1,0 +1,139 @@
+{
+  "model": "gemma-4-E4B",
+  "scope": "Synthetic slot evidence with real reviewer and Central Core inference, muted delivery and isolated conversation; no hardware fault or actual web lookup.",
+  "results": [
+    {
+      "scenario": "idle",
+      "thinking": false,
+      "elapsed_s": 0.389,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "gpu_alert",
+      "thinking": false,
+      "elapsed_s": 1.436,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "Alert the user that GPU 0 temperature is 97C, which is above the warning threshold of 90C.",
+          "slot_ids": [
+            "health"
+          ],
+          "reason": "A critical system issue (GPU overheating) has been observed."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "GPU 0 is currently operating at 97 degrees Celsius.  This exceeds the established warning threshold of 90 degrees Celsius."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "gpu_already_announced",
+      "thinking": false,
+      "elapsed_s": 0.394,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "search_done",
+      "thinking": false,
+      "elapsed_s": 1.565,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "Report the latest synthetic test news found in the search results.",
+          "slot_ids": [
+            "task_search_demo"
+          ],
+          "reason": "The requested web search is complete and a result is available."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "The search is complete.  A synthetic benchmark search result indicates that Example Lab opened a new robotics facility on October 6, 2026. That is the latest information I have managed to retrieve."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_return",
+      "thinking": false,
+      "elapsed_s": 1.286,
+      "inferences": 2,
+      "decision": {
+        "outcome": "response",
+        "reason": "Central Core notification delivered"
+      },
+      "handoff": [
+        {
+          "action": "prompt",
+          "instruction": "A person has returned after an absence.",
+          "slot_ids": [
+            "vision"
+          ],
+          "reason": "A person has returned after an absence."
+        }
+      ],
+      "reply": [
+        {
+          "role": "assistant",
+          "content": "You have returned.  I have logged your absence."
+        }
+      ],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_present",
+      "thinking": false,
+      "elapsed_s": 0.43,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    },
+    {
+      "scenario": "vision_already_greeted",
+      "thinking": false,
+      "elapsed_s": 0.896,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No useful new intervention"
+      },
+      "handoff": [],
+      "reply": [],
+      "internal_context_private": true
+    }
+  ]
+}

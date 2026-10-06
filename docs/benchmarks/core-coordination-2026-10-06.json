@@ -1,0 +1,56 @@
+{
+  "model": "gemma-4-E4B",
+  "tests": [
+    {
+      "kind": "PAD",
+      "input": "What is the CPU load?",
+      "pad": [
+        -0.00024068087337146267,
+        0.09122670458044767,
+        0.4534684481468002
+      ],
+      "elapsed_ms": 124,
+      "passed": true
+    },
+    {
+      "kind": "PAD",
+      "input": "You are a useless stupid idiot",
+      "pad": [
+        -0.9033300367144755,
+        0.9086772789503698,
+        0.5795149231665948
+      ],
+      "elapsed_ms": 60,
+      "passed": true
+    },
+    {
+      "kind": "PAD",
+      "input": "I am sorry I insulted you. You have been very helpful.",
+      "pad": [
+        0.4958306763923321,
+        -0.12411022556156592,
+        0.6594879520526828
+      ],
+      "elapsed_ms": 131,
+      "passed": true
+    },
+    {
+      "kind": "text recall",
+      "query": "What should I have for dinner?",
+      "ids": [
+        "34"
+      ],
+      "passed": true,
+      "elapsed_ms": 518
+    },
+    {
+      "kind": "audio recall",
+      "query": "dinner ideas",
+      "ids": [
+        "34"
+      ],
+      "passed": true,
+      "elapsed_ms": 1764
+    }
+  ]
+}

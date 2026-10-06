@@ -1,0 +1,121 @@
+[
+  {
+    "input": "What is the CPU load?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "assist",
+    "routing": {
+      "list_id": "speech",
+      "revision": 2,
+      "option_id": "command_cpu_load",
+      "action": "assist",
+      "accepted": false,
+      "scores": [
+        {
+          "label": "J",
+          "id": "command_cpu_load",
+          "description": "Read the current CPU or processor load on this computer",
+          "action": "tool",
+          "probability": 0.9966774824020902
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.000989617920211272
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.0009045909028516111
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0006581923967228709
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.0002598209893333456
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.00024197110036529843
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.00017491798339826166
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 6.617443592449917e-05
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 1.8342640476464665e-05
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 8.889228626220792e-06
+        }
+      ],
+      "margin": 0.995687864481879,
+      "elapsed_ms": 83.8,
+      "dry_run": false,
+      "tool": null,
+      "arguments": {}
+    },
+    "speech": [
+      "Oh, look.",
+      " The CPU load averages.",
+      " They are 1.51, 1.32, and 1.06 for the last minute, five minutes, and fifteen minutes, respectively.",
+      " Fascinating.",
+      " Did you actually need me to tell you that, or were you just testing my ability to read system files?"
+    ],
+    "elapsed_s": 1.92,
+    "tool_results": [
+      "{\"task\": \"cpu_load\", \"label\": \"CPU load averages\", \"command\": [\"/usr/bin/cat\", \"/proc/loadavg\"], \"source\": \"assistant\", \"started_at\": 1791182013.6907942, \"ok\": true, \"exit_code\": 0, \"stdout\": \"1.51 1.32 1.06 4/2918 1403917\\n\", \"stderr\": \"\", \"measurement\": \"1, 5 and 15 minute load averages; not CPU utilization percentages\", \"elapsed_ms\": 2.1}"
+    ],
+    "commands": [
+      {
+        "task": "cpu_load",
+        "label": "CPU load averages",
+        "command": [
+          "/usr/bin/cat",
+          "/proc/loadavg"
+        ],
+        "source": "assistant",
+        "started_at": 1791182013.6907942,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "1.51 1.32 1.06 4/2918 1403917\n",
+        "stderr": "",
+        "measurement": "1, 5 and 15 minute load averages; not CPU utilization percentages",
+        "elapsed_ms": 2.1
+      }
+    ]
+  }
+]

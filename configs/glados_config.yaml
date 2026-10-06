@@ -1,6 +1,26 @@
 Glados:
-  llm_model: "llama3.2"
-  completion_url: "http://localhost:11434/api/chat"
+  inference:
+    slots: 4  # Match llama-server --parallel 4, with -c 65536 (16K per slot).
+    reserved_interactive: 2  # Conversation and routing; background jobs share two slots.
+  routing:
+    enabled: true  # llama.cpp one-token option scoring.
+  health:
+    enabled: true
+    interval_s: 10  # Sample local readings without inference.
+    summary_interval_s: 60  # Rolling commentary uses a shared background slot.
+  search:
+    enabled: true
+    max_rounds: 3
+    deadline_s: 60
+  llm_model: "gemma-4-E4B"
+  completion_url: "http://127.0.0.1:18080/v1/chat/completions"
+  native_audio:
+    enabled: true
+    user_transcripts: false  # Optional Gemma transcript; never loads Parakeet.
+    language: "English"
+  llm_request_options:
+    chat_template_kwargs:
+      enable_thinking: false
   api_key: null  # Add your API key here if needed!
   interruptible: true
   audio_io: "sounddevice"
@@ -8,18 +28,26 @@ Glados:
   tts_enabled: true
   asr_muted: false
   tui_theme: "aperture"
-  asr_engine: "tdt"
+  asr_engine: "tdt"  # Used only when native_audio.enabled is false.
   llm_headers: null  # Optional extra headers (e.g., OpenRouter HTTP-Referer, X-Title)
   wake_word: null
   voice: "glados"
   announcement: "All neural network modules are now loaded. System Operational."
   autonomy:
-    enabled: false
+    enabled: true
     tick_interval_s: 10
     cooldown_s: 20
     autonomy_parallel_calls: 2
     autonomy_queue_max: null
     coalesce_ticks: true
+    tokens:
+      recall:
+        enabled: true
+        max_facts: 6
+        max_chars: 2400
+      model_context_window: 16384
+      token_threshold: 20000
+      target_utilization: 0.6
     jobs:
       enabled: false
       poll_interval_s: 1
@@ -37,6 +65,11 @@ Glados:
         temp_change_c: 4
         wind_alert_kmh: 40
   mcp_servers:
+    - name: "internet_search"
+      description: "Search the public internet for current facts, news and source links."
+      transport: "http"
+      url: "https://mcp.exa.ai/mcp?tools=web_search_exa"
+      allowed_tools: ["web_search_exa"]
     - name: "slow_clap_demo"
       transport: "stdio"
       command: "python"

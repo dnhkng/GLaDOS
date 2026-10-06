@@ -163,6 +163,47 @@ Tools will be available as:
 
 ## Remote Servers
 
+### Internet search (Exa)
+
+The standard, webapp, extended and local E4B profiles include Exa's hosted
+web-search MCP. It needs no installation or API key for its free, rate-limited
+connection. See [Exa's MCP documentation](https://exa.ai/docs/get-started/exa-mcp).
+
+```yaml
+mcp_servers:
+  - name: "internet_search"
+    description: "Search the public internet for current facts, news and source links."
+    transport: "http"
+    url: "https://mcp.exa.ai/mcp?tools=web_search_exa"
+    allowed_tools: ["web_search_exa"]
+```
+
+GLaDOS discovers `mcp.internet_search.web_search_exa` at startup and exposes it
+in Facility Tools and capability routing. Search is also available to ordinary
+replies and the read-only routing fallback. Requests use the live provider
+schema; the assistant is instructed to supply a query, objective and two
+results to fit the local model's context, cite sources and report search errors.
+Search evidence is capped at 3,500 characters, retaining up to three source
+titles, URLs, publication dates and excerpts. If the model still reports a
+context overflow, the reply retries with complete older turns omitted and,
+when needed, shorter tool excerpts. System instructions and the current
+user/tool exchange are preserved; saved conversation history is untouched.
+With `Glados.search.enabled` (the default), this tool delegates to Search Core:
+search, review useful passages, follow unresolved gaps, then pass a cited report
+back to Central Core. The default limits are three searches, six sources and a
+60-second research budget. Quotations are checked against returned excerpts;
+citations come from returned URLs. The final report stays within 3,500 characters.
+The core uses the existing shared background inference scheduler. Autonomy ON
+delivers research through the existing task completion handoff; Autonomy OFF
+returns the completed report directly. Pause Search Core to suspend research, or
+disable it in configuration to use single-call search. Queries are sent to Exa;
+no separate research history or file log is added. See [Search Core](webapp.md).
+
+Try: “Search the internet for the latest Raspberry Pi news and give me the
+source links.” Only web search is enabled; other Exa tools stay excluded.
+If free limits become restrictive, add an `x-api-key` header using an Exa API
+key in your private runtime config, or substitute another search provider.
+
 ### Home Assistant
 
 Home Assistant exposes its MCP server at the `/api/mcp` endpoint. Configure it using

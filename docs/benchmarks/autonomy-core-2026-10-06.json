@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-06",
+  "model": "gemma-4-E4B",
+  "scope": "Real local E4B with isolated Autonomy loop, processor and tool executor; synthetic task, no physical speech. Existing app controls and Minds restored.",
+  "protocol": "Schema-constrained JSON, validated before tool execution",
+  "results": [
+    {
+      "scenario": "idle",
+      "elapsed_s": 0.865,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No tasks are active and no new input was provided."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 20.0,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "task_done",
+      "elapsed_s": 2.301,
+      "inferences": 1,
+      "decision": {
+        "outcome": "speak",
+        "reason": "The requested task, 'Requested benchmark', is marked as done and needs to be announced."
+      },
+      "speech": [
+        "The synthetic benchmark has finished, and all three checks passed. I suppose that's one way to pass the time.",
+        "<EOS>"
+      ],
+      "silent_checks": 0,
+      "next_check_s": 9.8,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "already_announced",
+      "elapsed_s": 1.707,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "The completion of the synthetic benchmark was already announced in the previous turn."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 19.8,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "idle",
+      "elapsed_s": 0.781,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No tasks are currently assigned and the camera is disabled."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 20.0,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "task_done",
+      "elapsed_s": 2.59,
+      "inferences": 1,
+      "decision": {
+        "outcome": "speak",
+        "reason": "The requested task 'Requested benchmark' is marked as done and the result is available."
+      },
+      "speech": [
+        "The synthetic benchmark has finished, and all three checks passed. I suppose that's one way to pass the time.",
+        "<EOS>"
+      ],
+      "silent_checks": 0,
+      "next_check_s": 9.8,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "already_announced",
+      "elapsed_s": 1.701,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "The completion of the synthetic benchmark was already announced in the previous turn."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 19.8,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "idle",
+      "elapsed_s": 0.859,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "No tasks are currently assigned and the camera is disabled."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 20.0,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "task_done",
+      "elapsed_s": 2.186,
+      "inferences": 1,
+      "decision": {
+        "outcome": "speak",
+        "reason": "The requested benchmark task is complete and the result is available."
+      },
+      "speech": [
+        "The synthetic benchmark has finished, and all three checks passed. I suppose that's a success for once.",
+        "<EOS>"
+      ],
+      "silent_checks": 0,
+      "next_check_s": 9.8,
+      "shared_history_unchanged": true
+    },
+    {
+      "scenario": "already_announced",
+      "elapsed_s": 1.447,
+      "inferences": 1,
+      "decision": {
+        "outcome": "silent",
+        "reason": "The completion of the synthetic benchmark was already announced in the previous turn."
+      },
+      "speech": [],
+      "silent_checks": 1,
+      "next_check_s": 19.8,
+      "shared_history_unchanged": true
+    }
+  ]
+}

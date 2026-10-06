@@ -41,7 +41,7 @@ Most voice assistants wait for wake words. GLaDOS doesn't wait—she observes, t
 - **Emotions**: PAD model for reactive mood + HEXACO traits for persistent personality
 - **Long-term Memory**: Facts, preferences, and conversation summaries persist across sessions
 - **Observer Agent**: Constitutional AI monitors behavior and self-adjusts within bounds
-- **Vision**: FastVLM gives her eyes. [Details](/docs/vision.md) | [Demo](https://www.youtube.com/watch?v=JDd9Rc4toEo)
+- **Vision**: Gemma 4 E4B describes the camera scene and visible changes. [Details](/docs/vision.md) | [Demo](https://www.youtube.com/watch?v=JDd9Rc4toEo)
 - **Autonomy**: She watches, waits, and speaks when she has something to say. [Details](/docs/autonomy.md)
 - **MCP Tools**: Extensible tool system for home automation, system info, etc. [Details](/docs/mcp.md)
 - **8GB SBC**: Runs on a Rock5b with RK3588 NPU. [Branch](https://github.com/dnhkng/RKLLM-Gradio)
@@ -169,7 +169,7 @@ flowchart LR
 | TTSSynthesizer | `TextToSpeechSynthesizer` | ✗ | OUTPUT | `tts_queue` | Voice synthesis |
 | AudioPlayer | `SpeechPlayer` | ✗ | OUTPUT | `audio_queue` | Playback |
 | AutonomyLoop | `AutonomyLoop` | ✓ | BACKGROUND | — | Tick orchestration |
-| VisionProcessor | `VisionProcessor` | ✓ | BACKGROUND | `vision_request_queue` | Vision analysis |
+| Vision Mind | `Subagent-vision` + `VisionCamera` | ✓ | BACKGROUND | Shared inference scheduler | E4B camera observations |
 
 **Daemon threads** can be killed on exit. **Non-daemon threads** must complete gracefully to preserve state (e.g., conversation history).
 
@@ -222,7 +222,6 @@ What the LLM sees on each request:
 flowchart TB
     subgraph Triggers
         tick[⏱️ Time Tick]
-        vision[📷 Vision Event]
         task[📋 Task Update]
     end
 
@@ -239,6 +238,7 @@ flowchart TB
         observer[Observer Agent<br/>Behavior Adjustment]
         weather[Weather Agent]
         news[HN Agent]
+        vision[Vision Mind<br/>E4B Camera]
     end
 
     Triggers --> bus --> cooldown
@@ -294,7 +294,7 @@ See [mcp.md](/docs/mcp.md) for configuration.
 | **Voice Activity** | Silero VAD (ONNX) | Detect speech, 32ms chunks | ✅ |
 | **Voice Synthesis** | Kokoro / GLaDOS TTS | Text-to-speech, streaming | ✅ |
 | **Interruption** | VAD + Playback Control | Talk over her, she stops | ✅ |
-| **Vision** | FastVLM (ONNX) | Scene understanding, change detection | ✅ |
+| **Vision** | Gemma 4 E4B | Scene understanding, previous-frame comparison | ✅ |
 | **LLM** | OpenAI-compatible API | Reasoning, tool use, streaming | ✅ |
 | **Tools** | MCP Protocol | Extensibility, stdio/HTTP/SSE | ✅ |
 | **Autonomy** | Subagent Architecture | Proactive behavior, tick loop | ✅ |
@@ -310,10 +310,10 @@ See [mcp.md](/docs/mcp.md) for configuration.
 
 > *"The Enrichment Center is required to remind you that the Weighted Companion Cube cannot talk. In the event that it does talk The Enrichment Centre asks you to ignore its advice."  -  GLaDOS*
 
-1. Install [Ollama](https://github.com/ollama/ollama) and grab a model:
-   ```bash
-   ollama pull llama3.2
-   ```
+1. Start Gemma 4 E4B with a current CUDA llama.cpp server using the
+   [local setup instructions](docs/gemma4.md#reproduce-with-llamacpp).
+   The default profile sends English audio directly to E4B with thinking off;
+   optional transcripts are off and Parakeet is not loaded.
 
 2. Clone and install:
    ```bash
@@ -339,16 +339,29 @@ Works without GPU, just slower.
 
 ### LLM Backend
 
-GLaDOS needs an LLM. Options:
-1. [Ollama](https://github.com/ollama/ollama) (easiest): `ollama pull llama3.2`
-2. Any OpenAI-compatible API (OpenAI, [MiniMax](https://platform.minimaxi.com/), OpenRouter, etc.)
+GLaDOS has two profiles:
+1. **Default:** Gemma 4 E4B via llama.cpp, direct audio, English, thinking disabled,
+   optional transcripts off. No Parakeet model is loaded.
+2. **Extended:** Parakeet transcription plus a configurable model through Ollama
+   or an OpenAI-compatible API. Disable thinking or select the backend's minimal
+   reasoning setting. Start with `configs/glados_extended_config.yaml`.
 
-Configure in `glados_config.yaml`:
+The extended profile uses Ollama by default (install a current release and
+`ollama pull gemma4:e4b`). To choose another model, configure:
 ```yaml
-completion_url: "http://localhost:11434/v1/chat/completions"
-model: "llama3.2"
-api_key: ""  # if needed
+Glados:
+  completion_url: "http://localhost:11434/api/chat"
+  llm_model: "gemma4:e4b"
+  native_audio:
+    enabled: false
+  asr_engine: "tdt"
+  llm_request_options:
+    think: false  # Ollama; use your other provider's supported option instead.
+  api_key: null  # if needed
 ```
+
+See [the local multimodal evaluation](docs/gemma4.md) for optional transcripts,
+profile switching, and audio/image smoke-test results.
 
 #### Cloud LLM Providers
 

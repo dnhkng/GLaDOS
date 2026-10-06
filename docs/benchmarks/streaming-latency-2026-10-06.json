@@ -1,0 +1,56 @@
+{
+  "method": "Replay captured local E4B synthetic audio response chunks through old and new clause boundaries. Same timestamps; excludes HTTP buffering and TTS. Fixed prompt cache benchmark, not live voice-to-voice latency.",
+  "results": [
+    {
+      "question": "What time is it?",
+      "old_first_clause_ms": 2656.3,
+      "new_first_clause_ms": 2265.7,
+      "first_token_ms": 1581.8,
+      "prompt_timings": {
+        "cache_n": 0,
+        "prompt_n": 3318,
+        "prompt_ms": 1314.992,
+        "prompt_per_token_ms": 0.39632067510548524,
+        "prompt_per_second": 2523.209266672345,
+        "predicted_n": 47,
+        "predicted_ms": 1097.028,
+        "predicted_per_token_ms": 23.341021276595747,
+        "predicted_per_second": 42.84302679603438
+      }
+    },
+    {
+      "question": "How are you today?",
+      "old_first_clause_ms": 348.2,
+      "new_first_clause_ms": 348.2,
+      "first_token_ms": 108.3,
+      "prompt_timings": {
+        "cache_n": 3284,
+        "prompt_n": 35,
+        "prompt_ms": 53.908,
+        "prompt_per_token_ms": 1.5402285714285715,
+        "prompt_per_second": 649.2542850782814,
+        "predicted_n": 88,
+        "predicted_ms": 2953.653,
+        "predicted_per_token_ms": 33.56423863636363,
+        "predicted_per_second": 29.793614889765323
+      }
+    },
+    {
+      "question": "Explain why the sky is blue briefly.",
+      "old_first_clause_ms": 385.1,
+      "new_first_clause_ms": 385.1,
+      "first_token_ms": 110.6,
+      "prompt_timings": {
+        "cache_n": 3284,
+        "prompt_n": 61,
+        "prompt_ms": 59.539,
+        "prompt_per_token_ms": 0.9760491803278689,
+        "prompt_per_second": 1024.5385377651623,
+        "predicted_n": 59,
+        "predicted_ms": 1327.474,
+        "predicted_per_token_ms": 22.499559322033896,
+        "predicted_per_second": 44.4453149364884
+      }
+    }
+  ]
+}
