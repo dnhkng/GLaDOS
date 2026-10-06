@@ -43,6 +43,7 @@ class ToolExecutor:
         autonomy_enabled: Callable[[], bool] = lambda: True,
         quiet_mode: Callable[[], bool] = lambda: False,
         quiet_generation: Callable[[], int] = lambda: 0,
+        end_user_turn: Callable[[int, str], None] = lambda generation, reason: None,
         autonomy_generation: Callable[[], int] = lambda: 0,
         on_autonomy_done: Callable[[str, str, str], None] | None = None,
     ) -> None:
@@ -59,6 +60,7 @@ class ToolExecutor:
         self._on_tool_event = on_tool_event
         self.decision_store = decision_store
         self._autonomy_enabled = autonomy_enabled
+        self._end_user_turn = end_user_turn
         self._quiet_mode, self._quiet_generation = quiet_mode, quiet_generation
         self._autonomy_generation, self._on_autonomy_done = autonomy_generation, on_autonomy_done
 
@@ -94,6 +96,8 @@ class ToolExecutor:
         """
         logger.info("ToolExecutor thread started.")
         while not self.shutdown_event.is_set():
+            generation = None
+            autonomy_mode = False
             try:
                 tool_call = self.tool_calls_queue.get(timeout=self.pause_time)
                 generation = tool_call.get("_quiet_generation", self._quiet_generation())
@@ -193,13 +197,15 @@ class ToolExecutor:
                         def search_result(tool_name: str = tool, parameters: dict = args,
                                           requested_query: str = query, call_id: str = tool_call_id,
                                           task_id: str = slot_id, request_cancelled: Callable[[], bool] = cancelled,
-                                          cancel_event: threading.Event = search_cancelled) -> TaskResult:
+                                          cancel_event: threading.Event = search_cancelled,
+                                          background: bool = background_search) -> TaskResult:
                             search_started = time.perf_counter()
                             try:
                                 core = self.tool_config.get("search_agent")
                                 result = (core.research(parameters,
                                                       cancelled=lambda: cancel_event.is_set() or self.shutdown_event.is_set() or self._quiet_mode(),
-                                                      context_current=lambda: not request_cancelled(), task_id=task_id) if core else
+                                                      context_current=lambda: not request_cancelled(), task_id=task_id,
+                                                      inference_lane="autonomy" if background else "priority") if core else
                                           self.mcp_manager.call_tool(tool_name, parameters, timeout=self.tool_timeout))
                             except Exception:
                                 if self._observability_bus:
@@ -396,6 +402,8 @@ class ToolExecutor:
             except queue.Empty:
                 pass  # Normal
             except Exception as e:
+                if generation is not None and not autonomy_mode:
+                    self._end_user_turn(generation, "tool_error")
                 logger.exception(f"ToolExecutor: Unexpected error in main run loop: {e}")
                 time.sleep(0.1)
         logger.info("ToolExecutor thread finished.")

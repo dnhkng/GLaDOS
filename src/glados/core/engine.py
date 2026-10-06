@@ -628,6 +628,7 @@ class Glados:
 
         self.command_runner = SafeCommandRunner(self.observability_bus)
         self.tool_executor = ToolExecutor(
+            end_user_turn=self.inference_scheduler.end_interaction,
             autonomy_enabled=lambda: self.autonomy_config.enabled and not self.quiet_event.is_set(),
             autonomy_generation=lambda: self._autonomy_generation,
             on_autonomy_done=self._on_autonomy_done,
@@ -1177,6 +1178,7 @@ class Glados:
     def _graceful_shutdown(self) -> None:
         """Perform graceful shutdown of all components."""
         logger.info("Beginning graceful shutdown...")
+        self.inference_scheduler.end_interaction(self._quiet_generation, "shutdown")
 
         # Stop subagents first (they may be using shared resources)
         if self.subagent_manager:
@@ -1493,6 +1495,7 @@ class Glados:
         )
 
     def _cmd_quit(self, _args: list[str]) -> str:
+        self.inference_scheduler.end_interaction(self._quiet_generation, "shutdown")
         self.shutdown_event.set()
         return "Shutting down."
 

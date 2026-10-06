@@ -118,7 +118,9 @@ def test_semantic_recall_all_pages_stable_prefix_and_originals(recall_core, monk
     result = recall_core._semantic_recall("What should I have for dinner?", "", None, 0)
     assert len(calls) == 3
     assert [f["content"] for f in result["facts"]] == ["Steak is my favourite"]
-    assert all(c[0].lane == "autonomy" and c[0].deadline for c in calls)
+    # The HTTP timeout starts after admission; a conversation hold must not
+    # consume the memory lookup's inference budget.
+    assert all(c[0].lane == "autonomy" and c[0].deadline is None and c[0].timeout > 0 for c in calls)
     prefixes = [c[1] for c in calls]
     calls.clear()
     recall_core._semantic_recall("Something for supper?", "", None, 0)

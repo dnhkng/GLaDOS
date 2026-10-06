@@ -207,6 +207,7 @@ class SearchAgent(Subagent):
         cancelled: Callable[[], bool] = lambda: False,
         context_current: Callable[[], bool] = lambda: True,
         task_id: str | None = None,
+        inference_lane: str = "autonomy",
     ) -> str:
         query = str(arguments.get("query") or "").strip()[:1000]
         objective = str(arguments.get("objective") or query).strip()[:2000]
@@ -369,7 +370,7 @@ class SearchAgent(Subagent):
                 config = replace(
                     self.llm,
                     owner="Search",
-                    lane="autonomy",
+                    lane=inference_lane,
                     timeout=min(self.settings.review_timeout_s, remaining()),
                     deadline=started + self.settings.deadline_s,
                     cancelled=lambda: self.llm.cancelled() or stop() or expired(),

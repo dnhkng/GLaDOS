@@ -717,7 +717,7 @@ function coreIdentity(core){
 }
 function coreOwner(owner){
   const id=String(owner||'').toLowerCase();
-  return CORE_IDENTITIES[id]?.title || (/^routing/.test(id)?'Routing Core':/^vision/.test(id)?'Vision Core':/^glados/.test(id)||id==='draft'?'Central Core · GLaDOS':id==='emotional state'?'Emotion Core':owner);
+  return CORE_IDENTITIES[id]?.title || (/^routing/.test(id)?'Routing Core':/^vision/.test(id)?'Vision Core':/^glados/.test(id)||id==='draft'?'Central Core · GLaDOS':/^emotion/.test(id)?'Emotion Core':/^memory|^compaction/.test(id)?'Memory Core':owner);
 }
 function coreActivity(core){
   const id=core.id||core.agent_id, owner=CORE_IDENTITIES[id]?.title;
@@ -725,7 +725,7 @@ function coreActivity(core){
   const active=(S.inference?.active||[]).filter(matches), waiting=(S.inference?.waiting||[]).filter(matches);
   if(core.paused || (S.controls.quiet_mode && core.kind!=='router'))return {label:'Suspended',className:'s-paused',detail:active.length?'Finishing current run · '+active.map(r=>'Channel '+(r.slot+1)).join(', '):'Waiting for resume',active,waiting};
   if(active.length)return {label:'Working',className:'s-running',detail:active.map(r=>'Channel '+(r.slot+1)).join(' · '),active,waiting};
-  if(waiting.length)return {label:'Queued',className:'s-paused',detail:waiting.length+' request'+(waiting.length===1?'':'s')+' waiting',active,waiting};
+  if(waiting.length)return {label:'Queued',className:'s-paused',detail:waiting.some(r=>r.wait_reason==='user_response')?'Waiting for user response':waiting.length+' request'+(waiting.length===1?'':'s')+' waiting',active,waiting};
   if(core.research?.status==='researching')return {label:'Working',className:'s-running',detail:'Research round '+core.research.rounds+' of '+core.research.max_rounds,active,waiting};
   if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
   return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':'Scheduled every '+(core.interval_s||'?')+' s':'Ready for requests',active,waiting};
@@ -1211,7 +1211,7 @@ function renderInference(){
   }
   const state=S.inference;
   if(!state){$('inference-summary').textContent='Capacity unavailable';return;}
-  $('inference-summary').textContent=state.active.length+' / '+state.capacity+' channels active · '+state.waiting.length+' queued';
+  $('inference-summary').textContent=state.active.length+' / '+state.capacity+' channels active · '+state.waiting.length+' queued'+(state.interaction_hold?' · Background inference waiting for user response':'');
   $('inference-slots').innerHTML=Array.from({length:state.capacity},(_,i)=>{
     const r=state.active.find(r=>r.slot===i);
     return '<div class="card"><h3>Channel '+(i+1)+' <span class="chip '+(r?'amber':'teal')+'">'+(r?'Active':'Idle')+'</span></h3>'+kv('Capacity',i<state.reserved_interactive?'Reserved for interactive requests':'Shared')+(r?kv('Core',esc(coreOwner(r.owner)))+kv('Lane',esc(r.lane))+kv('Model',esc(r.model))+kv('Elapsed',Math.max(0,Date.now()/1000-r.started_at).toFixed(1)+' s'):'<p class="console-note">Ready for inference.</p>')+'</div>';

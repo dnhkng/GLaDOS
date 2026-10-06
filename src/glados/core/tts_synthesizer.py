@@ -104,6 +104,7 @@ class TextToSpeechSynthesizer:
                                 source="tts",
                                 kind="synthesize",
                                 message=trim_message(segment.text),
+                                meta={"generation": generation},
                             )
 
                         start_time = time.time()
@@ -129,6 +130,7 @@ class TextToSpeechSynthesizer:
                                 message=trim_message(spoken_text_variant),
                                 level="debug",
                                 meta={
+                                    "generation": generation,
                                     "inference_s": round(processing_time, 3),
                                     "audio_s": round(audio_duration, 3),
                                     "muted": bool(self._tts_muted_event and self._tts_muted_event.is_set()),

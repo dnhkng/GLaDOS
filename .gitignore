@@ -199,9 +199,7 @@ data/preferences.yaml.tmp
 data/operator_settings.yaml
 data/operator_settings.yaml.tmp
 
-/models/parakeet-redux-onnx/
 
-/models/sherpa-onnx-nemo-parakeet-redux/
 
 # Local profile and macOS resource forks
 /glados_config.yaml

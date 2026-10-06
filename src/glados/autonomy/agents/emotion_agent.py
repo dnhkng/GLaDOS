@@ -193,10 +193,9 @@ class EmotionAgent(Subagent):
         state = state or replace(self._state)
         generation = self._generation if generation is None else generation
         config = self._llm_config
-        deadline = time.monotonic() + min(config.timeout, 10)
         def stopped():
             return (generation != self._generation or self.paused or self._shutdown_event.is_set()
-                    or config.cancelled() or time.monotonic() >= deadline)
+                    or config.cancelled())
         axes = {
             "pleasure": ["extremely unpleasant; angry or distressed", "somewhat unpleasant; irritated", "neutral",
                          "somewhat pleasant; pleased", "extremely pleasant; delighted"],
@@ -208,6 +207,7 @@ class EmotionAgent(Subagent):
         def score(axis):
             guard = config.scheduler.lease("Emotion " + axis, "autonomy", config.model, stopped) if config.scheduler else nullcontext()
             with guard:
+                deadline = time.monotonic() + min(config.timeout, 10)
                 if stopped():
                     raise ValueError("Emotion update superseded")
                 parsed = urlsplit(config.url)

@@ -986,6 +986,9 @@ class LanguageModelProcessor:
                                 continue
                             self._set_quiet_mode(False)
                             self._reply_generation = self._quiet_generation()
+                            turn_generation = self._reply_generation
+                            if self._inference_scheduler:
+                                self._inference_scheduler.begin_interaction(turn_generation)
                             route = {"action": "plan"}  # Interpret any follow-up in the original wake request.
                         elif gate["accepted"] and gate["action"] == "quiet":
                             self._set_quiet_mode(True)
@@ -1036,6 +1039,10 @@ class LanguageModelProcessor:
                             continue
                         if route["action"] == "wake" and route.get("accepted") and self._set_quiet_mode:
                             self._set_quiet_mode(False)
+                            self._reply_generation = self._quiet_generation()
+                            turn_generation = self._reply_generation
+                            if self._inference_scheduler:
+                                self._inference_scheduler.begin_interaction(turn_generation)
                             route = {"action": "plan"}
                         if not self.processing_active_event.is_set() or self.shutdown_event.is_set():
                             continue
@@ -1061,6 +1068,7 @@ class LanguageModelProcessor:
                     self._before_reply(llm_input)
                 if self._quiet_mode() or self._reply_generation != self._quiet_generation() or self._autonomy_cancelled():
                     continue
+                admission_started = time.perf_counter()
                 if self._inference_scheduler and not (draft and draft.started):
                     inference_lease = self._inference_scheduler.acquire(
                         "Central Core notification" if self._autonomy_response else
@@ -1068,6 +1076,10 @@ class LanguageModelProcessor:
                         "autonomy" if self._autonomy_response else self._lane, self.model_name,
                         lambda: self.shutdown_event.is_set() or self._quiet_mode() or self._reply_generation != self._quiet_generation() or self._autonomy_cancelled() or not self.processing_active_event.is_set(),
                     )
+                if self._observability_bus:
+                    self._observability_bus.emit("llm", "admitted", "Inference admitted", level="debug",
+                        meta={"generation": self._reply_generation, "lane": self._lane,
+                              "wait_ms": round((time.perf_counter() - admission_started) * 1000, 1)})
                 if self._inflight_counter is not None:
                     self._inflight_counter.increment()
                     inflight_guard = True
@@ -1283,6 +1295,8 @@ class LanguageModelProcessor:
                         else:
                             self._record_context(data, base_messages, autonomy_mode)
                         try:
+                            stream_started = time.perf_counter()
+                            first_token = True
                             with (draft if draft and draft.started else self._post_with_context_recovery(
                                 request_url, data, base_messages, autonomy_mode,
                             )) as response:
@@ -1315,6 +1329,13 @@ class LanguageModelProcessor:
                                         if cleaned_line_data:
                                             chunk = self._process_chunk(cleaned_line_data)
                                             if chunk:
+                                                if first_token:
+                                                    first_token = False
+                                                    if self._observability_bus:
+                                                        self._observability_bus.emit("llm", "first_token", "First response token",
+                                                            level="debug", meta={"generation": self._reply_generation,
+                                                                "lane": self._lane,
+                                                                "elapsed_ms": round((time.perf_counter() - stream_started) * 1000, 1)})
                                                 if isinstance(chunk, list):
                                                     if not autonomy_mode:
                                                         self._process_tool_chunks(tool_calls_buffer, chunk)

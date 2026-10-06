@@ -171,3 +171,35 @@ The isolated [E4B coordination benchmark](benchmarks/core-coordination-2026-10-0
 passed three PAD scenarios and dinner-preference retrieval from both text and synthetic English
 audio. PAD batches took 60–131 ms, two-page text recall 518 ms, and audio topic extraction plus
 recall 1,764 ms. These are isolated local server measurements, not end-to-end voice latency.
+
+
+### Conversation inference priority
+
+Confirmed speech and submitted text hold new background inference until the first
+valid response audio (or muted text response) is queued. Routing, Central Core,
+required foreground tool inference, and spare-capacity drafts remain eligible.
+Already-admitted background requests finish. Four inference slots remain enabled.
+
+The shared scheduler owns a generation-tagged hold; stale completions cannot
+release a newer interaction. Ignored/empty input, abandoned recordings, terminal
+failures and shutdown release it. Foreground tool handoffs retain it. A 120-second
+monotonic fail-open limit prevents an orphaned hold from indefinitely starving cores.
+This does not change manual pause settings or mark conversational slots as paused.
+
+Periodic Vision, Emotion scoring, Memory recall/compaction, Health commentary,
+Search review, Observer and Autonomy inference use background admission. Camera
+capture, local emotion decay, health sampling/alerts, network fetches and slot
+updates continue. Explicit visual questions and synchronous search review needed
+by a reply use foreground admission. Important updates alone do not bypass the hold.
+Future cores must use the shared scheduler/client and default to background work;
+priority is for a current reply dependency, not a permanent property of a core.
+
+Background inference timeout budgets begin after admission. Explicit overall task
+deadlines, such as Search's research budget, still apply while queued. Existing
+coalescing and generation cancellation prevent stale periodic work accumulating.
+The inference snapshot exposes the hold and its last release reason; the console
+distinguishes waiting for a user response from waiting for capacity. LLM admission,
+first-token and TTS timings carry the turn generation for latency inspection.
+
+The controlled results in `benchmarks/interaction-hold-2026-10-06.json` use synthetic
+text prompts and two background LLM workers, not end-to-end microphone playback.
