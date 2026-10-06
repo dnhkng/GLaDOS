@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import queue
 import threading
 import time
@@ -5,10 +6,11 @@ import time
 from loguru import logger
 import numpy as np
 
-from ..TTS import SpeechSynthesizerProtocol
 from ..observability import ObservabilityBus, trim_message
+from ..TTS import SpeechSynthesizerProtocol
 from ..utils import spoken_text_converter as stc
 from .audio_data import AudioMessage
+from .speech_markup import SpeechMarkupParser, SpeechText
 
 
 class TextToSpeechSynthesizer:
@@ -21,7 +23,7 @@ class TextToSpeechSynthesizer:
 
     def __init__(
         self,
-        tts_input_queue: queue.Queue[str],
+        tts_input_queue: queue.Queue[str | SpeechText],
         audio_output_queue: queue.Queue[AudioMessage],
         tts_model: SpeechSynthesizerProtocol,
         stc_instance: stc.SpokenTextConverter,
@@ -29,6 +31,11 @@ class TextToSpeechSynthesizer:
         pause_time: float,
         tts_muted_event: threading.Event | None = None,
         observability_bus: ObservabilityBus | None = None,
+        quiet_mode: Callable[[], bool] = lambda: False,
+        quiet_generation: Callable[[], int] = lambda: 0,
+        on_response_ready: Callable[[int, str], None] = lambda generation, reason: None,
+        autonomy_generation: Callable[[], int] = lambda: 0,
+        autonomy_enabled: Callable[[], bool] = lambda: True,
     ) -> None:
         self.tts_input_queue = tts_input_queue
         self.audio_output_queue = audio_output_queue
@@ -38,6 +45,12 @@ class TextToSpeechSynthesizer:
         self.pause_time = pause_time
         self._tts_muted_event = tts_muted_event
         self._observability_bus = observability_bus
+        self._on_response_ready = on_response_ready
+        self._quiet_mode, self._quiet_generation = quiet_mode, quiet_generation
+        self._autonomy_generation, self._autonomy_enabled = autonomy_generation, autonomy_enabled
+
+    def _autonomy_current(self, generation: int | None) -> bool:
+        return generation is None or (self._autonomy_enabled() and generation == self._autonomy_generation())
 
     def run(self) -> None:
         """
@@ -51,57 +64,90 @@ class TextToSpeechSynthesizer:
         The thread will run until the shutdown event is set, at which point it will exit gracefully.
         """
         logger.info("TextToSpeechSynthesizer thread started.")
+        generation, autonomy_epoch = self._quiet_generation(), None
         while not self.shutdown_event.is_set():
             try:
                 text_to_speak = self.tts_input_queue.get(timeout=self.pause_time)
 
-                if text_to_speak == "<EOS>":
+                generation = getattr(text_to_speak, "generation", None)
+                autonomy_epoch = getattr(text_to_speak, "autonomy_generation", None)
+                autonomy_cycle = getattr(text_to_speak, "autonomy_cycle", None)
+                if generation is None:
+                    generation = self._quiet_generation()
+                if (self._quiet_mode() or generation != self._quiet_generation()
+                        or not self._autonomy_current(autonomy_epoch)):
+                    continue
+                if text_to_speak == "<EOS>" or (
+                    isinstance(text_to_speak, SpeechText) and text_to_speak.text == "<EOS>"
+                ):
                     logger.debug("TTS Synthesizer: Received EOS token.")
                     self.audio_output_queue.put(
-                        AudioMessage(audio=np.array([], dtype=np.float32), text="", is_eos=True)
+                        AudioMessage(audio=np.array([], dtype=np.float32), text="", is_eos=True, generation=generation,
+                                     autonomy_generation=autonomy_epoch, autonomy_cycle=autonomy_cycle)
                     )
 
-                elif not text_to_speak.strip():  # Check for empty or whitespace-only strings
-                    logger.warning(f"TTS Synthesizer: Received empty or whitespace string: '{text_to_speak}'")
                 else:
-                    logger.info(f"LLM text: {text_to_speak}")
-                    if self._observability_bus:
-                        self._observability_bus.emit(
-                            source="tts",
-                            kind="synthesize",
-                            message=trim_message(text_to_speak),
-                        )
-
-                    start_time = time.time()
-                    spoken_text_variant = self.stc.text_to_spoken(text_to_speak)
-                    if self._tts_muted_event and self._tts_muted_event.is_set():
-                        audio_data = np.array([], dtype=np.float32)
-                    else:
-                        audio_data = self.tts_model.generate_speech_audio(spoken_text_variant)
-                    processing_time = time.time() - start_time
-
-                    audio_duration = len(audio_data) / self.tts_model.sample_rate if audio_data.size else 0.0
-                    logger.info(
-                        f"TTS Synthesizer: TTS Complete. Inference: {processing_time:.2f}s, "
-                        f"Audio length: {audio_duration:.2f}s for text: '{spoken_text_variant}'"
+                    segments = (
+                        [text_to_speak]
+                        if isinstance(text_to_speak, SpeechText)
+                        else SpeechMarkupParser().feed(text_to_speak, final=True)
                     )
-                    if self._observability_bus:
-                        self._observability_bus.emit(
-                            source="tts",
-                            kind="ready",
-                            message=trim_message(spoken_text_variant),
-                            meta={
-                                "inference_s": round(processing_time, 3),
-                                "audio_s": round(audio_duration, 3),
-                                "muted": bool(self._tts_muted_event and self._tts_muted_event.is_set()),
-                            },
-                        )
+                    for segment in segments:
+                        if (self._quiet_mode() or generation != self._quiet_generation()
+                                or not self._autonomy_current(autonomy_epoch)):
+                            break
+                        if not segment.text.strip():
+                            continue
+                        logger.info(f"LLM text: {segment.text}")
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="tts",
+                                kind="synthesize",
+                                message=trim_message(segment.text),
+                            )
 
-                    # Even if audio_data is empty, send the message so AudioPlayer can log/handle it
-                    self.audio_output_queue.put(AudioMessage(audio=audio_data, text=spoken_text_variant, is_eos=False))
+                        start_time = time.time()
+                        spoken_text_variant = self.stc.text_to_spoken(segment.text)
+                        if self._tts_muted_event and self._tts_muted_event.is_set():
+                            audio_data = np.array([], dtype=np.float32)
+                        else:
+                            audio_data = self.tts_model.generate_speech_audio(spoken_text_variant)
+                        if (self._quiet_mode() or generation != self._quiet_generation()
+                                or not self._autonomy_current(autonomy_epoch)):
+                            break
+                        processing_time = time.time() - start_time
+
+                        audio_duration = len(audio_data) / self.tts_model.sample_rate if audio_data.size else 0.0
+                        logger.info(
+                            f"TTS Synthesizer: TTS Complete. Inference: {processing_time:.2f}s, "
+                            f"Audio length: {audio_duration:.2f}s for text: '{spoken_text_variant}'"
+                        )
+                        if self._observability_bus:
+                            self._observability_bus.emit(
+                                source="tts",
+                                kind="ready",
+                                message=trim_message(spoken_text_variant),
+                                level="debug",
+                                meta={
+                                    "inference_s": round(processing_time, 3),
+                                    "audio_s": round(audio_duration, 3),
+                                    "muted": bool(self._tts_muted_event and self._tts_muted_event.is_set()),
+                                },
+                            )
+
+                        # Even if audio_data is empty, send the message so AudioPlayer can log/handle it
+                        self.audio_output_queue.put(
+                            AudioMessage(audio=audio_data, text=spoken_text_variant, emotion=segment.emotion,
+                                         generation=generation, autonomy_generation=autonomy_epoch,
+                                         autonomy_cycle=autonomy_cycle)
+                        )
+                        if autonomy_epoch is None:
+                            self._on_response_ready(generation, "first_response_ready")
             except queue.Empty:
                 pass  # Normal, no text to process
             except Exception as e:
+                if autonomy_epoch is None:
+                    self._on_response_ready(generation, "synthesis_error")
                 logger.exception(f"TextToSpeechSynthesizer: Unexpected error in run loop: {e}")
                 # Potentially add a small sleep here
                 time.sleep(self.pause_time)

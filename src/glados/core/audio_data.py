@@ -23,6 +23,10 @@ class AudioMessage:
     audio: NDArray[np.float32]
     text: str
     is_eos: bool = False
+    emotion: str | None = None
+    generation: int | None = None
+    autonomy_generation: int | None = None
+    autonomy_cycle: str | None = None
 
 
 @dataclass
