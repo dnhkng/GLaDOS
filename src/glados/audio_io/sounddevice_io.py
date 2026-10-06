@@ -1,7 +1,9 @@
+"""Local microphone and speaker backend implemented with sounddevice."""
+
 import queue
+import sys
 import threading
 import time
-import sys
 from typing import Any
 
 from loguru import logger
@@ -382,8 +384,9 @@ class SoundDeviceAudioIO(AudioIO):
         stop_event = self._stop_event
 
         def stream_callback(
-            outdata: NDArray[np.float32], frames: int, time_info: Any, status: sd.CallbackFlags
+            outdata: NDArray[np.float32], frames: int, time_info: object, status: sd.CallbackFlags
         ) -> None:
+            """Fill the next output block and track completion or interruption."""
             nonlocal position, interrupted
             if status and status.output_underflow:
                 self._output_underflows += 1
@@ -467,3 +470,8 @@ class SoundDeviceAudioIO(AudioIO):
                         (audio_sample, vad_confidence)
         """
         return self._sample_queue
+
+    def close(self) -> None:
+        """Release local input and output resources."""
+        self.stop_speaking()
+        self.stop_listening()

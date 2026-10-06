@@ -9,8 +9,10 @@ Usage:
 
 Requires: websockets, numpy, sounddevice
 """
+
 import argparse
 import asyncio
+import time
 
 import numpy as np
 import websockets
@@ -22,19 +24,40 @@ async def mic_client(host: str, port: int, timeout: float) -> None:
     """Capture from the default mic and stream float32 16 kHz audio."""
     import sounddevice as sd
 
-    out = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    out: asyncio.Queue[bytes] = asyncio.Queue(maxsize=8)
 
-    def callback(indata, frames, time_info, status):
-        out.put_nowait(np.ascontiguousarray(indata[:, 0], dtype=np.float32).tobytes())
+    def enqueue(data: bytes) -> None:
+        """Enqueue a microphone block while keeping capture latency bounded."""
+        if out.full():
+            # Keep latency bounded: discard the oldest unsent microphone block.
+            out.get_nowait()
+            out.task_done()
+        out.put_nowait(data)
 
-    async def sender():
+    def callback(
+        indata: np.ndarray,
+        _frames: int,
+        _time_info: object,
+        _status: object,
+    ) -> None:
+        """Bridge a PortAudio callback safely into the asyncio event loop."""
+        data = np.ascontiguousarray(indata[:, 0], dtype=np.float32).tobytes()
+        loop.call_soon_threadsafe(enqueue, data)
+
+    async def sender() -> None:
+        """Send queued microphone blocks in capture order."""
         while True:
-            await ws.send(await out.get())
+            data = await out.get()
+            try:
+                await ws.send(data)
+            finally:
+                out.task_done()
 
     async with websockets.connect(f"ws://{host}:{port}/microphone") as ws:
         print("<-", await ws.recv())  # sampleRate:<hz>
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, blocksize=512, callback=callback):
-            await asyncio.wait_for(asyncio.gather(sender()), timeout)
+            await asyncio.wait_for(sender(), timeout)
 
 
 async def speaker_client(host: str, port: int, timeout: float) -> None:
@@ -42,23 +65,50 @@ async def speaker_client(host: str, port: int, timeout: float) -> None:
     import sounddevice as sd
 
     rate = SAMPLE_RATE
+    play_time = time.time()
+    playback_task: asyncio.Task[None] | None = None
+
+    async def stop_playback() -> None:
+        """Cancel pending playback and stop the output device."""
+        nonlocal playback_task
+        if playback_task is None:
+            return
+        sd.stop()
+        playback_task.cancel()
+        await asyncio.gather(playback_task, return_exceptions=True)
+        playback_task = None
 
     async with websockets.connect(f"ws://{host}:{port}/speaker") as ws:
-        while True:
-            try:
-                msg = await asyncio.wait_for(ws.recv(), timeout)
-            except asyncio.TimeoutError:
-                break
-            if isinstance(msg, str):
-                if msg.startswith("sampleRate:"):
-                    rate = int(msg.split(":", 1)[1])
-                elif msg == "reset":
-                    sd.stop()
-            else:
-                sd.play(np.frombuffer(msg, dtype=np.float32), rate)
+
+        async def play(data: bytes, scheduled_time: float, sample_rate: int) -> None:
+            """Play one scheduled track and acknowledge its completion."""
+            await asyncio.sleep(max(0.0, scheduled_time - time.time()))
+            sd.play(np.frombuffer(data, dtype=np.float32), sample_rate)
+            await asyncio.to_thread(sd.wait)
+            await ws.send("played")
+
+        try:
+            while True:
+                try:
+                    msg = await asyncio.wait_for(ws.recv(), timeout)
+                except TimeoutError:
+                    break
+                if isinstance(msg, str):
+                    if msg.startswith("time:"):
+                        play_time = float(msg.split(":", 1)[1])
+                    elif msg.startswith("sampleRate:"):
+                        rate = int(msg.split(":", 1)[1])
+                    elif msg == "reset":
+                        await stop_playback()
+                else:
+                    await stop_playback()
+                    playback_task = asyncio.create_task(play(msg, play_time, rate))
+        finally:
+            await stop_playback()
 
 
 def main() -> None:
+    """Run the selected microphone or speaker reference client."""
     ap = argparse.ArgumentParser(description="GLADOS websocket audio client")
     sub = ap.add_subparsers(dest="mode", required=True)
 

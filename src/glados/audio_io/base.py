@@ -4,6 +4,7 @@ This is the single contract every audio backend implements, so the Glados
 engine can swap between local hardware (sounddevice), a network backend
 (WebSocket), or any future backend without changing engine code.
 """
+
 from abc import ABC, abstractmethod
 import queue
 
@@ -28,9 +29,7 @@ class AudioIO(ABC):
         """Stop capturing audio input."""
 
     @abstractmethod
-    def start_speaking(
-        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = ""
-    ) -> None:
+    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None:
         """Queue audio for playback (non-blocking)."""
 
     @abstractmethod
@@ -52,3 +51,12 @@ class AudioIO(ABC):
     @abstractmethod
     def get_sample_queue(self) -> queue.Queue[tuple[NDArray[np.float32], bool]]:
         """Return the thread-safe queue of ``(audio_samples, vad_confidence)``."""
+
+    def close(self) -> None:
+        """Release backend resources.
+
+        The default is a no-op so existing ``AudioIO`` subclasses remain
+        compatible. Backends that own streams, sockets, or threads should
+        override this method.
+        """
+        return None

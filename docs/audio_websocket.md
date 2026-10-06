@@ -21,6 +21,7 @@ Glados:
     rooms: false            # multi-microphone room choreography (default: off)
     segregate_speakers: false
     default_room_tag: "office"
+    mic_queue_max_chunks: 256  # 8.2 seconds of bounded microphone buffering
 ```
 
 A ready-to-edit template is at `configs/glados_websocket_config.yaml`.
@@ -34,8 +35,12 @@ The server exposes two WebSocket paths:
 | `/microphone`   | client → server: stream mic audio for VAD/ASR     |
 | `/speaker`      | server → client: stream TTS audio for playback    |
 
-Audio is raw `float32` PCM at 16 kHz. Text frames are UTF-8; audio frames are
-binary.
+Audio is raw `float32` PCM. Microphone input is fixed at 16 kHz; speaker clients
+must decode each track at the rate supplied by its `sampleRate:<hz>` message.
+Text frames are UTF-8; audio frames are binary.
+
+The protocol has no authentication. Keep it bound to loopback or a trusted
+network, or place it behind an authenticated proxy before exposing it.
 
 ## Speaker protocol (`/speaker`)
 
@@ -52,6 +57,10 @@ On interrupt the server sends `reset` and the client must stop playback.
 Server → client: `sampleRate:<hz>` on connect.
 
 Client → server: binary audio chunks, optionally `room:<tag>`.
+
+The server buffers at most `mic_queue_max_chunks` VAD windows (32 ms each).
+When the speech consumer falls behind, it drops the oldest window to bound
+memory while favoring recent, low-latency audio.
 
 The server runs VAD per client and enqueues speech with a confidence flag into
 the shared sample queue consumed by ASR.
