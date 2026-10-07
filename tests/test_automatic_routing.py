@@ -64,13 +64,16 @@ def test_unavailable_backend_does_not_require_routing(monkeypatch: pytest.Monkey
     assert not RoutingConfig().enabled_for("http://localhost/v1/chat/completions", {})
 
 
+@pytest.mark.parametrize("search_tools", [False, True])
 @pytest.mark.parametrize("changed", [False, True])
 def test_automatic_draft_survives_background_mood_changes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: bool,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: bool, search_tools: bool,
 ) -> None:
     processor = make_processor()
     processor._inference_scheduler = InferenceScheduler()
     store = DecisionListStore(tmp_path / "choices.json", lambda: [tool_definition])
+    if search_tools:
+        processor._reply_tools = lambda: [{"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}]
     affect = ["Neutral; [emotion:neutral]"]
     builder = ContextBuilder()
     builder.register("emotion", lambda: affect[0], volatile=True)
@@ -85,6 +88,9 @@ def test_automatic_draft_survives_background_mood_changes(
         payloads.append(kwargs["json"])
         assert "Current topic: Hello" in json.dumps(kwargs["json"])
         assert "Old topic: tea" not in json.dumps(kwargs["json"])
+        if search_tools:
+            assert "call the search tool now" in json.dumps(kwargs["json"])
+            assert "numResults=2" in json.dumps(kwargs["json"])
         response = MagicMock(status_code=200)
         response.__enter__.return_value = response
         text = "Fresh reply." if len(payloads) > 1 else "Private draft."
@@ -114,7 +120,7 @@ def test_automatic_draft_survives_background_mood_changes(
     monkeypatch.setattr("glados.core.speculative.requests.post", post)
     processor._before_reply = react
     processor.router = Mock(store=store, score=score)
-    processor.llm_input_queue.put({"role": "user", "content": "Hello", "_allow_tools": False})
+    processor.llm_input_queue.put({"role": "user", "content": "Hello", "_allow_tools": search_tools})
     worker = threading.Thread(target=processor.run)
     worker.start()
     try:
@@ -181,3 +187,19 @@ def test_draft_generation_cancellation_survives_processing_reset() -> None:
     processor.processing_active_event.clear()
     processor.processing_active_event.set()
     assert stream.stopped()
+
+
+def test_direct_audio_does_not_launch_speculative_inference(monkeypatch):
+    processor = make_processor()
+    processor._inference_scheduler = InferenceScheduler()
+    draft = Mock()
+    monkeypatch.setattr("glados.core.llm_processor.SpeculativeStream", draft)
+    def score(*args, **kwargs):
+        assert kwargs["on_admitted"] is None
+        processor.shutdown_event.set()
+        return {"action": "ignore"}
+    processor.router = Mock(store=Mock(), score=score)
+    processor.llm_input_queue.put({"role": "user", "content": "[Voice input]",
+        "_native_audio": [{"type": "input_audio", "input_audio": {"data": "test", "format": "wav"}}]})
+    processor.run()
+    draft.assert_not_called()

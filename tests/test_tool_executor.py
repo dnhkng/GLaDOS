@@ -99,3 +99,73 @@ def test_unknown_tool(mocker, caplog):
     assert result["_tool_reply_context"] == call["function"]
     assert executor.llm_queue_autonomy.empty()
     tool.assert_not_called()
+
+
+def test_timed_out_tool_does_not_block_next_call_or_publish_late_result(monkeypatch):
+    import glados.core.tool_executor as module
+    released = threading.Event()
+    finished = threading.Event()
+
+    class Tool:
+        def __init__(self, llm_queue, tool_config):
+            self.queue = llm_queue
+        def run(self, call_id, args):
+            if call_id == "slow":
+                released.wait(2)
+            self.queue.put({"role": "tool", "tool_call_id": call_id, "content": call_id})
+            if call_id == "slow":
+                finished.set()
+
+    monkeypatch.setattr(module, "all_tools", ["test"])
+    monkeypatch.setattr(module, "tool_classes", {"test": Tool})
+    executor = make_executor()
+    executor.tool_timeout = .03
+    executor.processing_active_event.set()
+    worker = threading.Thread(target=executor.run)
+    worker.start()
+    def submit(call_id):
+        executor.tool_calls_queue.put({"id": call_id, "function": {"name": "test", "arguments": {}}})
+    try:
+        submit("slow")
+        timeout = executor.llm_queue_priority.get(timeout=1)
+        assert "timed out" in timeout["content"]
+        submit("fast")
+        assert executor.llm_queue_priority.get(timeout=1)["content"] == "fast"
+        released.set()
+        assert finished.wait(1)
+        assert executor.llm_queue_priority.empty()
+    finally:
+        released.set()
+        executor.shutdown_event.set()
+        worker.join(1)
+    assert not worker.is_alive()
+
+
+def test_hung_tools_have_bounded_admission(monkeypatch):
+    import glados.core.tool_executor as module
+    released = threading.Event()
+    started = []
+    class Tool:
+        def __init__(self, **kwargs):
+            pass
+        def run(self, call_id, args):
+            started.append(call_id)
+            released.wait(2)
+    monkeypatch.setattr(module, "all_tools", ["test"])
+    monkeypatch.setattr(module, "tool_classes", {"test": Tool})
+    executor = make_executor()
+    executor.tool_timeout = .02
+    executor.processing_active_event.set()
+    worker = threading.Thread(target=executor.run)
+    worker.start()
+    try:
+        for i in range(5):
+            executor.tool_calls_queue.put({"id": str(i), "function": {"name": "test", "arguments": {}}})
+            output = executor.llm_queue_priority.get(timeout=1)
+            assert ("timed out" if i < 4 else "capacity exhausted") in output["content"]
+        assert len(started) == 4
+    finally:
+        released.set()
+        executor.shutdown_event.set()
+        worker.join(1)
+    assert not worker.is_alive()

@@ -54,6 +54,8 @@ class ToolExecutor:
         self.shutdown_event = shutdown_event
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
+        self._tool_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="native-tool")
+        self._tool_capacity = threading.BoundedSemaphore(4)
         self.pause_time = pause_time
         self.mcp_manager = mcp_manager
         self._observability_bus = observability_bus
@@ -314,54 +316,48 @@ class ToolExecutor:
                     continue
 
                 if tool in all_tools:
-                    tool_instance = tool_classes.get(tool)(
-                        llm_queue=llm_queue,
-                        tool_config={**self.tool_config, "_quiet_generation": generation,
-                                     "_autonomy_generation": autonomy_epoch if autonomy_mode else None,
-                                     "_cancelled": cancelled},
-                    )
-                    with ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(tool_instance.run, tool_call_id, args)
-                        try:
-                            future.result(timeout=self.tool_timeout)
-                            if self._observability_bus:
-                                elapsed = time.perf_counter() - started_at
-                                self._observability_bus.emit(
-                                    source="tool",
-                                    kind="finish",
-                                    message=tool,
-                                    meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
-                                )
-                            logger.success("ToolExecutor: finished {}", tool)
-                            self._emit_tool_event("tool_success", tool)
-                        except FuturesTimeoutError:
-                            timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
-                            self._emit_tool_event("tool_timeout", tool)
-                            logger.error(f"ToolExecutor: {timeout_error}")
-                            if self._observability_bus:
-                                self._observability_bus.emit(
-                                    source="tool",
-                                    kind="timeout",
-                                    message=timeout_error,
-                                    level="warning",
-                                    meta={"tool": tool, "tool_call_id": tool_call_id},
-                                )
-                            self._enqueue(
-                                llm_queue,
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call_id,
-                                    "content": timeout_error,
-                                    "type": "function_call_output",
-                                    **autonomy_flag,
-                                },
-                                lane=lane,
-                            )
-                        except Exception as exc:
-                            self._emit_tool_event("tool_failure", tool)
-                            self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
-                                                      "content": f"error: tool '{tool}' failed - {exc}",
-                                                      **autonomy_flag}, lane=lane)
+                    if not self._tool_capacity.acquire(blocking=False):
+                        self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
+                            "content": "error: native tool capacity exhausted; earlier calls are still running"}, lane=lane)
+                        continue
+                    timed_out = threading.Event()
+                    result_queue = llm_queue
+                    result_queue.single_result = True
+                    result_queue.cancelled = lambda expired=timed_out, stale=cancelled: expired.is_set() or stale()
+                    try:
+                        tool_instance = tool_classes[tool](
+                            llm_queue=result_queue,
+                            tool_config={**self.tool_config, "_quiet_generation": generation,
+                                         "_autonomy_generation": autonomy_epoch if autonomy_mode else None,
+                                         "_cancelled": result_queue.cancelled},
+                        )
+                        future = self._tool_pool.submit(tool_instance.run, tool_call_id, args)
+                    except Exception:
+                        self._tool_capacity.release()
+                        raise
+                    future.add_done_callback(lambda done: self._tool_capacity.release())
+                    try:
+                        future.result(timeout=self.tool_timeout)
+                        self._emit_tool_event("tool_success", tool)
+                        if self._observability_bus:
+                            self._observability_bus.emit("tool", "finish", tool,
+                                meta={"tool_call_id": tool_call_id, "elapsed_s": round(time.perf_counter() - started_at, 3)})
+                    except FuturesTimeoutError:
+                        timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
+                        # Publish or close atomically against a concurrently finishing tool.
+                        result_queue.finish({"role": "tool", "tool_call_id": tool_call_id,
+                            "content": timeout_error, "type": "function_call_output",
+                            "_allow_tools": False, "_enqueued_at": time.time(), "_lane": lane})
+                        timed_out.set()
+                        future.cancel()
+                        self._emit_tool_event("tool_timeout", tool)
+                        if self._observability_bus:
+                            self._observability_bus.emit("tool", "timeout", timeout_error, level="warning",
+                                meta={"tool": tool, "tool_call_id": tool_call_id})
+                    except Exception as exc:
+                        result_queue.finish({"role": "tool", "tool_call_id": tool_call_id,
+                            "content": f"error: tool '{tool}' failed - {exc}", "_allow_tools": False})
+                        self._emit_tool_event("tool_failure", tool)
                 else:
                     tool_error = f"error: no tool named {tool} is available"
                     logger.error(f"ToolExecutor: {tool_error}")
@@ -391,6 +387,7 @@ class ToolExecutor:
                     self._end_user_turn(generation, "tool_error")
                 logger.exception(f"ToolExecutor: Unexpected error in main run loop: {e}")
                 time.sleep(0.1)
+        self._tool_pool.shutdown(wait=False, cancel_futures=True)
         logger.info("ToolExecutor thread finished.")
 
     @staticmethod
@@ -434,7 +431,7 @@ class ToolExecutor:
 
 class _ToolResultQueue:
     """Carry the performed action into the reply, including transcript-free voice turns."""
-    def __init__(self, target, tool_call, bound=False, cancelled=lambda: False):
+    def __init__(self, target, tool_call, bound=False, cancelled=lambda: False, single_result=False):
         self.target = target
         self.context = tool_call["function"]
         self.generation = tool_call.get("_quiet_generation")
@@ -443,6 +440,9 @@ class _ToolResultQueue:
         ) if key in tool_call}
         self.bound = bound
         self.cancelled = cancelled
+        self.single_result = single_result
+        self._result_lock = threading.Lock()
+        self._finished = False
 
     def _message(self, message):
         result = {**message, "_tool_reply_context": self.context, **self.autonomy_context}
@@ -453,9 +453,22 @@ class _ToolResultQueue:
         return result
 
     def put(self, message, *args, **kwargs):
-        if not self.cancelled():
-            self.target.put(self._message(message), *args, **kwargs)
+        with self._result_lock:
+            if not self.cancelled() and not self._finished:
+                self.target.put(self._message(message), *args, **kwargs)
+                if self.single_result:
+                    self._finished = True
 
     def put_nowait(self, message):
-        if not self.cancelled():
-            self.target.put_nowait(self._message(message))
+        with self._result_lock:
+            if not self.cancelled() and not self._finished:
+                self.target.put_nowait(self._message(message))
+                if self.single_result:
+                    self._finished = True
+
+    def finish(self, message):
+        """Deliver one terminal outcome, then reject all later tool writes."""
+        with self._result_lock:
+            if not self._finished and not self.cancelled():
+                self.target.put_nowait(self._message(message))
+            self._finished = True

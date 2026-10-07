@@ -27,7 +27,7 @@
   "notes": [
     "Live voice turns; transcripts disabled. No raw audio or spoken text saved here.",
     "Speech-end estimate adds configured 640ms silence; actual acoustic end and speaker onset were not measured.",
-    "Routing overlaps speculative inference; stage times are not additive.",
+    "Direct-audio turns do not launch speculative drafts. Text turns may overlap routing and drafts; these voice stage measurements must not be interpreted as demonstrating that overlap.",
     "GPU snapshot: RTX 3080, 97% utilization, 8976/10240 MiB, 73C. Four shared inference slots, two reserved for interactive admission."
   ]
 }

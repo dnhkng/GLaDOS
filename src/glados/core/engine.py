@@ -533,7 +533,6 @@ class Glados:
                 observability_bus=self.observability_bus,
                 command_handler=self.handle_command,
                 begin_user_turn=self._begin_user_turn,
-                turn_is_current=lambda generation: generation == self._quiet_generation,
             )
 
         self.llm_processor = LanguageModelProcessor(
