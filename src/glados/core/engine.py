@@ -180,18 +180,20 @@ class GladosConfig(BaseModel):
             GLADOS_WEBAPP_ENABLED=1 GLADOS_WEBAPP_PORT=8050 glados webapp
         """
         flag = os.environ.get("GLADOS_WEBAPP_ENABLED")
-        if flag is None:
+        host = os.environ.get("GLADOS_WEBAPP_HOST")
+        port = os.environ.get("GLADOS_WEBAPP_PORT")
+        if flag is None and not host and not port:
             return self
         base = self.webapp or WebappConfig()
         try:
-            env_port = int(os.environ.get("GLADOS_WEBAPP_PORT", ""))
+            env_port = int(port or "")
         except ValueError:
             env_port = None
         self.webapp = WebappConfig.model_validate(
             {
                 **base.model_dump(),
-                "enabled": flag.strip().lower() in ("1", "true", "yes"),
-                "host": os.environ.get("GLADOS_WEBAPP_HOST") or base.host,
+                "enabled": base.enabled if flag is None else flag.strip().lower() in ("1", "true", "yes"),
+                "host": host or base.host,
                 "port": env_port or base.port,
             }
         )
