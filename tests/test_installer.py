@@ -1,6 +1,7 @@
 """Installer planning tests; no downloads, driver changes or package installs."""
 
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -68,7 +69,7 @@ def test_install_uses_one_runtime_and_preserves_it_during_download(backend, monk
     def run(argv, **kwargs):
         calls.append(argv)
         assert kwargs["check"] is True
-        return subprocess.CompletedProcess(argv, 0)
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(["cpython", [3, 12, 8]]))
 
     monkeypatch.setattr(installer.subprocess, "run", run)
     installer.main()
@@ -79,6 +80,8 @@ def test_install_uses_one_runtime_and_preserves_it_during_download(backend, monk
     assert calls.index(removal) < calls.index(installs[0])
     assert ["uv", "run", "--no-sync", "glados", "download"] in calls
     if backend == "amd":
+        validation = next(call for call in calls if "sys.implementation.name" in call[-1])
+        assert calls.index(validation) < calls.index(removal)
         assert len(installs) == 2
         assert installs[0][-1].startswith("https://repo.radeon.com/")
         assert installs[1][-1] == ".[api]"
@@ -106,3 +109,50 @@ def test_install_failure_prevents_model_download(monkeypatch):
     with pytest.raises(subprocess.CalledProcessError):
         installer.main()
     assert not any("download" in call for call in calls)
+
+
+@pytest.mark.parametrize(
+    "implementation,version,compatible",
+    [
+        ("cpython", [3, 12, 0], True),
+        ("cpython", [3, 12, 11], True),
+        ("cpython", [3, 13, 0], False),
+        ("cpython", [3, 11, 9], False),
+        ("pypy", [3, 12, 0], False),
+    ],
+)
+def test_amd_interpreter_compatibility(implementation, version, compatible, monkeypatch):
+    env = {"VIRTUAL_ENV": "/selected/.venv"}
+
+    def run(argv, **kwargs):
+        assert argv[:2] == ["/selected/.venv/bin/python", "-c"]
+        assert kwargs["env"] == env
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps([implementation, version]))
+
+    monkeypatch.setattr(installer.subprocess, "run", run)
+    if compatible:
+        installer.validate_amd_python("/selected/.venv/bin/python", env)
+    else:
+        with pytest.raises(ValueError, match="AMD wheels require CPython 3.12"):
+            installer.validate_amd_python("/selected/.venv/bin/python", env)
+
+
+def test_incompatible_amd_interpreter_preserves_runtime_packages(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["install.py", "--backend", "amd"])
+    monkeypatch.setattr(installer, "detect_rocm_version", lambda: "7.2.1")
+    monkeypatch.setattr(installer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(installer.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(installer.os, "chdir", lambda path: None)
+    monkeypatch.setattr(installer, "install_uv", lambda: None)
+    monkeypatch.setattr(installer, "uv_command", lambda: ["uv"])
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(["cpython", [3, 13, 0]]))
+
+    monkeypatch.setattr(installer.subprocess, "run", run)
+    with pytest.raises(SystemExit) as error:
+        installer.main()
+    assert error.value.code == 2
+    assert not any("pip" in call or "download" in call for call in calls)

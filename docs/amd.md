@@ -65,7 +65,10 @@ runtime with `uv sync --extra cpu` or `uv sync --extra cuda`: these packages
 share the `onnxruntime` module and can overwrite one another. To update an AMD
 installation, rerun the installer with the same backend and ROCm release.
 
-The installer preserves an existing virtual environment during updates.
+The installer preserves an existing virtual environment during updates and
+checks that its interpreter is CPython 3.12 before replacing runtime packages.
+Any 3.12 patch release is compatible; other Python versions or implementations
+are rejected for the AMD wheel.
 When switching backends, it removes the previous ONNX Runtime
 distribution before installing the selected one. It stops on package or
 verification failures instead of proceeding to model download after a failed

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from pathlib import Path
 import platform
@@ -58,6 +59,22 @@ def amd_wheel_url(version: str | None) -> str:
         )
     filename = AMD_WHEELS[version] + "-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
     return f"https://repo.radeon.com/rocm/manylinux/rocm-rel-{version}/{filename}"
+
+
+def validate_amd_python(venv_python: str, env: dict[str, str]) -> None:
+    """Check the selected interpreter against the vendor wheel's cp312 ABI."""
+    probe = (
+        "import json, sys; "
+        "print(json.dumps([sys.implementation.name, list(sys.version_info[:3])]))"
+    )
+    result = subprocess.run([venv_python, "-c", probe], env=env, check=True, capture_output=True, text=True)
+    implementation, version = json.loads(result.stdout)
+    if implementation != "cpython" or version[:2] != [3, 12]:
+        actual = ".".join(map(str, version))
+        raise ValueError(
+            f"AMD wheels require CPython 3.12 (any patch release); got {implementation} {actual}. "
+            "Create a compatible .venv or use --backend cpu. No runtime packages have been replaced."
+        )
 
 
 def is_uv_installed() -> bool:
@@ -171,6 +188,12 @@ def main() -> None:
     env = os.environ.copy()
     env["PATH"] = f"{os.path.abspath(venv_bin)}:{env['PATH']}"
     env["VIRTUAL_ENV"] = os.path.abspath(".venv")
+    venv_python = str(Path(venv_bin) / ("python.exe" if os.name == "nt" else "python"))
+    if backend == "amd":
+        try:
+            validate_amd_python(venv_python, env)
+        except ValueError as error:
+            parser.error(str(error))
     # These distributions all provide the same Python module. Remove the old
     # backend before installing another one to avoid overlapping package files.
     subprocess.run([*uv_command(), "pip", "uninstall", *ONNX_PACKAGES], env=env, check=True)
@@ -179,7 +202,6 @@ def main() -> None:
     project = f".[{','.join(extras)}]" if extras else "."
     subprocess.run([*uv_command(), "pip", "install", "-e", project], env=env, check=True)
 
-    venv_python = str(Path(venv_bin) / ("python.exe" if os.name == "nt" else "python"))
     probe = "import onnxruntime as ort; p = ort.get_available_providers(); print('Available ONNX providers:', p)"
     if backend == "amd":
         probe += "; assert 'MIGraphXExecutionProvider' in p, 'AMD runtime is missing MIGraphX; check ROCm installation'"
