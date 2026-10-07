@@ -307,6 +307,48 @@ It can choose a reply, an intentional silence or an available action. Text
 replies may be drafted in parallel when capacity is free; direct-audio drafts
 remain disabled. Model-server capabilities determine which optimizations apply.
 
+### Jev-style routing during speech input
+
+Jev-style routing uses the conversation model as a constrained classifier, rather
+than loading a separate routing model. Each decision stage assigns single-token
+letters such as `A`, `B` and `C` to the available choices. A compatible llama.cpp
+server returns their probabilities after softmax; GLaDOS normalizes the option
+scores and checks both confidence and the margin over the next choice. A tool
+route can require several stages: capability, service, then a saved action.
+
+```mermaid
+flowchart TD
+    mic["Microphone audio"] --> vad["VAD buffers speech<br/>416 ms silence completes a turn"]
+    vad --> mode{"Voice input mode"}
+    mode -->|Default| audio["E4B direct audio<br/>No transcript required"]
+    mode -->|Extended| asr["Parakeet transcript"]
+    audio --> router["Jev-style routing on the conversation model<br/>Stable instructions and option list first<br/>Recent context and current input last"]
+    asr --> router
+    asr -. "When a spare slot is available" .-> draft["Speculative Central Core draft<br/>Runs alongside routing"]
+    router --> scores["One generated option token per stage<br/>Option probabilities from llama.cpp"]
+    scores --> gate{"Confidence and margin sufficient?"}
+    gate -->|No| assist["Cancel draft; Central interprets the request<br/>No action authorized by classifier"]
+    gate -->|Yes| choice{"Selected route"}
+    choice -->|Ignore or quiet| silence["No spoken reply<br/>Cancel any speculative draft"]
+    choice -->|Reply| reply["Central Core answers<br/>Reuse a compatible draft, otherwise generate"]
+    choice -->|Capability or action| tool["Cancel draft; refine route if needed<br/>Execute validated saved tool arguments<br/>or ask Central to plan within tool scope"]
+    tool --> result["Tool result enters context"]
+    result --> reply
+    assist --> reply
+    draft -. "Used only for a compatible reply route" .-> reply
+    reply --> tts["Stream speech chunks to TTS<br/>Emotion markers drive the avatar"]
+    tts --> output["Speaker playback"]
+    resume["User resumes before reply delivery"] -.-> cancel["Invalidate pending reply<br/>Extend the captured utterance"]
+    cancel -.-> vad
+    cancel -. "Cancel stale routing, draft and response" .-> router
+```
+
+The one-token limit applies to each routing decision's output. Audio encoding and
+prompt processing still take time. Direct-audio turns currently route before
+Central generates a reply; only transcript-based turns can overlap a speculative
+draft. Background cores yield new inference work during the interaction, while
+the Routing Core keeps its reserved access to the shared scheduler.
+
 Speech capture uses 32 ms VAD chunks and a 416 ms silence gap. If the user resumes
 before the pending response begins delivery, the new speech can extend that turn
 and invalidate the pending response. Interruption also stops playback when
