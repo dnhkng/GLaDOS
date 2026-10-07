@@ -14,6 +14,7 @@ from ..autonomy.task_manager import TaskResult
 from ..mcp import MCPManager
 from ..observability import ObservabilityBus, trim_message
 from ..tools import all_tools, tool_classes
+from .tool_invocation import ToolInvocation
 
 # Callback signature: (event_type: str, tool_name: str) -> None
 ToolEventCallback = Callable[[str, str], None]
@@ -87,307 +88,322 @@ class ToolExecutor:
     def _search_failed(result: str) -> bool:
         return ToolExecutor._search_status(result) in {"error", "cancelled"}
 
-    def run(self) -> None:
-        """
-        Starts the main loop for the ToolExecutor thread.
+    def _prepare_call(self, call: ToolInvocation) -> bool:
+        call.generation = call.tool_call.get("_quiet_generation", self._quiet_generation())
+        if self._quiet_mode() or call.generation != self._quiet_generation():
+            return False
+        if not self.processing_active_event.is_set():  # Check if we were interrupted before starting
+            logger.info("ToolExecutor: Interruption signal active, discarding tool call.")
+            return False
 
-        This method continuously checks the tool calls queue for tool calls to
-        run. It processes the tool arguments, sends them to the tool and
-        streams the response. The thread will run until the shutdown event is
-        set, at which point it will exit gracefully.
-        """
-        logger.info("ToolExecutor thread started.")
-        while not self.shutdown_event.is_set():
-            generation = None
-            autonomy_mode = False
+        logger.info(f"ToolExecutor: Received tool call: '{call.tool_call}'")
+        call.tool = call.tool_call["function"]["name"]
+        logger.success("ToolExecutor: executing {}", call.tool)
+        call.tool_call_id = call.tool_call["id"]
+        call.started_at = time.perf_counter()
+        call.autonomy_mode = bool(call.tool_call.get("autonomy", False))
+        call.autonomy_epoch = call.tool_call.get("_autonomy_generation", self._autonomy_generation())
+        if call.autonomy_mode and (not self._autonomy_enabled() or call.autonomy_epoch != self._autonomy_generation()):
+            return False
+        call.cancelled = lambda g=call.generation, a=call.autonomy_epoch, mode=call.autonomy_mode: (
+            self.shutdown_event.is_set() or self._quiet_mode() or g != self._quiet_generation()
+            or (mode and (not self._autonomy_enabled() or a != self._autonomy_generation()))
+        )
+        call.autonomy_flag = {"autonomy": True} if call.autonomy_mode else {}
+        call.base_queue = self.llm_queue_autonomy if call.autonomy_mode else self.llm_queue_priority
+        call.lane = "autonomy" if call.autonomy_mode else "priority"
+        call.llm_queue = self._wrap_llm_queue(call.base_queue) if call.autonomy_mode else call.base_queue
+        permit = call.tool_call.get("_decision_permit")
+        if permit:
+            if self.decision_store is None or not self.decision_store.authorize(permit):
+                call.base_queue.put({"role": "tool", "tool_call_id": call.tool_call_id,
+                                "content": "Action cancelled: its decision settings changed. Ask the user to retry.",
+                                "_allow_tools": False, "_quiet_generation": call.generation})
+                return False
+        routing_permit = call.tool_call.get("_routing_permit")
+        if routing_permit and (self.decision_store is None
+                               or not self.decision_store.authorize_scope(routing_permit, call.tool)):
+            call.base_queue.put({"role": "tool", "tool_call_id": call.tool_call_id,
+                            "content": "Action cancelled: its routing settings or available tools changed.",
+                            "_allow_tools": False, "_quiet_generation": call.generation})
+            return False
+        call.llm_queue = _ToolResultQueue(call.llm_queue, call.tool_call, bound=bool(permit or routing_permit or call.tool_call.get("_read_only_tools")),
+            cancelled=call.cancelled)
+        if self._observability_bus:
+            self._observability_bus.emit(
+                source="tool",
+                kind="start",
+                message=call.tool,
+                meta={"tool_call_id": call.tool_call_id, "autonomy": call.autonomy_mode},
+            )
+
+        try:
+            raw_args = call.tool_call["function"]["arguments"]
+            if isinstance(raw_args, str):
+                call.args = json.loads(raw_args)
+            else:
+                call.args = raw_args
+        except json.JSONDecodeError:
+            logger.trace(
+                "ToolExecutor: Failed to parse non-JSON tool call args: "
+                f"{call.tool_call['function']['arguments']}"
+            )
+            call.args = {}
+
+        return True
+
+    def _execute_search(self, call: ToolInvocation, tasks) -> None:
+        background_search = self._autonomy_enabled() and not call.autonomy_mode
+        search_cancelled = threading.Event()
+        slot_id = "task_search_" + uuid.uuid4().hex[:10]
+        query = str(call.args.get("query") or call.args.get("search_query") or call.args.get("objective") or "Web search")[:160]
+        def search_result(tool_name: str = call.tool, parameters: dict = call.args,
+                          requested_query: str = query, call_id: str = call.tool_call_id,
+                          task_id: str = slot_id, request_cancelled: Callable[[], bool] = call.cancelled,
+                          cancel_event: threading.Event = search_cancelled,
+                          background: bool = background_search) -> TaskResult:
+            search_started = time.perf_counter()
             try:
-                tool_call = self.tool_calls_queue.get(timeout=self.pause_time)
-                generation = tool_call.get("_quiet_generation", self._quiet_generation())
-                if self._quiet_mode() or generation != self._quiet_generation():
-                    continue
-                if not self.processing_active_event.is_set():  # Check if we were interrupted before starting
-                    logger.info("ToolExecutor: Interruption signal active, discarding tool call.")
-                    continue
-
-                logger.info(f"ToolExecutor: Received tool call: '{tool_call}'")
-                tool = tool_call["function"]["name"]
-                logger.success("ToolExecutor: executing {}", tool)
-                tool_call_id = tool_call["id"]
-                started_at = time.perf_counter()
-                autonomy_mode = bool(tool_call.get("autonomy", False))
-                autonomy_epoch = tool_call.get("_autonomy_generation", self._autonomy_generation())
-                if autonomy_mode and (not self._autonomy_enabled() or autonomy_epoch != self._autonomy_generation()):
-                    continue
-                cancelled = lambda g=generation, a=autonomy_epoch, mode=autonomy_mode: (
-                    self.shutdown_event.is_set() or self._quiet_mode() or g != self._quiet_generation()
-                    or (mode and (not self._autonomy_enabled() or a != self._autonomy_generation()))
-                )
-                autonomy_flag = {"autonomy": True} if autonomy_mode else {}
-                base_queue = self.llm_queue_autonomy if autonomy_mode else self.llm_queue_priority
-                lane = "autonomy" if autonomy_mode else "priority"
-                llm_queue = self._wrap_llm_queue(base_queue) if autonomy_mode else base_queue
-                permit = tool_call.get("_decision_permit")
-                if permit:
-                    if self.decision_store is None or not self.decision_store.authorize(permit):
-                        base_queue.put({"role": "tool", "tool_call_id": tool_call_id,
-                                        "content": "Action cancelled: its decision settings changed. Ask the user to retry.",
-                                        "_allow_tools": False, "_quiet_generation": generation})
-                        continue
-                routing_permit = tool_call.get("_routing_permit")
-                if routing_permit and (self.decision_store is None
-                                       or not self.decision_store.authorize_scope(routing_permit, tool)):
-                    base_queue.put({"role": "tool", "tool_call_id": tool_call_id,
-                                    "content": "Action cancelled: its routing settings or available tools changed.",
-                                    "_allow_tools": False, "_quiet_generation": generation})
-                    continue
-                llm_queue = _ToolResultQueue(llm_queue, tool_call, bound=bool(permit or routing_permit or tool_call.get("_read_only_tools")),
-                    cancelled=cancelled)
+                core = self.tool_config.get("search_agent")
+                result = (core.research(parameters,
+                                      cancelled=lambda: cancel_event.is_set() or self.shutdown_event.is_set() or self._quiet_mode(),
+                                      context_current=lambda: not request_cancelled(), task_id=task_id,
+                                      inference_lane="autonomy" if background else "priority") if core else
+                          self.mcp_manager.call_tool(tool_name, parameters, timeout=self.tool_timeout))
+            except Exception:
                 if self._observability_bus:
-                    self._observability_bus.emit(
-                        source="tool",
-                        kind="start",
-                        message=tool,
-                        meta={"tool_call_id": tool_call_id, "autonomy": autonomy_mode},
-                    )
+                    self._observability_bus.emit("tool", "error", "Background web search failed",
+                        level="error", meta={"tool": tool_name, "tool_call_id": call_id,
+                                              "slot_id": task_id})
+                self._emit_tool_event("tool_failure", tool_name)
+                raise
+            failed = self._search_failed(result)
+            if self._observability_bus:
+                self._observability_bus.emit("tool", "error" if failed else "finish", tool_name,
+                    level="error" if failed else "info", meta={"tool_call_id": call_id,
+                        "slot_id": task_id, "elapsed_s": round(time.perf_counter() - search_started, 3)})
+            self._emit_tool_event("tool_failure" if failed else "tool_success", tool_name)
+            status = self._search_status(result)
+            description = {"done": "is ready", "partial": "has partial findings",
+                           "error": "failed", "cancelled": "was cancelled"}[status]
+            return TaskResult(status, "Requested web search " + description + ": " + requested_query,
+                              report=str(result), importance=0.8 if failed else 0.7,
+                              update_priority="important")
+        def search_progress(parameters: dict = call.args) -> str:
+            core = self.tool_config.get("search_agent")
+            state = core.snapshot() if core else {}
+            if state.get("requested_query", state.get("query")) == parameters.get("query"):
+                return (f"Researching {state.get('current_query', state['query'])}; "
+                        f"{state.get('sources', 0)} sources, {state.get('findings', 0)} findings")
+            return "Waiting for search results"
+        try:
+            handle = tasks.submit(slot_id, "Web search: " + query, search_result,
+                                  progress=search_progress, group="search", cancelled=search_cancelled)
+        except ValueError as exc:
+            self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                                      "content": json.dumps({"error": str(exc)})}, lane=call.lane)
+            return
+        if not background_search:
+            while not handle.future.done() and not call.cancelled():
+                self.shutdown_event.wait(.05)
+            if not call.cancelled():
+                completed = handle.future.result()
+                slot = tasks._slot_store.get_slot(slot_id)
+                tasks._slot_store.mark_handled(slot_id, slot.revision)
+                self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                    "content": completed.report or json.dumps({"status": completed.status,
+                                                            "summary": completed.summary})}, lane=call.lane)
+            return
+        self._enqueue(call.llm_queue, {
+            "role": "tool", "tool_call_id": call.tool_call_id,
+            "content": json.dumps({"status": handle.status if isinstance(handle.status, str) else "queued", "task_id": slot_id, "query": query,
+                "instruction": "Give only one short acknowledgement of the stated search status (queued or running). "
+                "Do not add commentary, camera observations, questions or invented findings. "
+                "Autonomy Core will ask Central Core to report the saved result when ready."}),
+        }, lane=call.lane)
+        if self._observability_bus:
+            self._observability_bus.emit("tool", "background", "Web search started",
+                                         meta={"slot_id": slot_id, "query": query})
+        return
 
+    def _execute_mcp(self, call: ToolInvocation) -> None:
+        if not self.mcp_manager:
+            tool_error = "error: MCP tools are unavailable"
+            logger.error(f"ToolExecutor: {tool_error}")
+            if self._observability_bus:
+                self._observability_bus.emit(
+                    source="tool",
+                    kind="error",
+                    message=tool_error,
+                    level="error",
+                    meta={"tool": call.tool, "tool_call_id": call.tool_call_id},
+                )
+            self._enqueue(
+                call.llm_queue,
+                {
+                    "role": "tool",
+                    "tool_call_id": call.tool_call_id,
+                    "content": tool_error,
+                    "type": "function_call_output",
+                    **call.autonomy_flag,
+                },
+                lane=call.lane,
+            )
+            return
+        tasks = self.tool_config.get("task_manager")
+        if call.tool == "mcp.internet_search.web_search_exa" and tasks:
+            self._execute_search(call, tasks)
+            return
+        try:
+            core = self.tool_config.get("search_agent") if call.tool == "mcp.internet_search.web_search_exa" else None
+            result = (core.research(call.args, cancelled=call.cancelled, context_current=lambda: not call.cancelled())
+                      if core else self.mcp_manager.call_tool(call.tool, call.args, timeout=self.tool_timeout))
+            if call.cancelled():
+                return
+            failed = self._search_failed(result) if core else str(result).lower().startswith("error:")
+            if self._observability_bus:
+                elapsed = time.perf_counter() - call.started_at
+                self._observability_bus.emit(
+                    source="tool",
+                    kind="error" if failed else "finish",
+                    message=call.tool,
+                    level="error" if failed else "info",
+                    meta={"tool_call_id": call.tool_call_id, "elapsed_s": round(elapsed, 3)},
+                )
+            logger.log("ERROR" if failed else "SUCCESS", "ToolExecutor: finished {}", call.tool)
+            self._emit_tool_event("tool_failure" if failed else "tool_success", call.tool)
+            self._enqueue(
+                call.llm_queue,
+                {
+                    "role": "tool",
+                    "tool_call_id": call.tool_call_id,
+                    "content": str(result),
+                    "type": "function_call_output",
+                    **call.autonomy_flag,
+                },
+                lane=call.lane,
+            )
+        except Exception as e:
+            tool_error = f"error: MCP tool '{call.tool}' failed - {e}"
+            self._emit_tool_event("tool_failure", call.tool)
+            logger.error(f"ToolExecutor: {tool_error}")
+            if self._observability_bus:
+                self._observability_bus.emit(
+                    source="tool",
+                    kind="error",
+                    message=trim_message(tool_error),
+                    level="error",
+                    meta={"tool": call.tool, "tool_call_id": call.tool_call_id},
+                )
+            self._enqueue(
+                call.llm_queue,
+                {
+                    "role": "tool",
+                    "tool_call_id": call.tool_call_id,
+                    "content": tool_error,
+                    "type": "function_call_output",
+                    **call.autonomy_flag,
+                },
+                lane=call.lane,
+            )
+        return
+
+
+    def _execute_native(self, call: ToolInvocation) -> None:
+        if not self._tool_capacity.acquire(blocking=False):
+            self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": "error: native tool capacity exhausted; earlier calls are still running"}, lane=call.lane)
+            return
+        timed_out = threading.Event()
+        result_queue = call.llm_queue
+        result_queue.single_result = True
+        result_queue.cancelled = lambda expired=timed_out, stale=call.cancelled: expired.is_set() or stale()
+        try:
+            tool_instance = tool_classes[call.tool](
+                llm_queue=result_queue,
+                tool_config={**self.tool_config, "_quiet_generation": call.generation,
+                             "_autonomy_generation": call.autonomy_epoch if call.autonomy_mode else None,
+                             "_cancelled": result_queue.cancelled},
+            )
+            future = self._tool_pool.submit(tool_instance.run, call.tool_call_id, call.args)
+        except Exception:
+            self._tool_capacity.release()
+            raise
+        future.add_done_callback(lambda done: self._tool_capacity.release())
+        try:
+            future.result(timeout=self.tool_timeout)
+            self._emit_tool_event("tool_success", call.tool)
+            if self._observability_bus:
+                self._observability_bus.emit("tool", "finish", call.tool,
+                    meta={"tool_call_id": call.tool_call_id, "elapsed_s": round(time.perf_counter() - call.started_at, 3)})
+        except FuturesTimeoutError:
+            timeout_error = f"error: tool '{call.tool}' timed out after {self.tool_timeout}s"
+            # Publish or close atomically against a concurrently finishing tool.
+            result_queue.finish({"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": timeout_error, "type": "function_call_output",
+                "_allow_tools": False, "_enqueued_at": time.time(), "_lane": call.lane})
+            timed_out.set()
+            future.cancel()
+            self._emit_tool_event("tool_timeout", call.tool)
+            if self._observability_bus:
+                self._observability_bus.emit("tool", "timeout", timeout_error, level="warning",
+                    meta={"tool": call.tool, "tool_call_id": call.tool_call_id})
+        except Exception as exc:
+            result_queue.finish({"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": f"error: tool '{call.tool}' failed - {exc}", "_allow_tools": False})
+            self._emit_tool_event("tool_failure", call.tool)
+
+    def _unknown_tool(self, call: ToolInvocation) -> None:
+        tool_error = f"error: no tool named {call.tool} is available"
+        logger.error(f"ToolExecutor: {tool_error}")
+        if self._observability_bus:
+            self._observability_bus.emit(
+                source="tool",
+                kind="error",
+                message=trim_message(tool_error),
+                level="error",
+                meta={"tool": call.tool, "tool_call_id": call.tool_call_id},
+            )
+        self._enqueue(
+            call.llm_queue,
+            {
+                "role": "tool",
+                "tool_call_id": call.tool_call_id,
+                "content": tool_error,
+                "type": "function_call_output",
+                **call.autonomy_flag,
+            },
+            lane=call.lane,
+        )
+
+    def _dispatch_call(self, call: ToolInvocation) -> None:
+        if not self._prepare_call(call):
+            return
+        if call.tool.startswith("mcp."):
+            self._execute_mcp(call)
+        elif call.tool in all_tools:
+            self._execute_native(call)
+        else:
+            self._unknown_tool(call)
+
+    def run(self) -> None:
+        """Dispatch tools without tying worker lifetime to the queue-consumer thread."""
+        logger.info("ToolExecutor thread started.")
+        try:
+            while not self.shutdown_event.is_set():
+                call = ToolInvocation()
                 try:
-                    raw_args = tool_call["function"]["arguments"]
-                    if isinstance(raw_args, str):
-                        args = json.loads(raw_args)
-                    else:
-                        args = raw_args
-                except json.JSONDecodeError:
-                    logger.trace(
-                        "ToolExecutor: Failed to parse non-JSON tool call args: "
-                        f"{tool_call['function']['arguments']}"
-                    )
-                    args = {}
-
-                if tool.startswith("mcp."):
-                    if not self.mcp_manager:
-                        tool_error = "error: MCP tools are unavailable"
-                        logger.error(f"ToolExecutor: {tool_error}")
-                        if self._observability_bus:
-                            self._observability_bus.emit(
-                                source="tool",
-                                kind="error",
-                                message=tool_error,
-                                level="error",
-                                meta={"tool": tool, "tool_call_id": tool_call_id},
-                            )
-                        self._enqueue(
-                            llm_queue,
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": tool_error,
-                                "type": "function_call_output",
-                                **autonomy_flag,
-                            },
-                            lane=lane,
-                        )
-                        continue
-                    tasks = self.tool_config.get("task_manager")
-                    if tool == "mcp.internet_search.web_search_exa" and tasks:
-                        background_search = self._autonomy_enabled() and not autonomy_mode
-                        search_cancelled = threading.Event()
-                        slot_id = "task_search_" + uuid.uuid4().hex[:10]
-                        query = str(args.get("query") or args.get("search_query") or args.get("objective") or "Web search")[:160]
-                        def search_result(tool_name: str = tool, parameters: dict = args,
-                                          requested_query: str = query, call_id: str = tool_call_id,
-                                          task_id: str = slot_id, request_cancelled: Callable[[], bool] = cancelled,
-                                          cancel_event: threading.Event = search_cancelled,
-                                          background: bool = background_search) -> TaskResult:
-                            search_started = time.perf_counter()
-                            try:
-                                core = self.tool_config.get("search_agent")
-                                result = (core.research(parameters,
-                                                      cancelled=lambda: cancel_event.is_set() or self.shutdown_event.is_set() or self._quiet_mode(),
-                                                      context_current=lambda: not request_cancelled(), task_id=task_id,
-                                                      inference_lane="autonomy" if background else "priority") if core else
-                                          self.mcp_manager.call_tool(tool_name, parameters, timeout=self.tool_timeout))
-                            except Exception:
-                                if self._observability_bus:
-                                    self._observability_bus.emit("tool", "error", "Background web search failed",
-                                        level="error", meta={"tool": tool_name, "tool_call_id": call_id,
-                                                              "slot_id": task_id})
-                                self._emit_tool_event("tool_failure", tool_name)
-                                raise
-                            failed = self._search_failed(result)
-                            if self._observability_bus:
-                                self._observability_bus.emit("tool", "error" if failed else "finish", tool_name,
-                                    level="error" if failed else "info", meta={"tool_call_id": call_id,
-                                        "slot_id": task_id, "elapsed_s": round(time.perf_counter() - search_started, 3)})
-                            self._emit_tool_event("tool_failure" if failed else "tool_success", tool_name)
-                            status = self._search_status(result)
-                            description = {"done": "is ready", "partial": "has partial findings",
-                                           "error": "failed", "cancelled": "was cancelled"}[status]
-                            return TaskResult(status, "Requested web search " + description + ": " + requested_query,
-                                              report=str(result), importance=0.8 if failed else 0.7,
-                                              update_priority="important")
-                        def search_progress(parameters: dict = args) -> str:
-                            core = self.tool_config.get("search_agent")
-                            state = core.snapshot() if core else {}
-                            if state.get("requested_query", state.get("query")) == parameters.get("query"):
-                                return (f"Researching {state.get('current_query', state['query'])}; "
-                                        f"{state.get('sources', 0)} sources, {state.get('findings', 0)} findings")
-                            return "Waiting for search results"
-                        try:
-                            handle = tasks.submit(slot_id, "Web search: " + query, search_result,
-                                                  progress=search_progress, group="search", cancelled=search_cancelled)
-                        except ValueError as exc:
-                            self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
-                                                      "content": json.dumps({"error": str(exc)})}, lane=lane)
-                            continue
-                        if not background_search:
-                            while not handle.future.done() and not cancelled():
-                                self.shutdown_event.wait(.05)
-                            if not cancelled():
-                                completed = handle.future.result()
-                                slot = tasks._slot_store.get_slot(slot_id)
-                                tasks._slot_store.mark_handled(slot_id, slot.revision)
-                                self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
-                                    "content": completed.report or json.dumps({"status": completed.status,
-                                                                            "summary": completed.summary})}, lane=lane)
-                            continue
-                        self._enqueue(llm_queue, {
-                            "role": "tool", "tool_call_id": tool_call_id,
-                            "content": json.dumps({"status": handle.status if isinstance(handle.status, str) else "queued", "task_id": slot_id, "query": query,
-                                "instruction": "Give only one short acknowledgement of the stated search status (queued or running). "
-                                "Do not add commentary, camera observations, questions or invented findings. "
-                                "Autonomy Core will ask Central Core to report the saved result when ready."}),
-                        }, lane=lane)
-                        if self._observability_bus:
-                            self._observability_bus.emit("tool", "background", "Web search started",
-                                                         meta={"slot_id": slot_id, "query": query})
-                        continue
-                    try:
-                        core = self.tool_config.get("search_agent") if tool == "mcp.internet_search.web_search_exa" else None
-                        result = (core.research(args, cancelled=cancelled, context_current=lambda: not cancelled())
-                                  if core else self.mcp_manager.call_tool(tool, args, timeout=self.tool_timeout))
-                        if cancelled():
-                            continue
-                        failed = self._search_failed(result) if core else str(result).lower().startswith("error:")
-                        if self._observability_bus:
-                            elapsed = time.perf_counter() - started_at
-                            self._observability_bus.emit(
-                                source="tool",
-                                kind="error" if failed else "finish",
-                                message=tool,
-                                level="error" if failed else "info",
-                                meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
-                            )
-                        logger.log("ERROR" if failed else "SUCCESS", "ToolExecutor: finished {}", tool)
-                        self._emit_tool_event("tool_failure" if failed else "tool_success", tool)
-                        self._enqueue(
-                            llm_queue,
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": str(result),
-                                "type": "function_call_output",
-                                **autonomy_flag,
-                            },
-                            lane=lane,
-                        )
-                    except Exception as e:
-                        tool_error = f"error: MCP tool '{tool}' failed - {e}"
-                        self._emit_tool_event("tool_failure", tool)
-                        logger.error(f"ToolExecutor: {tool_error}")
-                        if self._observability_bus:
-                            self._observability_bus.emit(
-                                source="tool",
-                                kind="error",
-                                message=trim_message(tool_error),
-                                level="error",
-                                meta={"tool": tool, "tool_call_id": tool_call_id},
-                            )
-                        self._enqueue(
-                            llm_queue,
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": tool_error,
-                                "type": "function_call_output",
-                                **autonomy_flag,
-                            },
-                            lane=lane,
-                        )
-                    continue
-
-                if tool in all_tools:
-                    if not self._tool_capacity.acquire(blocking=False):
-                        self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
-                            "content": "error: native tool capacity exhausted; earlier calls are still running"}, lane=lane)
-                        continue
-                    timed_out = threading.Event()
-                    result_queue = llm_queue
-                    result_queue.single_result = True
-                    result_queue.cancelled = lambda expired=timed_out, stale=cancelled: expired.is_set() or stale()
-                    try:
-                        tool_instance = tool_classes[tool](
-                            llm_queue=result_queue,
-                            tool_config={**self.tool_config, "_quiet_generation": generation,
-                                         "_autonomy_generation": autonomy_epoch if autonomy_mode else None,
-                                         "_cancelled": result_queue.cancelled},
-                        )
-                        future = self._tool_pool.submit(tool_instance.run, tool_call_id, args)
-                    except Exception:
-                        self._tool_capacity.release()
-                        raise
-                    future.add_done_callback(lambda done: self._tool_capacity.release())
-                    try:
-                        future.result(timeout=self.tool_timeout)
-                        self._emit_tool_event("tool_success", tool)
-                        if self._observability_bus:
-                            self._observability_bus.emit("tool", "finish", tool,
-                                meta={"tool_call_id": tool_call_id, "elapsed_s": round(time.perf_counter() - started_at, 3)})
-                    except FuturesTimeoutError:
-                        timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
-                        # Publish or close atomically against a concurrently finishing tool.
-                        result_queue.finish({"role": "tool", "tool_call_id": tool_call_id,
-                            "content": timeout_error, "type": "function_call_output",
-                            "_allow_tools": False, "_enqueued_at": time.time(), "_lane": lane})
-                        timed_out.set()
-                        future.cancel()
-                        self._emit_tool_event("tool_timeout", tool)
-                        if self._observability_bus:
-                            self._observability_bus.emit("tool", "timeout", timeout_error, level="warning",
-                                meta={"tool": tool, "tool_call_id": tool_call_id})
-                    except Exception as exc:
-                        result_queue.finish({"role": "tool", "tool_call_id": tool_call_id,
-                            "content": f"error: tool '{tool}' failed - {exc}", "_allow_tools": False})
-                        self._emit_tool_event("tool_failure", tool)
-                else:
-                    tool_error = f"error: no tool named {tool} is available"
-                    logger.error(f"ToolExecutor: {tool_error}")
-                    if self._observability_bus:
-                        self._observability_bus.emit(
-                            source="tool",
-                            kind="error",
-                            message=trim_message(tool_error),
-                            level="error",
-                            meta={"tool": tool, "tool_call_id": tool_call_id},
-                        )
-                    self._enqueue(
-                        llm_queue,
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "content": tool_error,
-                            "type": "function_call_output",
-                            **autonomy_flag,
-                        },
-                        lane=lane,
-                    )
-            except queue.Empty:
-                pass  # Normal
-            except Exception as e:
-                if generation is not None and not autonomy_mode:
-                    self._end_user_turn(generation, "tool_error")
-                logger.exception(f"ToolExecutor: Unexpected error in main run loop: {e}")
-                time.sleep(0.1)
-        self._tool_pool.shutdown(wait=False, cancel_futures=True)
+                    call.tool_call = self.tool_calls_queue.get(timeout=self.pause_time)
+                    self._dispatch_call(call)
+                except queue.Empty:
+                    pass
+                except Exception as exc:
+                    if call.generation is not None and not call.autonomy_mode:
+                        self._end_user_turn(call.generation, "tool_error")
+                    logger.exception("ToolExecutor: Unexpected error in main run loop: {}", exc)
+                    time.sleep(0.1)
+        finally:
+            self._tool_pool.shutdown(wait=False, cancel_futures=True)
         logger.info("ToolExecutor thread finished.")
 
     @staticmethod

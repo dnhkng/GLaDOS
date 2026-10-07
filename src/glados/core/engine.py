@@ -313,34 +313,7 @@ class Glados:
         health_config: HealthConfig | None = None,
         search_config: SearchConfig | None = None,
     ) -> None:
-        """
-        Initialize the Glados voice assistant with configuration parameters.
-
-        This method sets up the voice recognition system, including voice activity detection (VAD),
-        automatic speech recognition (ASR), text-to-speech (TTS), and language model processing.
-        The initialization configures various components and starts background threads for
-        processing LLM responses and TTS output.
-
-        Args:
-            asr_model (TranscriberProtocol): The ASR model for transcribing audio input.
-            tts_model (SpeechSynthesizerProtocol): The TTS model for synthesizing spoken output.
-            audio_io (AudioProtocol): The audio input/output system to use.
-            completion_url (HttpUrl): The URL for the LLM completion endpoint.
-            llm_model (str): The name of the LLM model to use.
-            api_key (str | None): API key for accessing the LLM service, if required.
-            interruptible (bool): Whether the assistant can be interrupted while speaking.
-            wake_word (str | None): Optional wake word to trigger the assistant.
-            announcement (str | None): Optional announcement to play on startup.
-            personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
-            tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
-            tool_timeout (float): Timeout in seconds for tool execution.
-            vision_config (VisionConfig | None): Optional vision configuration.
-            autonomy_config (AutonomyConfig | None): Optional autonomy configuration.
-            mcp_servers (list[MCPServerConfig] | None): Optional MCP server configurations.
-            tts_enabled (bool): Whether TTS audio output is enabled at startup.
-            asr_muted (bool): Whether ASR starts muted.
-            llm_headers (dict[str, str] | None): Extra headers for LLM requests.
-        """
+        """Wire injected models/backends, then start components in dependency order."""
         self._asr_model = asr_model
         self.started_at = time.time()
         self.quiet_event = threading.Event()
@@ -371,6 +344,39 @@ class Glados:
         self.health_agent: HealthAgent | None = None
         self.search_config = search_config or SearchConfig()
         self.search_agent: SearchAgent | None = None
+        self._init_context_and_state(personality_preprompt, vision_config, asr_muted, tts_enabled)
+
+        self._init_background_cores()
+
+        # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
+        self._stc = stc.SpokenTextConverter()
+
+        # warm up onnx ASR model, this is needed to avoid long pauses on first request
+        if self._asr_model is not None:
+            self._asr_model.transcribe_file(resource_path("data/0.wav"))
+
+        self._init_queues_and_mcp()
+
+        # Initialize audio input/output system
+        self.audio_io: AudioProtocol = audio_io
+        logger.info("Audio I/O system initialized.")
+
+        # Initialize threads for each component
+        self.component_threads: list[threading.Thread] = []
+
+        self._init_listeners()
+
+        self._init_primary_processor(llm_headers, llm_request_options, routing_config)
+
+        self._init_autonomy_processors(llm_headers, llm_request_options)
+
+        self._init_tools_and_speech()
+
+        self._init_autonomy_loop()
+
+        self._start_components()
+
+    def _init_context_and_state(self, personality_preprompt, vision_config, asr_muted, tts_enabled) -> None:
         history_path = self.autonomy_config.tokens.state_path
         self._conversation_store = ConversationStore(initial_messages=list(personality_preprompt),
                                                      path=Path(history_path) if history_path else None)
@@ -428,6 +434,8 @@ class Glados:
             global_timeout=30.0,
             phase_timeout=10.0,
         )
+
+    def _init_background_cores(self) -> None:
         # The shared task board is useful even with background autonomy disabled.
         self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
         self.context_builder.register("slots", lambda: self._format_slots(), priority=8, volatile=True)
@@ -462,13 +470,8 @@ class Glados:
                     [{"role": "system", "content": SYSTEM_PROMPT_VISION_HANDLING}] + current_messages
                 )
 
-        # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
-        self._stc = stc.SpokenTextConverter()
 
-        # warm up onnx ASR model, this is needed to avoid long pauses on first request
-        if self._asr_model is not None:
-            self._asr_model.transcribe_file(resource_path("data/0.wav"))
-
+    def _init_queues_and_mcp(self) -> None:
         # Initialize queues for inter-thread communication
         self._priority_inflight = InFlightCounter()
         self._autonomy_inflight = InFlightCounter()
@@ -491,13 +494,8 @@ class Glados:
             )
             self.mcp_manager.start()
 
-        # Initialize audio input/output system
-        self.audio_io: AudioProtocol = audio_io
-        logger.info("Audio I/O system initialized.")
 
-        # Initialize threads for each component
-        self.component_threads: list[threading.Thread] = []
-
+    def _init_listeners(self) -> None:
         self.speech_listener: SpeechListener | None = None
         self.text_listener: TextListener | None = None
         if self.input_mode in {"audio", "both"}:
@@ -516,7 +514,7 @@ class Glados:
                 asr_muted_event=self.asr_muted_event,
                 audio_state=self.audio_state,
                 on_interrupt=lambda _: self._push_emotion_event("user", "User interrupted me mid-sentence"),
-                native_audio=native_audio,
+                native_audio=self.native_audio,
                 begin_user_turn=self._begin_user_turn,
                 end_user_turn=self.inference_scheduler.end_interaction,
                 turn_is_current=lambda generation: generation == self._quiet_generation,
@@ -535,6 +533,8 @@ class Glados:
                 begin_user_turn=self._begin_user_turn,
             )
 
+
+    def _init_primary_processor(self, llm_headers, llm_request_options, routing_config) -> None:
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue_priority,
             tool_calls_queue=self.tool_calls_queue,
@@ -567,7 +567,7 @@ class Glados:
             lane="priority",
             inflight_counter=self._priority_inflight,
             inference_scheduler=self.inference_scheduler,
-            native_audio=native_audio,
+            native_audio=self.native_audio,
             request_options=llm_request_options,
         )
         self.decision_lists = DecisionListStore(
@@ -585,6 +585,8 @@ class Glados:
             recalled_topic=lambda: self.compaction_agent.recalled_topic if self.compaction_agent else None,
         )
         self.llm_processor.router = self.router
+
+    def _init_autonomy_processors(self, llm_headers, llm_request_options) -> None:
         self.autonomy_llm_processors: list[LanguageModelProcessor] = []
         # Idle workers allow the console to enable autonomy without restarting.
         autonomy_parallel_calls = max(0, self.autonomy_config.autonomy_parallel_calls)
@@ -624,6 +626,8 @@ class Glados:
                 )
             )
 
+
+    def _init_tools_and_speech(self) -> None:
         self.command_runner = SafeCommandRunner(self.observability_bus)
         self.tool_executor = ToolExecutor(
             end_user_turn=self.inference_scheduler.end_interaction,
@@ -694,6 +698,8 @@ class Glados:
             speech_animation=self.speech_animation,
         )
 
+
+    def _init_autonomy_loop(self) -> None:
         self.autonomy_ticker_thread: threading.Thread | None = None
         if self.autonomy_event_bus is not None:
             assert self.autonomy_event_bus is not None
@@ -722,6 +728,8 @@ class Glados:
                 daemon=True,
             )
 
+
+    def _start_components(self) -> None:
         # Define thread configurations with daemon settings and shutdown priorities
         # daemon=True: Can be killed without waiting (pure input, stateless)
         # daemon=False: Must be joined (has in-flight state to preserve)
@@ -814,6 +822,7 @@ class Glados:
         # Start subagents after other components are running
         if self.subagent_manager:
             self.subagent_manager.start_all()
+
 
     def _health_runtime_status(self) -> dict[str, Any]:
         """Read existing in-process status without issuing tools or inference."""
