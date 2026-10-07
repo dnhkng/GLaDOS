@@ -60,9 +60,9 @@ def test_convert_percentages(converter: SpokenTextConverter, input_text: str, ex
         ("12:00", "twelve o'clock"),
         ("9:15", "nine fifteen"),
         ("11:45", "eleven forty-five"),
-        ("3:00pm", "three p m"),
-        ("7:30AM", "seven thirty a m"),
-        ("8:05 pm", "eight oh five p m"),
+        ("3:00pm", "three in the afternoon"),
+        ("7:30AM", "seven thirty in the morning"),
+        ("8:05 pm", "eight oh five in the evening"),
     ],
 )
 def test_convert_times(converter: SpokenTextConverter, input_text: str, expected: str) -> None:
@@ -124,7 +124,7 @@ def test_convert_currency(converter: SpokenTextConverter, input_text: str, expec
     [
         ("1999", "nineteen ninety-nine"),
         ("2024", "twenty twenty-four"),
-        ("2000s", "twenty hundreds"),
+        ("2000s", "two thousands"),
         ("1805", "eighteen oh five"),
         ("1900", "nineteen hundred"),
         ("2000", "two thousand"),
@@ -186,7 +186,7 @@ def test_convert_decimal_numbers(converter: SpokenTextConverter, input_text: str
     [
         (
             "The meeting at 3:00pm on 1/1/2024 will cost $50.00.",
-            "The meeting at three p m on one/one/twenty twenty-four will cost fifty dollars.",
+            "The meeting at three in the afternoon on january first, twenty twenty-four will cost fifty dollars.",
         ),
         (
             "In 1999, the company grew by 25% and made £1000000.",
@@ -194,11 +194,11 @@ def test_convert_decimal_numbers(converter: SpokenTextConverter, input_text: str
         ),
         (
             "Temperature is 98.6° with 0.5% margin of error.",
-            "Temperature is ninety-eight point six° with zero point five percent margin of error.",
+            "Temperature is ninety-eight point six degrees with zero point five percent margin of error.",
         ),
         (
             "I am at a meeting from 9:00am to 5:00 costs $100.50.",
-            "I am at a meeting from nine a m to five o'clock costs one hundred dollars and fifty cents.",
+            "I am at a meeting from nine in the morning to five o'clock costs one hundred dollars and fifty cents.",
         ),
         ("8 is the square root of 64", "eight is the square root of sixty-four"),
         ("8^2 = 64", "eight to the power of two equals sixty-four"),
