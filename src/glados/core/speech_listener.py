@@ -313,6 +313,8 @@ class SpeechListener:
             raise ValueError("Wake word should not be None")
 
         words = text.split()
+        if not words:
+            return False
         closest_distance = min(distance(word.lower(), self.wake_word) for word in words)
         return closest_distance < self.SIMILARITY_THRESHOLD
 

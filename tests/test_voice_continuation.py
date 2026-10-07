@@ -51,6 +51,20 @@ def decode(message):
     return sf.read(io.BytesIO(base64.b64decode(message["_native_audio"][1]["input_audio"]["data"])))[0]
 
 
+@pytest.mark.parametrize("text", ["", " ", "\t\n"])
+def test_empty_transcript_does_not_trigger_wake_word(text):
+    core, _, _ = listener(native=False)
+    core.wake_word = "glados"
+    assert core._wakeword_detected(text) is False
+
+
+def test_wake_word_detection_still_matches_spoken_words():
+    core, _, _ = listener(native=False)
+    core.wake_word = "glados"
+    assert core._wakeword_detected("Hello GLaDOS") is True
+    assert core._wakeword_detected("Hello computer") is False
+
+
 def test_resumed_audio_retains_each_segment_once_and_reuses_turn_id():
     core, pending, generation = listener()
     say(core, 0.1)
