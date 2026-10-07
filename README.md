@@ -333,7 +333,10 @@ See [mcp.md](/docs/mcp.md) for configuration.
 ### GPU Setup (recommended)
 
 - **NVIDIA**: Install [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit)
-- **AMD/Intel**: Install appropriate [ONNX Runtime](https://onnxruntime.ai/docs/install/)
+- **AMD on Linux**: Install a supported ROCm release, then run
+  `python scripts/install.py --backend amd`. See the [AMD setup guide](docs/amd.md)
+  for supported releases and verification.
+- **Intel**: Install appropriate [ONNX Runtime](https://onnxruntime.ai/docs/install/)
 
 Works without GPU, just slower.
 
