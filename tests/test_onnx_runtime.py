@@ -12,6 +12,11 @@ from glados.onnx_runtime import audio_providers
         (["CPUExecutionProvider", "MIGraphXExecutionProvider"], ["MIGraphXExecutionProvider", "CPUExecutionProvider"]),
         (["ROCMExecutionProvider", "CPUExecutionProvider"], ["ROCMExecutionProvider", "CPUExecutionProvider"]),
         (["CUDAExecutionProvider", "CPUExecutionProvider"], ["CUDAExecutionProvider", "CPUExecutionProvider"]),
+        (["OpenVINOExecutionProvider", "CPUExecutionProvider"], ["OpenVINOExecutionProvider", "CPUExecutionProvider"]),
+        (
+            ["OpenVINOExecutionProvider", "MIGraphXExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
+            ["CUDAExecutionProvider", "MIGraphXExecutionProvider", "OpenVINOExecutionProvider", "CPUExecutionProvider"],
+        ),
         (
             ["MIGraphXExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
             ["CUDAExecutionProvider", "MIGraphXExecutionProvider", "CPUExecutionProvider"],

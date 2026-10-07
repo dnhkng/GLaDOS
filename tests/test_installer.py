@@ -72,6 +72,8 @@ def test_install_uses_one_runtime_and_preserves_it_during_download(backend, monk
 
     monkeypatch.setattr(installer.subprocess, "run", run)
     installer.main()
+    creation = next(call for call in calls if call[:2] == ["uv", "venv"])
+    assert "--allow-existing" in creation
     installs = [call for call in calls if call[:3] == ["uv", "pip", "install"]]
     removal = next(call for call in calls if call[:3] == ["uv", "pip", "uninstall"])
     assert calls.index(removal) < calls.index(installs[0])

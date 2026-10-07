@@ -159,7 +159,7 @@ def main() -> None:
     install_uv()
 
     # Create virtual environment
-    subprocess.run([*uv_command(), "venv", "--python", "3.12.8"], check=True)
+    subprocess.run([*uv_command(), "venv", "--allow-existing", "--python", "3.12.8"], check=True)
 
     venv_bin = ".venv\\Scripts" if os.name == "nt" else ".venv/bin"
 

@@ -65,7 +65,8 @@ runtime with `uv sync --extra cpu` or `uv sync --extra cuda`: these packages
 share the `onnxruntime` module and can overwrite one another. To update an AMD
 installation, rerun the installer with the same backend and ROCm release.
 
-When switching backends, the installer removes the previous ONNX Runtime
+The installer preserves an existing virtual environment during updates.
+When switching backends, it removes the previous ONNX Runtime
 distribution before installing the selected one. It stops on package or
 verification failures instead of proceeding to model download after a failed
 package installation.
