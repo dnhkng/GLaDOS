@@ -1,0 +1,521 @@
+[
+  {
+    "input": "GLaDOS, what time is it?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "time",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.9804624629093839
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.013728859433862615
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0037674625702085584
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0012966274138393422
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.0006932355261268016
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 2.5827047622054705e-05
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 1.698748697445871e-05
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 8.327437838388282e-06
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 2.1017414395234535e-07
+        }
+      ],
+      "margin": 0.9667336034755213,
+      "elapsed_ms": 180.2,
+      "dry_run": false,
+      "tool": "get_time",
+      "arguments": {}
+    },
+    "speech": [
+      "It is 8 22 AM on October 5th, 2026. Groundbreaking information, I'm sure."
+    ],
+    "elapsed_s": 0.91,
+    "tool_results": [
+      "{\"datetime\": \"2026-10-05T08:22:36.909284+02:00\", \"time\": \"08:22:36\", \"date\": \"2026-10-05\", \"timezone\": \"CEST\", \"utc_offset\": \"+0200\", \"source\": \"system clock\"}"
+    ],
+    "commands": []
+  },
+  {
+    "input": "What is the time now?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "time",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.9964386660695792
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0017157030249024734
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0008921346018175649
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.0008442050758152964
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 8.60871573233463e-05
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 8.103966917439633e-06
+        },
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 7.723071451951662e-06
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 7.284328031634217e-06
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 9.27041610792061e-08
+        }
+      ],
+      "margin": 0.9947229630446768,
+      "elapsed_ms": 159.0,
+      "dry_run": false,
+      "tool": "get_time",
+      "arguments": {}
+    },
+    "speech": [
+      "It is 8 22 AM on October 5th, 2026. ",
+      "Groundbreaking information, I'm sure."
+    ],
+    "elapsed_s": 1.37,
+    "tool_results": [
+      "{\"datetime\": \"2026-10-05T08:22:37.815230+02:00\", \"time\": \"08:22:37\", \"date\": \"2026-10-05\", \"timezone\": \"CEST\", \"utc_offset\": \"+0200\", \"source\": \"system clock\"}"
+    ],
+    "commands": []
+  },
+  {
+    "input": "GLaDOS, run the uptime command.",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_uptime",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.9777101927278009
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.01140000956716254
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.0040089306638593876
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.003230914258192935
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0023220856799717276
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.0010053754140098995
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.0002186036447720916
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 8.357551314242433e-05
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 2.0312531088075215e-05
+        }
+      ],
+      "margin": 0.9663101831606383,
+      "elapsed_ms": 213.3,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "uptime"
+      }
+    },
+    "speech": [
+      "Oh, look.",
+      " The system has been running for a rather impressive amount of time.",
+      " It's been up for one week, four days, twenty-two hours, fifty-nine minutes.",
+      " Don't strain yourself trying to keep up."
+    ],
+    "elapsed_s": 1.25,
+    "tool_results": [
+      "{\"task\": \"uptime\", \"label\": \"System uptime\", \"command\": [\"/usr/bin/uptime\", \"-p\"], \"source\": \"assistant\", \"started_at\": 1791181359.26388, \"ok\": true, \"exit_code\": 0, \"stdout\": \"up 1 week, 4 days, 22 hours, 59 minutes\\n\", \"stderr\": \"\", \"elapsed_ms\": 3.0}"
+    ],
+    "commands": [
+      {
+        "task": "uptime",
+        "label": "System uptime",
+        "command": [
+          "/usr/bin/uptime",
+          "-p"
+        ],
+        "source": "assistant",
+        "started_at": 1791181359.26388,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "up 1 week, 4 days, 22 hours, 59 minutes\n",
+        "stderr": "",
+        "elapsed_ms": 3.0
+      }
+    ]
+  },
+  {
+    "input": "GLaDOS, how long has this computer been running?",
+    "spoken": true,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_uptime",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.9907675894286321
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.007385086668823511
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.0006910727764168082
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.0004664986004025441
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 0.0003558124849909103
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.00025246673390563
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 5.7013504781982426e-05
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 1.908708128686882e-05
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 5.372720759611812e-06
+        }
+      ],
+      "margin": 0.9833825027598085,
+      "elapsed_ms": 174.1,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "uptime"
+      }
+    },
+    "speech": [
+      "Oh, look.",
+      " The system has been running for a whole week, four days, and twenty-two hours.",
+      " Groundbreaking.",
+      " What profound insight did you hope to gain from that?"
+    ],
+    "elapsed_s": 1.11,
+    "tool_results": [
+      "{\"task\": \"uptime\", \"label\": \"System uptime\", \"command\": [\"/usr/bin/uptime\", \"-p\"], \"source\": \"assistant\", \"started_at\": 1791181360.502245, \"ok\": true, \"exit_code\": 0, \"stdout\": \"up 1 week, 4 days, 22 hours, 59 minutes\\n\", \"stderr\": \"\", \"elapsed_ms\": 3.2}"
+    ],
+    "commands": [
+      {
+        "task": "uptime",
+        "label": "System uptime",
+        "command": [
+          "/usr/bin/uptime",
+          "-p"
+        ],
+        "source": "assistant",
+        "started_at": 1791181360.502245,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "up 1 week, 4 days, 22 hours, 59 minutes\n",
+        "stderr": "",
+        "elapsed_ms": 3.2
+      }
+    ]
+  },
+  {
+    "input": "Use run_safe_command to check the system uptime.",
+    "spoken": false,
+    "transcripts": false,
+    "action": "tool",
+    "routing": {
+      "list_id": "speech",
+      "revision": 1,
+      "option_id": "command_uptime",
+      "action": "tool",
+      "accepted": true,
+      "scores": [
+        {
+          "label": "F",
+          "id": "command_uptime",
+          "description": "Read system uptime: how long this computer has been running since boot",
+          "action": "tool",
+          "probability": 0.9939691490000915
+        },
+        {
+          "label": "C",
+          "id": "time",
+          "description": "Request the current LOCAL time or date (no other timezone specified)",
+          "action": "tool",
+          "probability": 0.002412520132124788
+        },
+        {
+          "label": "G",
+          "id": "command_disk_usage",
+          "description": "Read available disk space or storage usage on this computer",
+          "action": "tool",
+          "probability": 0.0010541933658291271
+        },
+        {
+          "label": "A",
+          "id": "ignore",
+          "description": "Background speech clearly not addressed to GLaDOS; no reply needed",
+          "action": "ignore",
+          "probability": 0.001035358297955737
+        },
+        {
+          "label": "I",
+          "id": "command_system_info",
+          "description": "Read the operating system and kernel version of this computer",
+          "action": "tool",
+          "probability": 0.0005647082617540782
+        },
+        {
+          "label": "B",
+          "id": "reply",
+          "description": "Ordinary conversation, question or story addressed to GLaDOS; no external tool needed",
+          "action": "reply",
+          "probability": 0.00045135277039373353
+        },
+        {
+          "label": "E",
+          "id": "plan",
+          "description": "A request requiring another tool, non-local time, variable arguments or multiple actions",
+          "action": "plan",
+          "probability": 0.0003927469104849866
+        },
+        {
+          "label": "D",
+          "id": "clarify",
+          "description": "Ambiguous or incomplete command; ask what the user means",
+          "action": "clarify",
+          "probability": 8.662592938790499e-05
+        },
+        {
+          "label": "H",
+          "id": "command_memory_usage",
+          "description": "Read this computer RAM or memory usage",
+          "action": "tool",
+          "probability": 3.334533197820484e-05
+        }
+      ],
+      "margin": 0.9915566288679667,
+      "elapsed_ms": 163.5,
+      "dry_run": false,
+      "tool": "run_safe_command",
+      "arguments": {
+        "task": "uptime"
+      }
+    },
+    "speech": [
+      "Oh, look.",
+      " The system has been running for a whole week, four days, and twenty-two hours.",
+      " Groundbreaking.",
+      " I'm sure that's exactly what you wanted to know."
+    ],
+    "elapsed_s": 1.09,
+    "tool_results": [
+      "{\"task\": \"uptime\", \"label\": \"System uptime\", \"command\": [\"/usr/bin/uptime\", \"-p\"], \"source\": \"assistant\", \"started_at\": 1791181361.6057773, \"ok\": true, \"exit_code\": 0, \"stdout\": \"up 1 week, 4 days, 22 hours, 59 minutes\\n\", \"stderr\": \"\", \"elapsed_ms\": 3.2}"
+    ],
+    "commands": [
+      {
+        "task": "uptime",
+        "label": "System uptime",
+        "command": [
+          "/usr/bin/uptime",
+          "-p"
+        ],
+        "source": "assistant",
+        "started_at": 1791181361.6057773,
+        "ok": true,
+        "exit_code": 0,
+        "stdout": "up 1 week, 4 days, 22 hours, 59 minutes\n",
+        "stderr": "",
+        "elapsed_ms": 3.2
+      }
+    ]
+  }
+]

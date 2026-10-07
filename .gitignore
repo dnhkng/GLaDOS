@@ -164,6 +164,7 @@ cython_debug/
 *.bin
 *.gguf
 *.onnx
+!src/glados/vision/models/face_detection_yunet_2023mar.onnx
 *.nemo
 
 # Local knowledge store
@@ -177,3 +178,29 @@ tmp/
 
 # Claude Code
 CLAUDE.md
+
+# Local routing settings edited in the console
+data/decision_lists.json
+data/decision_lists.tmp
+data/vision_settings.json
+data/vision_settings.tmp
+data/search_settings.json
+data/search_settings.tmp
+data/vision_greetings.json
+data/vision_greetings.tmp
+data/search_settings.yaml
+data/search_settings.yaml.tmp
+data/vision_settings.yaml
+data/vision_settings.yaml.tmp
+data/decision_lists.yaml
+data/decision_lists.yaml.tmp
+data/preferences.yaml
+data/preferences.yaml.tmp
+data/operator_settings.yaml
+data/operator_settings.yaml.tmp
+
+
+
+# Local profile and macOS resource forks
+/glados_config.yaml
+._*

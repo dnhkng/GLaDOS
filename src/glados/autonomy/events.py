@@ -2,14 +2,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class VisionUpdateEvent:
-    description: str
-    prev_description: str | None
-    change_score: float
-    captured_at: float
-
-
-@dataclass(frozen=True)
 class TimeTickEvent:
     ticked_at: float
 
@@ -25,3 +17,6 @@ class TaskUpdateEvent:
     importance: float | None = None
     confidence: float | None = None
     next_run: float | None = None
+    attention_key: str | None = None
+    update_priority: str | None = None
+    revision: int = 0

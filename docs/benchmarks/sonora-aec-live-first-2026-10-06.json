@@ -1,0 +1,91 @@
+{
+  "timestamp": "2026-10-06T11:15:40.433316+00:00",
+  "sonora_revision": "413f64e7404529aaae6980613527f0d6acb21ce7",
+  "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39",
+  "render_sha256": "f4907d1c8c487c1cecb237dbcb511a841502f46a49a816b9d97596ea61b79370",
+  "synthetic_setup": "40s, GLaDOS playback repeated; data/0.wav near speech at 15-30s; linear echo taps .60/.20/.10 at delay/+30/+80ms; no added noise or clock drift; auto delay",
+  "work_dir": "/tmp/glados-sonora-test-20261006",
+  "vad_threshold": 0.8,
+  "offline": [],
+  "live": {
+    "input_device": {
+      "name": "UGREEN Camera 2K: USB Audio (hw:4,0)",
+      "index": 9,
+      "hostapi": 0,
+      "max_input_channels": 2,
+      "max_output_channels": 0,
+      "default_low_input_latency": 0.008684807256235827,
+      "default_low_output_latency": -1.0,
+      "default_high_input_latency": 0.034829931972789115,
+      "default_high_output_latency": -1.0,
+      "default_samplerate": 44100.0
+    },
+    "output_device": {
+      "name": "default",
+      "index": 13,
+      "hostapi": 0,
+      "max_input_channels": 64,
+      "max_output_channels": 64,
+      "default_low_input_latency": 0.008684807256235827,
+      "default_low_output_latency": 0.008684807256235827,
+      "default_high_input_latency": 0.034807256235827665,
+      "default_high_output_latency": 0.034807256235827665,
+      "default_samplerate": 44100.0
+    },
+    "latency_seconds": [
+      0.02,
+      0.02
+    ],
+    "callback_delay_median_ms": 36.18750000168802,
+    "callback_faults": [],
+    "seconds_recorded": 44.0,
+    "input_peak": 0.349884033203125,
+    "echo_only_reduction_db": 24.815611659396705,
+    "echo_only_raw_vad": {
+      "voiced_fraction": 0.898936170212766,
+      "longest_voiced_run_frames": 92,
+      "reaches_playback_interruption_gate": true
+    },
+    "echo_only_clean_vad": {
+      "voiced_fraction": 0.0,
+      "longest_voiced_run_frames": 0,
+      "reaches_playback_interruption_gate": false
+    },
+    "double_talk_raw_vad": {
+      "voiced_fraction": 0.963302752293578,
+      "longest_voiced_run_frames": 100,
+      "reaches_playback_interruption_gate": true
+    },
+    "double_talk_clean_vad": {
+      "voiced_fraction": 0.5779816513761468,
+      "longest_voiced_run_frames": 42,
+      "reaches_playback_interruption_gate": true
+    },
+    "near_only_raw_vad": {
+      "voiced_fraction": 0.0,
+      "longest_voiced_run_frames": 0,
+      "reaches_playback_interruption_gate": false
+    },
+    "near_only_clean_vad": {
+      "voiced_fraction": 0.0,
+      "longest_voiced_run_frames": 0,
+      "reaches_playback_interruption_gate": false
+    },
+    "timing": {
+      "aec": true,
+      "configuration": "AEC3 defaults (including high-pass); NS/AGC disabled",
+      "delay_hint_ms": 0,
+      "estimated_delay_ms": 60,
+      "frame_ms": 10,
+      "frames": 4400,
+      "internal_erle_db": 9.341958999633789,
+      "max_processing_ms": 0.279409,
+      "mean_processing_ms": 0.12511844159090912,
+      "p95_processing_ms": 0.18048,
+      "rate": 48000
+    },
+    "limitation": "Live double-talk has no clean reference; listen to recording to assess intelligibility.",
+    "participant_note": "Participant reports stopping early after hearing stop in the transition cue; near-only section invalid.",
+    "participant_listening_feedback": "Cleaned overlap replay is a bit hard to understand, but understandable; noticeably degraded."
+  }
+}

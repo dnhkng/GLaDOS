@@ -1,0 +1,54 @@
+{
+  "iterations": 2000,
+  "repeats": 7,
+  "scope": "warm text normalization only; excludes model inference",
+  "cases": {
+    "plain": {
+      "current_median_us": 8.108,
+      "baseline_median_us": 28.276,
+      "speedup": 3.488,
+      "characters": 41
+    },
+    "contractions": {
+      "current_median_us": 13.398,
+      "baseline_median_us": 29.357,
+      "speedup": 2.191,
+      "characters": 35
+    },
+    "weather": {
+      "current_median_us": 44.536,
+      "baseline_median_us": 51.044,
+      "speedup": 1.146,
+      "characters": 63
+    },
+    "currency": {
+      "current_median_us": 38.67,
+      "baseline_median_us": 64.035,
+      "speedup": 1.656,
+      "characters": 55
+    },
+    "time_and_date": {
+      "current_median_us": 30.573,
+      "baseline_median_us": 54.951,
+      "speedup": 1.797,
+      "characters": 51
+    },
+    "paragraph": {
+      "current_median_us": 566.773,
+      "baseline_median_us": 751.351,
+      "speedup": 1.326,
+      "characters": 1240
+    }
+  },
+  "measured_at": "2026-10-07T06:34:52.587469+00:00",
+  "python": "3.12.8",
+  "baseline_revision": "1714f22a2a494591347cbad8c91c56c7e6d28648",
+  "baseline_sha256": "c2948f1410ad387cdf80cc36eb29a5dfe247df089f83de53c6890bcbaf91d6bb",
+  "current_sha256": "1c2f33f4ed18454e561020e67d460dd7ad16fc15e5384d86d58b291ba7eaaa1c",
+  "new_public_regressions": {
+    "cases": 119,
+    "baseline_failures": 102,
+    "current_failures": 0,
+    "baseline_exceptions": 4
+  }
+}

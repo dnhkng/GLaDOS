@@ -72,7 +72,7 @@ def get_audio_system(
             - "sounddevice": Uses the sounddevice library for local audio I/O
             - "websocket": Network-based audio I/O (starts a WebSocket server)
         backend_options (dict | None): Backend-specific options.
-            - "sounddevice": No options are allowed.
+            - "sounddevice": input_device and output_device (index, name or None for system default).
             - "websocket" accepted options:
                 - server: listen address (default: 127.0.0.1)
                 - port: listen port (default: 5051)
@@ -93,11 +93,13 @@ def get_audio_system(
     if backend_type == "sounddevice":
         from .sounddevice_io import SoundDeviceAudioIO
 
-        if backend_options is not None:
-            raise ValueError("Sounddevice backend does not support options")
+        options = backend_options or {}
+        if set(options) - {"input_device", "output_device"}:
+            raise ValueError("Unsupported sounddevice backend option")
 
         return SoundDeviceAudioIO(
             vad_threshold=vad_threshold,
+            **options,
         )
     elif backend_type == "websocket":
         from .websocket_io import WebsocketAudioIO

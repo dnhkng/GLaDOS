@@ -18,8 +18,8 @@ from loguru import logger
 from .subagent_memory import SubagentMemory
 
 if TYPE_CHECKING:
-    from .slots import TaskSlotStore
     from ..observability import MindRegistry, ObservabilityBus
+    from .slots import TaskSlotStore
 
 
 @dataclass
@@ -53,11 +53,13 @@ class SubagentOutput:
     status: str
     summary: str
     report: str | None = None
-    notify_user: bool = True
+    notify_user: bool = False  # Compatibility for older producers; use update_priority in new code.
     importance: float | None = None
     confidence: float | None = None
     next_run: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    attention_key: str | None = None
+    update_priority: str | None = None
 
 
 class Subagent(ABC):
@@ -85,6 +87,9 @@ class Subagent(ABC):
         self._thread: threading.Thread | None = None
         self._last_tick: float = 0.0
         self._tick_count: int = 0
+        self._paused = threading.Event()
+        self._tick_requested = threading.Event()
+        self._tick_is_requested = False
         self._memory = SubagentMemory(
             agent_id=config.agent_id,
             max_entries=config.memory_max_entries,
@@ -155,17 +160,26 @@ class Subagent(ABC):
             self.on_start()
 
             # Run immediately on start if configured
-            if self._config.run_on_start:
+            if self._config.run_on_start and not self._paused.is_set():
                 self._do_tick()
 
             while not self._shutdown_event.is_set():
-                next_tick_in = self._config.loop_interval_s - (time.time() - self._last_tick)
-                if next_tick_in > 0:
-                    if self._shutdown_event.wait(timeout=min(next_tick_in, 1.0)):
+                if self._paused.is_set() and not self._tick_requested.is_set():
+                    self._shutdown_event.wait(timeout=0.1)
+                    continue
+                next_tick_in = self._seconds_until_next_tick()
+                if next_tick_in > 0 and not self._tick_requested.is_set():
+                    self._tick_requested.wait(timeout=min(next_tick_in, 1.0))
+                    if self._shutdown_event.is_set():
                         break
                     continue
 
-                self._do_tick()
+                self._tick_is_requested = self._tick_requested.is_set()
+                self._tick_requested.clear()
+                try:
+                    self._do_tick()
+                finally:
+                    self._tick_is_requested = False
 
         except Exception as exc:
             logger.exception("Subagent %s crashed: %s", self._config.agent_id, exc)
@@ -195,6 +209,10 @@ class Subagent(ABC):
                 )
 
             logger.info("Subagent %s stopped.", self._config.agent_id)
+
+    def _seconds_until_next_tick(self) -> float:
+        """Time until scheduled work; event-driven agents may reset their deadline."""
+        return self._config.loop_interval_s - (time.time() - self._last_tick)
 
     def _do_tick(self) -> None:
         """Execute a single tick and update slot."""
@@ -227,17 +245,40 @@ class Subagent(ABC):
                 importance=output.importance,
                 confidence=output.confidence,
                 next_run=output.next_run,
+                attention_key=output.attention_key,
+                update_priority=output.update_priority,
             )
+
+    @property
+    def paused(self) -> bool:
+        return self._paused.is_set()
+
+    def set_paused(self, paused: bool) -> None:
+        """Pause future scheduled ticks; an in-progress tick may finish."""
+        if paused:
+            self._paused.set()
+        else:
+            self._paused.clear()
+
+    def request_tick(self) -> None:
+        """Queue one tick on the existing worker, including while paused."""
+        if not self.is_running:
+            raise ValueError("Mind is not running")
+        self._tick_requested.set()
 
     def write_slot(
         self,
         status: str,
         summary: str,
         report: str | None = None,
-        notify_user: bool = True,
+        notify_user: bool | None = None,
         importance: float | None = None,
         confidence: float | None = None,
         next_run: float | None = None,
+        context: str | None = None,
+        attention_key: str | None = None,
+        update_priority: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Write output to this subagent's slot."""
         self._slot_store.update_slot(
@@ -250,6 +291,10 @@ class Subagent(ABC):
             importance=importance,
             confidence=confidence,
             next_run=next_run,
+            context=context,
+            attention_key=attention_key,
+            update_priority=update_priority,
+            turn_id=turn_id,
         )
 
     def start(self) -> threading.Thread:

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-05",
+  "gaze_event_hz": 29.174652660765446,
+  "event_count": 117,
+  "slow_state_updates": 8,
+  "capture_hz": 29.8,
+  "face_tracking_hz": 29.8,
+  "caption_hz": 0.5,
+  "median_delivery_age_ms": 13.566970825195312,
+  "max_delivery_age_ms": 23.523330688476562,
+  "method": "Four-second local SSE sample; tracking data only, no images, JPEG encoding or E4B requests from gaze telemetry."
+}

@@ -140,6 +140,7 @@ class WebsocketAudioIO(AudioIO):
             maxsize=self._mic_queue_max_chunks
         )
         self._dropped_mic_chunks = 0
+        self._capture_discontinuity = threading.Event()
 
         # if audio is currently playing
         self._is_playing = False
@@ -350,8 +351,23 @@ class WebsocketAudioIO(AudioIO):
         """
         return self._sample_queue
 
+    def consume_capture_discontinuity(self) -> bool:
+        """Tell the listener to discard an utterance spanning dropped or switched input."""
+        if not self._capture_discontinuity.is_set():
+            return False
+        self._capture_discontinuity.clear()
+        return True
+
     def _clear_microphone_ownership(self) -> None:
         """Clear owner and silence state when no server task can be concurrent."""
+        if self._mic_state.current_id is not None:
+            self._capture_discontinuity.set()
+            # Buffered samples belong to the previous owner; never splice sources.
+            while True:
+                try:
+                    self._sample_queue.get_nowait()
+                except queue.Empty:
+                    break
         self._mic_state.current_id = None
         self._mic_state.silence_chunks = 0
 
@@ -383,6 +399,8 @@ class WebsocketAudioIO(AudioIO):
             # if another producer is introduced later.
             dropped_chunks += 1
 
+        if dropped_chunks:
+            self._capture_discontinuity.set()
         self._dropped_mic_chunks += dropped_chunks
         if dropped_chunks and (self._dropped_mic_chunks == 1 or self._dropped_mic_chunks % 100 == 0):
             logger.warning(
@@ -684,6 +702,8 @@ class WebsocketAudioIO(AudioIO):
                                     self._mic_state.silence_chunks = self._mic_max_silence_chunks
                             # if controlling mic is inactive and we have voice, take control
                             elif self._mic_state.inactive(self._mic_max_silence_chunks) and vad_confidence:
+                                if self._mic_state.current_id != client_id:
+                                    self._clear_microphone_ownership()
                                 self._mic_state.current_id = client_id
 
                             has_control = self._mic_state.current_id == client_id

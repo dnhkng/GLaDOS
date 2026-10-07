@@ -1,0 +1,837 @@
+{
+  "note": "Real router prompt construction and current local tool catalog; synthetic audio; no conversation history or MCP catalog. Vision left active. No tools executed. Default cache setting omitted except explicit uncached controls. Three repetitions per condition. Warm audio reuses identical synthetic recording, unlike a fresh utterance.",
+  "changed_text_common_prefix_tokens": 755,
+  "sliding_window_tokens_from_model_metadata": 512,
+  "summary": [
+    {
+      "phase": "text_uncached_root",
+      "median_elapsed_ms": 225.37,
+      "cached_tokens": [
+        0,
+        0,
+        0
+      ],
+      "processed_tokens": [
+        765,
+        765,
+        765
+      ]
+    },
+    {
+      "phase": "text_warm_root",
+      "median_elapsed_ms": 31.33,
+      "cached_tokens": [
+        764,
+        764,
+        764
+      ],
+      "processed_tokens": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "phase": "text_branch",
+      "median_elapsed_ms": 101.94,
+      "cached_tokens": [
+        603,
+        603,
+        603
+      ],
+      "processed_tokens": [
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "phase": "text_root_after_branch",
+      "median_elapsed_ms": 69.77,
+      "cached_tokens": [
+        763,
+        763,
+        763
+      ],
+      "processed_tokens": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "phase": "text_changed_text",
+      "median_elapsed_ms": 195.27,
+      "cached_tokens": [
+        248,
+        248,
+        248
+      ],
+      "processed_tokens": [
+        518,
+        518,
+        518
+      ]
+    },
+    {
+      "phase": "audio_uncached_root",
+      "median_elapsed_ms": 278.11,
+      "cached_tokens": [
+        0,
+        0,
+        0
+      ],
+      "processed_tokens": [
+        823,
+        823,
+        823
+      ]
+    },
+    {
+      "phase": "audio_warm_root",
+      "median_elapsed_ms": 30.56,
+      "cached_tokens": [
+        822,
+        822,
+        822
+      ],
+      "processed_tokens": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "phase": "audio_branch",
+      "median_elapsed_ms": 89.3,
+      "cached_tokens": [
+        661,
+        661,
+        661
+      ],
+      "processed_tokens": [
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "phase": "audio_root_after_branch",
+      "median_elapsed_ms": 83.21,
+      "cached_tokens": [
+        306,
+        821,
+        821
+      ],
+      "processed_tokens": [
+        517,
+        2,
+        2
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "phase": "text_uncached_root",
+      "elapsed_ms": 202.72,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 765,
+        "prompt_ms": 194.88,
+        "prompt_per_token_ms": 0.2547450980392157,
+        "prompt_per_second": 3925.4926108374384,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_warm_root",
+      "elapsed_ms": 58.96,
+      "timings": {
+        "cache_n": 764,
+        "prompt_n": 1,
+        "prompt_ms": 19.33,
+        "prompt_per_token_ms": 19.33,
+        "prompt_per_second": 51.733057423693744,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 764
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_branch",
+      "elapsed_ms": 101.94,
+      "timings": {
+        "cache_n": 603,
+        "prompt_n": 5,
+        "prompt_ms": 51.337,
+        "prompt_per_token_ms": 10.2674,
+        "prompt_per_second": 97.39564057112803,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 608,
+        "total_tokens": 609,
+        "prompt_tokens_details": {
+          "cached_tokens": 603
+        }
+      },
+      "repeat": 0,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "text_root_after_branch",
+      "elapsed_ms": 72.31,
+      "timings": {
+        "cache_n": 763,
+        "prompt_n": 2,
+        "prompt_ms": 34.357,
+        "prompt_per_token_ms": 17.1785,
+        "prompt_per_second": 58.21230025904474,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 763
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_changed_text",
+      "elapsed_ms": 195.27,
+      "timings": {
+        "cache_n": 248,
+        "prompt_n": 518,
+        "prompt_ms": 182.647,
+        "prompt_per_token_ms": 0.3526003861003861,
+        "prompt_per_second": 2836.071766850811,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 766,
+        "total_tokens": 767,
+        "prompt_tokens_details": {
+          "cached_tokens": 248
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_mcp"
+    },
+    {
+      "phase": "text_uncached_root",
+      "elapsed_ms": 225.37,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 765,
+        "prompt_ms": 214.139,
+        "prompt_per_token_ms": 0.2799202614379085,
+        "prompt_per_second": 3572.445934649924,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_warm_root",
+      "elapsed_ms": 31.33,
+      "timings": {
+        "cache_n": 764,
+        "prompt_n": 1,
+        "prompt_ms": 19.365,
+        "prompt_per_token_ms": 19.365,
+        "prompt_per_second": 51.639555899819264,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 764
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_branch",
+      "elapsed_ms": 105.63,
+      "timings": {
+        "cache_n": 603,
+        "prompt_n": 5,
+        "prompt_ms": 55.078,
+        "prompt_per_token_ms": 11.015600000000001,
+        "prompt_per_second": 90.78034787029303,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 608,
+        "total_tokens": 609,
+        "prompt_tokens_details": {
+          "cached_tokens": 603
+        }
+      },
+      "repeat": 1,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "text_root_after_branch",
+      "elapsed_ms": 69.03,
+      "timings": {
+        "cache_n": 763,
+        "prompt_n": 2,
+        "prompt_ms": 34.029,
+        "prompt_per_token_ms": 17.0145,
+        "prompt_per_second": 58.77339915954039,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 763
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_changed_text",
+      "elapsed_ms": 203.15,
+      "timings": {
+        "cache_n": 248,
+        "prompt_n": 518,
+        "prompt_ms": 179.144,
+        "prompt_per_token_ms": 0.34583783783783784,
+        "prompt_per_second": 2891.52860268834,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 766,
+        "total_tokens": 767,
+        "prompt_tokens_details": {
+          "cached_tokens": 248
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_mcp"
+    },
+    {
+      "phase": "text_uncached_root",
+      "elapsed_ms": 236.97,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 765,
+        "prompt_ms": 214.843,
+        "prompt_per_token_ms": 0.28084052287581696,
+        "prompt_per_second": 3560.7397029458725,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_warm_root",
+      "elapsed_ms": 30.2,
+      "timings": {
+        "cache_n": 764,
+        "prompt_n": 1,
+        "prompt_ms": 19.041,
+        "prompt_per_token_ms": 19.041,
+        "prompt_per_second": 52.518250091906935,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 764
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_branch",
+      "elapsed_ms": 87.63,
+      "timings": {
+        "cache_n": 603,
+        "prompt_n": 5,
+        "prompt_ms": 54.807,
+        "prompt_per_token_ms": 10.961400000000001,
+        "prompt_per_second": 91.22922254456547,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 608,
+        "total_tokens": 609,
+        "prompt_tokens_details": {
+          "cached_tokens": 603
+        }
+      },
+      "repeat": 2,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "text_root_after_branch",
+      "elapsed_ms": 69.77,
+      "timings": {
+        "cache_n": 763,
+        "prompt_n": 2,
+        "prompt_ms": 33.337,
+        "prompt_per_token_ms": 16.6685,
+        "prompt_per_second": 59.99340072592014,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 765,
+        "total_tokens": 766,
+        "prompt_tokens_details": {
+          "cached_tokens": 763
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "text_changed_text",
+      "elapsed_ms": 158.63,
+      "timings": {
+        "cache_n": 248,
+        "prompt_n": 518,
+        "prompt_ms": 146.812,
+        "prompt_per_token_ms": 0.28342084942084944,
+        "prompt_per_second": 3528.3219355366045,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 766,
+        "total_tokens": 767,
+        "prompt_tokens_details": {
+          "cached_tokens": 248
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_mcp"
+    },
+    {
+      "phase": "audio_uncached_root",
+      "elapsed_ms": 229.48,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 823,
+        "prompt_ms": 216.682,
+        "prompt_per_token_ms": 0.2632831105710814,
+        "prompt_per_second": 3798.1927432827833,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_warm_root",
+      "elapsed_ms": 30.56,
+      "timings": {
+        "cache_n": 822,
+        "prompt_n": 1,
+        "prompt_ms": 19.226,
+        "prompt_per_token_ms": 19.226,
+        "prompt_per_second": 52.01289919900135,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 822
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_branch",
+      "elapsed_ms": 115.02,
+      "timings": {
+        "cache_n": 661,
+        "prompt_n": 5,
+        "prompt_ms": 78.272,
+        "prompt_per_token_ms": 15.6544,
+        "prompt_per_second": 63.87980376124284,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 666,
+        "total_tokens": 667,
+        "prompt_tokens_details": {
+          "cached_tokens": 661
+        }
+      },
+      "repeat": 0,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "audio_root_after_branch",
+      "elapsed_ms": 270.79,
+      "timings": {
+        "cache_n": 306,
+        "prompt_n": 517,
+        "prompt_ms": 222.851,
+        "prompt_per_token_ms": 0.4310464216634429,
+        "prompt_per_second": 2319.935741818524,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 306
+        }
+      },
+      "repeat": 0,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_uncached_root",
+      "elapsed_ms": 293.21,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 823,
+        "prompt_ms": 268.832,
+        "prompt_per_token_ms": 0.32664884568651276,
+        "prompt_per_second": 3061.3915010117844,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_warm_root",
+      "elapsed_ms": 30.54,
+      "timings": {
+        "cache_n": 822,
+        "prompt_n": 1,
+        "prompt_ms": 19.07,
+        "prompt_per_token_ms": 19.07,
+        "prompt_per_second": 52.43838489774515,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 822
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_branch",
+      "elapsed_ms": 89.3,
+      "timings": {
+        "cache_n": 661,
+        "prompt_n": 5,
+        "prompt_ms": 54.785,
+        "prompt_per_token_ms": 10.956999999999999,
+        "prompt_per_second": 91.26585744273069,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 666,
+        "total_tokens": 667,
+        "prompt_tokens_details": {
+          "cached_tokens": 661
+        }
+      },
+      "repeat": 1,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "audio_root_after_branch",
+      "elapsed_ms": 82.51,
+      "timings": {
+        "cache_n": 821,
+        "prompt_n": 2,
+        "prompt_ms": 33.332,
+        "prompt_per_token_ms": 16.666,
+        "prompt_per_second": 60.00240009600384,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 821
+        }
+      },
+      "repeat": 1,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_uncached_root",
+      "elapsed_ms": 278.11,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 823,
+        "prompt_ms": 266.001,
+        "prompt_per_token_ms": 0.3232089914945322,
+        "prompt_per_second": 3093.973330927328,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_warm_root",
+      "elapsed_ms": 31.45,
+      "timings": {
+        "cache_n": 822,
+        "prompt_n": 1,
+        "prompt_ms": 19.444,
+        "prompt_per_token_ms": 19.444,
+        "prompt_per_second": 51.42974696564493,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 822
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    },
+    {
+      "phase": "audio_branch",
+      "elapsed_ms": 87.2,
+      "timings": {
+        "cache_n": 661,
+        "prompt_n": 5,
+        "prompt_ms": 53.113,
+        "prompt_per_token_ms": 10.6226,
+        "prompt_per_second": 94.13891137762883,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 666,
+        "total_tokens": 667,
+        "prompt_tokens_details": {
+          "cached_tokens": 661
+        }
+      },
+      "repeat": 2,
+      "action": "tool",
+      "option_id": "time"
+    },
+    {
+      "phase": "audio_root_after_branch",
+      "elapsed_ms": 83.21,
+      "timings": {
+        "cache_n": 821,
+        "prompt_n": 2,
+        "prompt_ms": 33.687,
+        "prompt_per_token_ms": 16.8435,
+        "prompt_per_second": 59.370083414967205,
+        "predicted_n": 1,
+        "predicted_ms": 0.001,
+        "predicted_per_token_ms": 0.001,
+        "predicted_per_second": 1000000.0
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 823,
+        "total_tokens": 824,
+        "prompt_tokens_details": {
+          "cached_tokens": 821
+        }
+      },
+      "repeat": 2,
+      "action": "plan",
+      "option_id": "area_system"
+    }
+  ]
+}

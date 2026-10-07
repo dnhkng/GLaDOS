@@ -18,6 +18,72 @@ from ..utils.resources import resource_path
 ort.set_default_logger_severity(4)
 
 
+# Keep contracted auxiliaries distinct from words like "cant" and "wont".
+# The prediction model often gives the wrong vowel/voicing when the apostrophe
+# is removed; these US-English entries also avoid an inference for common words.
+_NEGATIVE_CONTRACTIONS = {
+    "can't": "kˈænt",
+    "won't": "wˈoʊnt",
+    "don't": "dˈoʊnt",
+    "doesn't": "dˈʌzənt",
+    "didn't": "dˈɪdənt",
+    "isn't": "ˈɪzənt",
+    "aren't": "ˈɑːɹnt",
+    "wasn't": "wˈʌzənt",
+    "weren't": "wˈɜːɹnt",
+    "haven't": "hˈævənt",
+    "hasn't": "hˈæzənt",
+    "hadn't": "hˈædənt",
+    "couldn't": "kˈʊdənt",
+    "wouldn't": "wˈʊdənt",
+    "shouldn't": "ʃˈʊdənt",
+    "mustn't": "mˈʌsənt",
+    "needn't": "nˈiːdənt",
+    "mightn't": "mˈaɪtənt",
+    "oughtn't": "ˈɔːtənt",
+    "shan't": "ʃˈænt",
+    "ain't": "ˈeɪnt",
+}
+_APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'"})
+
+# Uppercase single-letter tokens are the converter's spelling of initialisms.
+# The word dictionary contains consonant sounds for several lowercase letters.
+_LETTER_NAMES = dict(
+    zip(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        (
+            "ˈeɪ",
+            "bˈiː",
+            "sˈiː",
+            "dˈiː",
+            "ˈiː",
+            "ˈɛf",
+            "dʒˈiː",
+            "ˈeɪtʃ",
+            "ˈaɪ",
+            "dʒˈeɪ",
+            "kˈeɪ",
+            "ˈɛl",
+            "ˈɛm",
+            "ˈɛn",
+            "ˈoʊ",
+            "pˈiː",
+            "kjˈuː",
+            "ˈɑːɹ",
+            "ˈɛs",
+            "tˈiː",
+            "jˈuː",
+            "vˈiː",
+            "dˈʌbəljuː",
+            "ˈɛks",
+            "wˈaɪ",
+            "zˈiː",
+        ),
+        strict=True,
+    )
+)
+
+
 @dataclass
 class ModelConfig:
     MODEL_PATH: Path
@@ -165,6 +231,7 @@ class Phonemizer:
         self.config = config
         self.phoneme_dict: dict[str, str] = self._load_pickle(self.config.PHONEME_DICT_PATH)
 
+        self.phoneme_dict.update(_NEGATIVE_CONTRACTIONS)
         self.phoneme_dict["glados"] = "ɡlˈædoʊs"  # Add GLaDOS to the phoneme dictionary!
 
         self.token_to_idx = self._load_pickle(self.config.TOKEN_TO_IDX_PATH)
@@ -490,8 +557,19 @@ class Phonemizer:
         """
         split_text, cleaned_words = [], set[str]()
         for text in texts:
-            cleaned_text = "".join(t for t in text if t.isalnum() or t in punc_set)
-            split = [s for s in re.split(punc_pattern, cleaned_text) if len(s) > 0]
+            text = text.translate(_APOSTROPHES)
+            cleaned_text = "".join(t for t in text if t.isalnum() or t in punc_set or t == "'")
+            split = []
+            for token in re.split(punc_pattern, cleaned_text):
+                # Preserve recognized contractions; keep legacy handling of names,
+                # possessives, quotation marks, and unknown apostrophes.
+                contraction = token.strip("'")
+                if contraction.lower() in _NEGATIVE_CONTRACTIONS:
+                    token = contraction
+                else:
+                    token = token.replace("'", "")
+                if token:
+                    split.append(token)
             split_text.append(split)
             cleaned_words.update(split)
         return split_text, cleaned_words
@@ -538,7 +616,7 @@ class Phonemizer:
         # Step 2: Collect dictionary phonemes for words and hyphenated words
         for punct in punc_set:
             self.phoneme_dict[punct] = punct
-        word_phonemes = {word: self.phoneme_dict.get(word.lower()) for word in cleaned_words}
+        word_phonemes = {word: _LETTER_NAMES.get(word) or self.phoneme_dict.get(word.lower()) for word in cleaned_words}
 
         # Step 3: If word is not in dictionary, split it into subwords
         words_to_split = [w for w in cleaned_words if word_phonemes[w] is None]

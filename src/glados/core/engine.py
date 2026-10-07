@@ -5,7 +5,8 @@ This module provides the main orchestration classes including the Glados assista
 configuration management, and component coordination.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import hashlib
 import os
 from pathlib import Path
 import queue
@@ -15,39 +16,59 @@ import time
 from typing import Any, Callable, Literal
 
 from loguru import logger
-from pydantic import BaseModel, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 import yaml
 
 from ..ASR import TranscriberProtocol, get_audio_transcriber
 from ..audio_io import AudioProtocol, get_audio_system
-from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
-from ..utils import spoken_text_converter as stc
-from ..utils.resources import resource_path
-from ..autonomy import AutonomyConfig, AutonomyLoop, ConstitutionalState, EventBus, InteractionState, SubagentConfig, SubagentManager, TaskManager, TaskSlotStore
+from ..autonomy import (
+    AutonomyConfig,
+    AutonomyLoop,
+    ConstitutionalState,
+    EventBus,
+    InteractionState,
+    SubagentConfig,
+    SubagentManager,
+    TaskManager,
+    TaskSlotStore,
+)
 from ..autonomy.agents import CompactionAgent, EmotionAgent, HackerNewsSubagent, ObserverAgent, WeatherSubagent
+from ..autonomy.agents.health_agent import HealthAgent, HealthConfig
+from ..autonomy.agents.search_agent import SearchAgent, SearchConfig
 from ..autonomy.emotion_state import EmotionEvent
 from ..autonomy.events import TimeTickEvent
 from ..autonomy.llm_client import LLMConfig
 from ..autonomy.summarization import estimate_tokens
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
+from ..tools.safe_command import SafeCommandRunner
+from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
+from ..utils import spoken_text_converter as stc
+from ..utils.resources import resource_path
 from ..vision import VisionConfig, VisionState
 from ..vision.constants import SYSTEM_PROMPT_VISION_HANDLING
+from ..webapp import WebappConfig
 from .audio_data import AudioMessage
-from .context import ContextBuilder
 from .audio_state import AudioState
+from .context import ContextBuilder
 from .conversation_store import ConversationStore
+from .decision_lists import DecisionListStore
+from .inference import InferenceConfig, InferenceScheduler
 from .knowledge_store import KnowledgeStore
 from .llm_processor import LanguageModelProcessor
-from .shutdown import ShutdownOrchestrator, ShutdownPriority
-from .store import Store, format_preferences
 from .llm_tracking import InFlightCounter
+from .native_audio import NativeAudioConfig, NativeAudioInput
+from .operator_state import OperatorState
+from .routing import DecisionRouter, RoutingConfig
+from .shutdown import ShutdownOrchestrator, ShutdownPriority
+from .speech_animation import SpeechAnimationState
 from .speech_listener import SpeechListener
+from .speech_markup import SpeechText
 from .speech_player import SpeechPlayer
+from .store import Store, format_preferences
 from .text_listener import TextListener
 from .tool_executor import ToolExecutor
 from .tts_synthesizer import TextToSpeechSynthesizer
-from .memory_context import MemoryContext
 
 try:
     logger.remove(0)
@@ -113,10 +134,16 @@ class GladosConfig(BaseModel):
     tts_enabled: bool = True
     asr_muted: bool = False
     asr_engine: str
+    native_audio: NativeAudioConfig = Field(default_factory=NativeAudioConfig)
     wake_word: str | None
     voice: str
     announcement: str | None
     llm_headers: dict[str, str] | None = None
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
+    inference: InferenceConfig = Field(default_factory=InferenceConfig)
+    health: HealthConfig = Field(default_factory=HealthConfig)
+    search: SearchConfig = Field(default_factory=SearchConfig)
+    llm_request_options: dict[str, Any] | None = None
     tui_theme: str | None = None
     personality_preprompt: list[PersonalityPrompt]
     slow_clap_audio_path: str = "data/slow-clap.mp3"
@@ -124,6 +151,16 @@ class GladosConfig(BaseModel):
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
+    webapp: WebappConfig | None = None
+
+    @model_validator(mode="after")
+    def _validate_native_audio(self) -> "GladosConfig":
+        if self.native_audio.enabled:
+            if not str(self.completion_url).rstrip("/").endswith("/v1/chat/completions"):
+                raise ValueError("Native audio requires a multimodal /v1/chat/completions endpoint (e.g. llama.cpp)")
+            if self.wake_word:
+                raise ValueError("Native audio does not support transcript-based wake words; use Parakeet mode")
+        return self
 
     @model_validator(mode="after")
     def _resolve_api_key_from_env(self) -> "GladosConfig":
@@ -134,8 +171,38 @@ class GladosConfig(BaseModel):
                 self.api_key = env_key
         return self
 
+    @model_validator(mode="after")
+    def _apply_webapp_env(self) -> "GladosConfig":
+        """Enable/configure the webapp console from GLADOS_WEBAPP_* env vars.
+
+        Lets the console be switched on without editing any YAML::
+
+            GLADOS_WEBAPP_ENABLED=1 GLADOS_WEBAPP_PORT=8050 glados webapp
+        """
+        flag = os.environ.get("GLADOS_WEBAPP_ENABLED")
+        host = os.environ.get("GLADOS_WEBAPP_HOST")
+        port = os.environ.get("GLADOS_WEBAPP_PORT")
+        if flag is None and not host and not port:
+            return self
+        base = self.webapp or WebappConfig()
+        try:
+            env_port = int(port or "")
+        except ValueError:
+            env_port = None
+        self.webapp = WebappConfig.model_validate(
+            {
+                **base.model_dump(),
+                "enabled": base.enabled if flag is None else flag.strip().lower() in ("1", "true", "yes"),
+                "host": host or base.host,
+                "port": env_port or base.port,
+            }
+        )
+        return self
+
     @classmethod
-    def from_yaml(cls, paths: str | Path | list[str] | list[Path], key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
+    def from_yaml(
+        cls, paths: str | Path | list[str] | list[Path], key_to_config: tuple[str, ...] = ("Glados",)
+    ) -> "GladosConfig":
         """
         Load a GladosConfig instance from one or more configuration files.
         Explicitly specified options in later configuration files override options specified in earlier files.
@@ -214,7 +281,6 @@ class Glados:
     """
 
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
-    NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
     DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
         {
             "role": "system",
@@ -224,7 +290,7 @@ class Glados:
 
     def __init__(
         self,
-        asr_model: TranscriberProtocol,
+        asr_model: TranscriberProtocol | None,
         tts_model: SpeechSynthesizerProtocol,
         audio_io: AudioProtocol,
         completion_url: HttpUrl,
@@ -243,58 +309,90 @@ class Glados:
         tts_enabled: bool = True,
         asr_muted: bool = False,
         llm_headers: dict[str, str] | None = None,
+        native_audio_config: NativeAudioConfig | None = None,
+        llm_request_options: dict[str, Any] | None = None,
+        inference_config: InferenceConfig | None = None,
+        routing_config: RoutingConfig | None = None,
+        health_config: HealthConfig | None = None,
+        search_config: SearchConfig | None = None,
     ) -> None:
-        """
-        Initialize the Glados voice assistant with configuration parameters.
-
-        This method sets up the voice recognition system, including voice activity detection (VAD),
-        automatic speech recognition (ASR), text-to-speech (TTS), and language model processing.
-        The initialization configures various components and starts background threads for
-        processing LLM responses and TTS output.
-
-        Args:
-            asr_model (TranscriberProtocol): The ASR model for transcribing audio input.
-            tts_model (SpeechSynthesizerProtocol): The TTS model for synthesizing spoken output.
-            audio_io (AudioProtocol): The audio input/output system to use.
-            completion_url (HttpUrl): The URL for the LLM completion endpoint.
-            llm_model (str): The name of the LLM model to use.
-            api_key (str | None): API key for accessing the LLM service, if required.
-            interruptible (bool): Whether the assistant can be interrupted while speaking.
-            wake_word (str | None): Optional wake word to trigger the assistant.
-            announcement (str | None): Optional announcement to play on startup.
-            personality_preprompt (tuple[dict[str, str], ...]): Initial personality preprompt messages.
-            tool_config (dict[str, Any] | None): Configuration for tools (e.g., audio paths).
-            tool_timeout (float): Timeout in seconds for tool execution.
-            vision_config (VisionConfig | None): Optional vision configuration.
-            autonomy_config (AutonomyConfig | None): Optional autonomy configuration.
-            mcp_servers (list[MCPServerConfig] | None): Optional MCP server configurations.
-            tts_enabled (bool): Whether TTS audio output is enabled at startup.
-            asr_muted (bool): Whether ASR starts muted.
-            llm_headers (dict[str, str] | None): Extra headers for LLM requests.
-        """
+        """Wire injected models/backends, then start components in dependency order."""
         self._asr_model = asr_model
+        self.started_at = time.time()
+        self.quiet_event = threading.Event()
+        self._quiet_lock = threading.RLock()
+        self._quiet_saved_pauses: dict[str, bool] = {}
+        self._quiet_generation = 0
+        self._autonomy_generation = 0
+        self.operator_state = OperatorState(path=resource_path("data/operator_settings.yaml"))
+        self.inference_scheduler = InferenceScheduler(inference_config)
+        native_audio = (
+            NativeAudioInput(native_audio_config) if native_audio_config and native_audio_config.enabled else None
+        )
+        self.native_audio = native_audio
         self._tts = tts_model
         self.input_mode = input_mode
         self.completion_url = completion_url
         self.llm_model = llm_model
         self.api_key = api_key
+        self.llm_request_options = dict(llm_request_options or {})
         self.interruptible = interruptible
         self.wake_word = wake_word
         self.announcement = announcement
         self.tool_config = tool_config or {}
         self.tool_timeout = tool_timeout
         self.mcp_servers = mcp_servers or []
-        self._conversation_store = ConversationStore(initial_messages=list(personality_preprompt))
-        self.vision_config = vision_config
         self.autonomy_config = autonomy_config or AutonomyConfig()
-        self.vision_state: VisionState | None = VisionState() if self.vision_config else None
-        self.vision_request_queue: queue.Queue | None = queue.Queue() if self.vision_config else None
+        self.health_config = health_config or HealthConfig()
+        self.health_agent: HealthAgent | None = None
+        self.search_config = search_config or SearchConfig()
+        self.search_agent: SearchAgent | None = None
+        self._init_context_and_state(personality_preprompt, vision_config, asr_muted, tts_enabled)
+
+        self._init_background_cores()
+
+        # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
+        self._stc = stc.SpokenTextConverter()
+
+        # warm up onnx ASR model, this is needed to avoid long pauses on first request
+        if self._asr_model is not None:
+            self._asr_model.transcribe_file(resource_path("data/0.wav"))
+
+        self._init_queues_and_mcp()
+
+        # Initialize audio input/output system
+        self.audio_io: AudioProtocol = audio_io
+        logger.info("Audio I/O system initialized.")
+
+        # Initialize threads for each component
+        self.component_threads: list[threading.Thread] = []
+
+        self._init_listeners()
+
+        self._init_primary_processor(llm_headers, llm_request_options, routing_config)
+
+        self._init_autonomy_processors(llm_headers, llm_request_options)
+
+        self._init_tools_and_speech()
+
+        self._init_autonomy_loop()
+
+        self._start_components()
+
+    def _init_context_and_state(self, personality_preprompt, vision_config, asr_muted, tts_enabled) -> None:
+        history_path = self.autonomy_config.tokens.state_path
+        self._conversation_store = ConversationStore(initial_messages=list(personality_preprompt),
+                                                     path=Path(history_path) if history_path else None)
+        self.vision_config = vision_config
+        self.vision_state: VisionState | None = VisionState() if self.vision_config and self.vision_config.enabled else None
+        self.vision_agent = None
         self.autonomy_event_bus: EventBus | None = None
         self.autonomy_loop: AutonomyLoop | None = None
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
         self.subagent_manager: SubagentManager | None = None
         self._emotion_agent: EmotionAgent | None = None
+        self.compaction_agent: CompactionAgent | None = None
         self.constitutional_state = ConstitutionalState()
         self.observability_bus = ObservabilityBus()
         self.mind_registry = MindRegistry()
@@ -306,25 +404,30 @@ class Glados:
         if not tts_enabled:
             self.tts_muted_event.set()
         self.audio_state = AudioState()
+        self.speech_animation = SpeechAnimationState(self.observability_bus)
         self.knowledge_store = KnowledgeStore(resource_path("data/knowledge.json"))
         self.preferences_store = Store[Any](
-            path=resource_path("data/preferences.json"),
+            path=resource_path("data/preferences.yaml"),
             formatter=format_preferences,
         )
 
         # Create unified context builder for LLM context injection
         self.context_builder = ContextBuilder()
+        self.context_builder.register("operator", self.operator_state.as_prompt, priority=20)
         self.context_builder.register("preferences", self.preferences_store.as_prompt, priority=10)
         self.context_builder.register("knowledge", lambda: self._format_knowledge(), priority=5)
         self.context_builder.register("constitution", self.constitutional_state.get_modifiers_prompt, priority=3)
 
-        # Register long-term memory for context injection
-        self.memory_context = MemoryContext()
-        self.context_builder.register("memory", self.memory_context.as_prompt, priority=7)
+        # Long-term recall is published by the Memory Core through its slot.
+        self.context_builder.register("emotion", self._emotion_prompt, priority=15, volatile=True)
+        self.context_builder.register("health", lambda: self.health_agent.as_prompt() if self.health_agent else None,
+                                      priority=12, volatile=True)
 
         self._command_registry, self._command_order = self._build_command_registry()
         # Initialize events for thread synchronization
-        self.processing_active_event = threading.Event()  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
+        self.processing_active_event = (
+            threading.Event()
+        )  # Indicates if input processing is active (ASR + LLM + TTS + VLM)
         self.currently_speaking_event = threading.Event()  # Indicates if the assistant is currently speaking
         self.shutdown_event = threading.Event()  # Event to signal shutdown of all threads
 
@@ -334,30 +437,32 @@ class Glados:
             global_timeout=30.0,
             phase_timeout=10.0,
         )
-        if self.autonomy_config.enabled:
-            self.autonomy_event_bus = EventBus()
-            self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
-            self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
-            # Register slots with context builder
-            self.context_builder.register("slots", lambda: self._format_slots(), priority=8)
-            if self.autonomy_config.jobs.enabled:
-                self.subagent_manager = SubagentManager(
-                    slot_store=self.autonomy_slots,
-                    mind_registry=self.mind_registry,
-                    observability_bus=self.observability_bus,
-                    shutdown_event=self.shutdown_event,
-                )
-                self._register_subagents()
 
-        if self.vision_config:
+    def _init_background_cores(self) -> None:
+        # The shared task board is useful even with background autonomy disabled.
+        self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
+        self.context_builder.register("slots", lambda: self._format_slots(), priority=8, volatile=True)
+        self.autonomy_event_bus = EventBus()
+        self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
+        if self.search_config.enabled or self.health_config.enabled or self.vision_state is not None or self.autonomy_config.emotion.enabled or self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled or (
+            self.autonomy_config.enabled and self.autonomy_config.jobs.enabled
+        ):
+            self.subagent_manager = SubagentManager(
+                slot_store=self.autonomy_slots,
+                mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus,
+                shutdown_event=self.shutdown_event,
+            )
+            self._register_subagents()
+
+        if self.vision_state is not None:
             # Add instructions to system prompt to correctly handle [vision] marked messages
             messages = self._conversation_store.snapshot()
             vision_prompt_added = False
             for i, message in enumerate(messages):
                 if message.get("role") == "system" and isinstance(message.get("content"), str):
                     self._conversation_store.modify_message(
-                        i,
-                        {"content": f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"}
+                        i, {"content": f"{message['content']} {SYSTEM_PROMPT_VISION_HANDLING}"}
                     )
                     vision_prompt_added = True
                     break
@@ -369,20 +474,18 @@ class Glados:
                 )
 
 
-        # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
-        self._stc = stc.SpokenTextConverter()
-
-        # warm up onnx ASR model, this is needed to avoid long pauses on first request
-        self._asr_model.transcribe_file(resource_path("data/0.wav"))
-
+    def _init_queues_and_mcp(self) -> None:
         # Initialize queues for inter-thread communication
+        self._priority_inflight = InFlightCounter()
         self._autonomy_inflight = InFlightCounter()
         self.llm_queue_priority: queue.Queue[dict[str, Any]] = queue.Queue()
         autonomy_queue_max = self.autonomy_config.autonomy_queue_max
         autonomy_queue_size = autonomy_queue_max if autonomy_queue_max and autonomy_queue_max > 0 else 0
         self.llm_queue_autonomy: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=autonomy_queue_size)
-        self.tool_calls_queue: queue.Queue[dict[str, Any]] = queue.Queue()  # Tool calls from LLMProcessor to ToolExecutor
-        self.tts_queue: queue.Queue[str] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
+        self.tool_calls_queue: queue.Queue[dict[str, Any]] = (
+            queue.Queue()
+        )  # Tool calls from LLMProcessor to ToolExecutor
+        self.tts_queue: queue.Queue[str | SpeechText] = queue.Queue()  # Text from LLMProcessor to TTSynthesizer
         self.audio_queue: queue.Queue[AudioMessage] = queue.Queue()  # AudioMessages from TTSSynthesizer to AudioPlayer
 
         self.mcp_manager: MCPManager | None = None
@@ -394,13 +497,8 @@ class Glados:
             )
             self.mcp_manager.start()
 
-        # Initialize audio input/output system
-        self.audio_io: AudioProtocol = audio_io
-        logger.info("Audio I/O system initialized.")
 
-        # Initialize threads for each component
-        self.component_threads: list[threading.Thread] = []
-
+    def _init_listeners(self) -> None:
         self.speech_listener: SpeechListener | None = None
         self.text_listener: TextListener | None = None
         if self.input_mode in {"audio", "both"}:
@@ -419,6 +517,10 @@ class Glados:
                 asr_muted_event=self.asr_muted_event,
                 audio_state=self.audio_state,
                 on_interrupt=lambda _: self._push_emotion_event("user", "User interrupted me mid-sentence"),
+                native_audio=self.native_audio,
+                begin_user_turn=self._begin_user_turn,
+                end_user_turn=self.inference_scheduler.end_interaction,
+                turn_is_current=lambda generation: generation == self._quiet_generation,
             )
         if self.input_mode in {"text", "both"}:
             if self.input_mode == "text":
@@ -431,8 +533,11 @@ class Glados:
                 interaction_state=self.interaction_state,
                 observability_bus=self.observability_bus,
                 command_handler=self.handle_command,
+                begin_user_turn=self._begin_user_turn,
             )
 
+
+    def _init_primary_processor(self, llm_headers, llm_request_options, routing_config) -> None:
         self.llm_processor = LanguageModelProcessor(
             llm_input_queue=self.llm_queue_priority,
             tool_calls_queue=self.tool_calls_queue,
@@ -449,16 +554,45 @@ class Glados:
             preferences_store=self.preferences_store,
             constitutional_state=self.constitutional_state,
             context_builder=self.context_builder,
-            autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
+            autonomy_system_prompt=self.autonomy_config.system_prompt,
+            autonomy_enabled=lambda: self.autonomy_config.enabled and not self.quiet_event.is_set(),
+            autonomy_generation=lambda: self._autonomy_generation,
+            on_autonomy_done=self._on_autonomy_done,
+            autonomy_request_current=self._autonomy_request_current,
+            quiet_mode=self.quiet_event.is_set,
+            set_quiet_mode=self.set_quiet_mode,
+            quiet_generation=lambda: self._quiet_generation,
+            before_reply=self._react_to_input,
+            before_context=self._clear_input_context,
             mcp_manager=self.mcp_manager,
             observability_bus=self.observability_bus,
             extra_headers=llm_headers,
             lane="priority",
+            inflight_counter=self._priority_inflight,
+            inference_scheduler=self.inference_scheduler,
+            native_audio=self.native_audio,
+            request_options=llm_request_options,
         )
+        self.decision_lists = DecisionListStore(
+            resource_path("data/decision_lists.yaml"), lambda: self.llm_processor._build_tools(False),
+            enabled=(routing_config or RoutingConfig()).enabled_for(
+                str(self.completion_url), self.llm_processor.prompt_headers),
+            backend_key=hashlib.sha256(f"{self.completion_url}|{self.llm_model}".encode()).hexdigest(),
+        )
+        self.router = DecisionRouter(
+            self.decision_lists, self.inference_scheduler, str(self.completion_url), self.llm_model,
+            self.llm_processor.prompt_headers, routing_config or RoutingConfig(),
+            self.observability_bus, self.shutdown_event,
+            mcp_catalog=self.mcp_manager.get_routing_catalog if self.mcp_manager else None,
+            health_metrics=lambda: self.health_agent.covered_metrics() if self.health_agent else set(),
+            recalled_topic=lambda: self.compaction_agent.recalled_topic if self.compaction_agent else None,
+        )
+        self.llm_processor.router = self.router
+
+    def _init_autonomy_processors(self, llm_headers, llm_request_options) -> None:
         self.autonomy_llm_processors: list[LanguageModelProcessor] = []
-        autonomy_parallel_calls = 0
-        if self.autonomy_config.enabled:
-            autonomy_parallel_calls = max(0, self.autonomy_config.autonomy_parallel_calls)
+        # Idle workers allow the console to enable autonomy without restarting.
+        autonomy_parallel_calls = max(0, self.autonomy_config.autonomy_parallel_calls)
         for _ in range(autonomy_parallel_calls):
             self.autonomy_llm_processors.append(
                 LanguageModelProcessor(
@@ -477,16 +611,35 @@ class Glados:
                     preferences_store=self.preferences_store,
                     constitutional_state=self.constitutional_state,
                     context_builder=self.context_builder,
-                    autonomy_system_prompt=self.autonomy_config.system_prompt if self.autonomy_config.enabled else None,
+                    autonomy_system_prompt=self.autonomy_config.system_prompt,
+                    autonomy_enabled=lambda: self.autonomy_config.enabled and not self.quiet_event.is_set(),
+                    autonomy_generation=lambda: self._autonomy_generation,
+                    on_autonomy_done=self._on_autonomy_done,
+                    on_autonomy_prompt=self._on_autonomy_prompt,
+                    autonomy_thinking=self.autonomy_config.decision_thinking,
+                    quiet_mode=self.quiet_event.is_set,
+                    quiet_generation=lambda: self._quiet_generation,
                     mcp_manager=self.mcp_manager,
                     observability_bus=self.observability_bus,
                     extra_headers=llm_headers,
                     lane="autonomy",
                     inflight_counter=self._autonomy_inflight,
+                    inference_scheduler=self.inference_scheduler,
+                    request_options=llm_request_options,
                 )
             )
 
+
+    def _init_tools_and_speech(self) -> None:
+        self.command_runner = SafeCommandRunner(self.observability_bus)
         self.tool_executor = ToolExecutor(
+            end_user_turn=self.inference_scheduler.end_interaction,
+            autonomy_enabled=lambda: self.autonomy_config.enabled and not self.quiet_event.is_set(),
+            autonomy_generation=lambda: self._autonomy_generation,
+            on_autonomy_done=self._on_autonomy_done,
+            quiet_mode=self.quiet_event.is_set,
+            quiet_generation=lambda: self._quiet_generation,
+            decision_store=self.decision_lists,
             llm_queue_priority=self.llm_queue_priority,
             llm_queue_autonomy=self.llm_queue_autonomy,
             tool_calls_queue=self.tool_calls_queue,
@@ -494,11 +647,14 @@ class Glados:
             shutdown_event=self.shutdown_event,
             tool_config={
                 **self.tool_config,
-                "vision_request_queue": self.vision_request_queue,
-                "vision_tool_timeout": self.tool_timeout,
+                "command_runner": self.command_runner,
+                "vision_agent": self.vision_agent,
                 "tts_queue": self.tts_queue,
                 "preferences_store": self.preferences_store,
                 "slot_store": self.autonomy_slots,
+                "task_manager": self.autonomy_tasks,
+                "search_agent": self.search_agent,
+                "memory_agent": self.compaction_agent,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
@@ -508,6 +664,11 @@ class Glados:
         )
 
         self.tts_synthesizer = TextToSpeechSynthesizer(
+            on_response_ready=self.inference_scheduler.end_interaction,
+            autonomy_enabled=lambda: self.autonomy_config.enabled,
+            autonomy_generation=lambda: self._autonomy_generation,
+            quiet_mode=self.quiet_event.is_set,
+            quiet_generation=lambda: self._quiet_generation,
             tts_input_queue=self.tts_queue,
             audio_output_queue=self.audio_queue,
             tts_model=self._tts,
@@ -519,6 +680,13 @@ class Glados:
         )
 
         self.speech_player = SpeechPlayer(
+            playback_lock=self._quiet_lock,
+            on_response_started=self.speech_listener.response_started if self.speech_listener else None,
+            on_autonomy_done=self._on_autonomy_done,
+            autonomy_enabled=lambda: self.autonomy_config.enabled,
+            autonomy_generation=lambda: self._autonomy_generation,
+            quiet_mode=self.quiet_event.is_set,
+            quiet_generation=lambda: self._quiet_generation,
             audio_io=self.audio_io,
             audio_output_queue=self.audio_queue,
             conversation_store=self._conversation_store,
@@ -530,26 +698,20 @@ class Glados:
             tts_muted_event=self.tts_muted_event,
             interaction_state=self.interaction_state,
             observability_bus=self.observability_bus,
+            speech_animation=self.speech_animation,
         )
 
-        self.vision_processor = None
-        if self.vision_config:
-            from ..vision import VisionProcessor
-            self.vision_processor = VisionProcessor(
-                vision_state=self.vision_state,
-                processing_active_event=self.processing_active_event,
-                shutdown_event=self.shutdown_event,
-                config=self.vision_config,
-                request_queue=self.vision_request_queue,
-                event_bus=self.autonomy_event_bus,
-                observability_bus=self.observability_bus,
-            )
 
+    def _init_autonomy_loop(self) -> None:
         self.autonomy_ticker_thread: threading.Thread | None = None
-        if self.autonomy_config.enabled:
+        if self.autonomy_event_bus is not None:
             assert self.autonomy_event_bus is not None
             assert self.autonomy_slots is not None
             self.autonomy_loop = AutonomyLoop(
+                quiet_mode=self.quiet_event.is_set,
+                user_busy=self._autonomy_user_busy,
+                quiet_generation=lambda: self._quiet_generation,
+                autonomy_generation=lambda: self._autonomy_generation,
                 config=self.autonomy_config,
                 event_bus=self.autonomy_event_bus,
                 interaction_state=self.interaction_state,
@@ -563,16 +725,14 @@ class Glados:
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
-            # Wire emotion agent to autonomy loop for vision events
-            if self._emotion_agent is not None:
-                self.autonomy_loop.set_emotion_agent(self._emotion_agent)
-            if not self.vision_config:
-                self.autonomy_ticker_thread = threading.Thread(
-                    target=self._run_autonomy_ticker,
-                    name="AutonomyTicker",
-                    daemon=True,
-                )
+            self.autonomy_ticker_thread = threading.Thread(
+                target=self._run_autonomy_ticker,
+                name="AutonomyTicker",
+                daemon=True,
+            )
 
+
+    def _start_components(self) -> None:
         # Define thread configurations with daemon settings and shutdown priorities
         # daemon=True: Can be killed without waiting (pure input, stateless)
         # daemon=False: Must be joined (has in-flight state to preserve)
@@ -630,13 +790,6 @@ class Glados:
                 ShutdownPriority.BACKGROUND,
                 None,
             )
-        if self.vision_processor:
-            thread_configs["VisionProcessor"] = (
-                self.vision_processor.run,
-                True,  # Can safely abandon
-                ShutdownPriority.BACKGROUND,
-                self.vision_request_queue,
-            )
         if self.autonomy_ticker_thread:
             self.component_threads.append(self.autonomy_ticker_thread)
             self.autonomy_ticker_thread.start()
@@ -673,6 +826,26 @@ class Glados:
         if self.subagent_manager:
             self.subagent_manager.start_all()
 
+
+    def _health_runtime_status(self) -> dict[str, Any]:
+        """Read existing in-process status without issuing tools or inference."""
+        state = self.inference_scheduler.snapshot()
+        now = time.time()
+        waiting = state['waiting']
+        audio = getattr(self, 'audio_io', None)
+        capture = audio.capture_health() if audio and hasattr(audio, 'capture_health') else None
+        if capture:
+            capture = {**capture, 'expected': self.input_mode in {'audio', 'both'}
+                       and not self.asr_muted_event.is_set()}
+        manager = getattr(self, 'mcp_manager', None)
+        return {'inference': {'capacity': state['capacity'], 'active': len(state['active']),
+                              'waiting': len(waiting), 'oldest_wait_s':
+                              round(max((now-r['queued_at'] for r in waiting), default=0), 1)},
+                'mcp': [{'name': server['name'], 'connected': server['connected']}
+                        for server in manager.status_snapshot()[:16]] if manager else [],
+                'audio': {key: capture.get(key) for key in ('enabled', 'expected', 'connected', 'overflows', 'recoveries')}
+                         if capture else None}
+
     def _register_subagents(self) -> None:
         """Register configured subagents with the manager."""
         if not self.subagent_manager:
@@ -685,7 +858,111 @@ class Glados:
             url=str(self.completion_url),
             api_key=self.api_key,
             model=self.llm_model,
+            request_options=self.llm_request_options,
+            scheduler=self.inference_scheduler,
+            shutdown_event=self.shutdown_event,
+            cancelled=self.quiet_event.is_set,
         )
+
+        health = getattr(self, 'health_config', None)
+        if health and health.enabled:
+            self.health_agent = HealthAgent(
+                health_config=health, completion_url=str(self.completion_url),
+                runtime_status=self._health_runtime_status, llm_config=llm_config,
+                interactive_busy=lambda: self.quiet_event.is_set() or bool(
+                    getattr(self, '_priority_inflight', None) and self._priority_inflight.value()
+                    or getattr(self, 'llm_queue_priority', None) and not self.llm_queue_priority.empty()),
+                slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
+            )
+            self.subagent_manager.register(self.health_agent)
+
+        search = getattr(self, 'search_config', None)
+        if search and search.enabled:
+            self.search_agent = SearchAgent(
+                settings=search, llm_config=llm_config,
+                settings_path=resource_path("data/search_settings.yaml"),
+                search=lambda arguments, timeout: self.mcp_manager.call_tool(
+                    "mcp.internet_search.web_search_exa", arguments, timeout=timeout),
+                slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
+            )
+            self.subagent_manager.register(self.search_agent)
+
+        # Vision stays on E4B even when conversation uses a remote API model.
+        if self.vision_state is not None and self.vision_config is not None:
+            from ..vision.vision_mind import VisionMind
+
+            vision = self.vision_config
+            self.vision_agent = VisionMind(
+                vision_config=vision,
+                llm_config=LLMConfig(
+                    url=vision.completion_url, model=vision.model, api_key=vision.api_key,
+                    timeout=vision.timeout_s, scheduler=self.inference_scheduler,
+                    shutdown_event=self.shutdown_event, owner="Vision", cancelled=self.quiet_event.is_set,
+                ),
+                vision_state=self.vision_state, slot_store=self.autonomy_slots,
+                mind_registry=self.mind_registry, observability_bus=self.observability_bus,
+                shutdown_event=self.shutdown_event,
+                settings_path=resource_path("data/vision_settings.yaml"),
+                greetings_path=resource_path("data/vision_greetings.json"),
+            )
+            self.subagent_manager.register(self.vision_agent)
+
+        # Emotional regulation is independent of background job scheduling.
+        if self.autonomy_config.emotion.enabled:
+            emotion_cfg = self.autonomy_config.emotion
+            emotion_subagent_config = SubagentConfig(
+                agent_id="emotion",
+                title="Emotion Core",
+                role="emotional_regulation",
+                loop_interval_s=emotion_cfg.tick_interval_s,
+                run_on_start=True,
+            )
+            emotion_agent = EmotionAgent(
+                config=emotion_subagent_config,
+                llm_config=replace(llm_config, owner="emotion"),
+                emotion_config=emotion_cfg,
+                slot_store=self.autonomy_slots,
+                mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus,
+                shutdown_event=self.shutdown_event,
+            )
+            self.subagent_manager.register(emotion_agent)
+            self._emotion_agent = emotion_agent  # Keep reference for event pushing
+
+        # Context maintenance is a background Mind even with autonomous speech OFF.
+        if self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled:
+            tokens = self.autonomy_config.tokens
+            threshold = tokens.token_threshold
+            if tokens.model_context_window:
+                threshold = min(threshold, int(tokens.model_context_window * tokens.target_utilization))
+            vision = self.vision_config if self.vision_config and self.vision_config.enabled else None
+            memory_llm = (
+                LLMConfig(
+                    url=vision.completion_url, model=vision.model, api_key=vision.api_key,
+                    timeout=vision.timeout_s, owner="Compaction", scheduler=self.inference_scheduler,
+                    shutdown_event=self.shutdown_event, cancelled=self.quiet_event.is_set,
+                )
+                if vision else replace(llm_config, owner="Compaction")
+            )
+            self.compaction_agent = CompactionAgent(
+                config=SubagentConfig(agent_id="compaction", title="Memory Core", role="Recall and context management",
+                                      loop_interval_s=tokens.tick_interval_s, run_on_start=True),
+                llm_config=memory_llm,
+                conversation_store=self._conversation_store, token_threshold=threshold,
+                preserve_recent=tokens.preserve_recent_messages, summary_max_tokens=tokens.summary_max_tokens,
+                summary_input_tokens=tokens.summary_input_tokens,
+                recall_config=tokens.recall, compaction_enabled=tokens.enabled,
+                interactive_busy=lambda: bool(getattr(self, "_priority_inflight", None) and
+                    (self._priority_inflight.value() or not self.llm_queue_priority.empty())) or self.quiet_event.is_set(),
+                slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
+            )
+            self.subagent_manager.register(self.compaction_agent)
+
+        if not (self.autonomy_config.enabled and jobs_config.enabled):
+            return
 
         if jobs_config.hacker_news.enabled:
             hn_config = SubagentConfig(
@@ -699,7 +976,7 @@ class Glados:
                 config=hn_config,
                 top_n=jobs_config.hacker_news.top_n,
                 min_score=jobs_config.hacker_news.min_score,
-                llm_config=llm_config,
+                llm_config=replace(llm_config, owner="hn_top"),
                 slot_store=self.autonomy_slots,
                 mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus,
@@ -725,58 +1002,13 @@ class Glados:
                     timezone=jobs_config.weather.timezone,
                     temp_change_c=jobs_config.weather.temp_change_c,
                     wind_alert_kmh=jobs_config.weather.wind_alert_kmh,
-                    llm_config=llm_config,
+                    llm_config=replace(llm_config, owner="weather"),
                     slot_store=self.autonomy_slots,
                     mind_registry=self.mind_registry,
                     observability_bus=self.observability_bus,
                     shutdown_event=self.shutdown_event,
                 )
                 self.subagent_manager.register(weather_subagent)
-
-        # Emotion agent - always registered, core to GLaDOS personality
-        emotion_cfg = self.autonomy_config.emotion
-        emotion_subagent_config = SubagentConfig(
-            agent_id="emotion",
-            title="Emotional State",
-            role="emotional_regulation",
-            loop_interval_s=emotion_cfg.tick_interval_s,
-            run_on_start=True,
-        )
-        emotion_agent = EmotionAgent(
-            config=emotion_subagent_config,
-            llm_config=llm_config,
-            emotion_config=emotion_cfg,
-            slot_store=self.autonomy_slots,
-            mind_registry=self.mind_registry,
-            observability_bus=self.observability_bus,
-            shutdown_event=self.shutdown_event,
-        )
-        self.subagent_manager.register(emotion_agent)
-        self._emotion_agent = emotion_agent  # Keep reference for event pushing
-        # Wire emotion agent to autonomy loop for vision events
-        if self.autonomy_config.enabled and self.autonomy_loop:
-            self.autonomy_loop.set_emotion_agent(emotion_agent)
-
-        # Compaction agent - monitors conversation size and compacts when needed
-        compaction_config = SubagentConfig(
-            agent_id="compaction",
-            title="Message Compaction",
-            role="context_management",
-            loop_interval_s=60.0,  # Check every minute
-            run_on_start=False,  # Wait for conversation to build up
-        )
-        compaction_agent = CompactionAgent(
-            config=compaction_config,
-            llm_config=llm_config,
-            conversation_store=self._conversation_store,
-            token_threshold=self.autonomy_config.tokens.token_threshold,
-            preserve_recent=self.autonomy_config.tokens.preserve_recent_messages,
-            slot_store=self.autonomy_slots,
-            mind_registry=self.mind_registry,
-            observability_bus=self.observability_bus,
-            shutdown_event=self.shutdown_event,
-        )
-        self.subagent_manager.register(compaction_agent)
 
         # Observer agent - monitors behavior and proposes adjustments
         observer_config = SubagentConfig(
@@ -788,7 +1020,7 @@ class Glados:
         )
         observer_agent = ObserverAgent(
             config=observer_config,
-            llm_config=llm_config,
+            llm_config=replace(llm_config, owner="observer"),
             conversation_store=self._conversation_store,
             constitutional_state=self.constitutional_state,
             sample_count=10,
@@ -842,9 +1074,9 @@ class Glados:
             Glados: A new Glados instance configured with the provided settings
         """
 
-        asr_model = get_audio_transcriber(
-            engine_type=config.asr_engine,
-        )
+        asr_model = None
+        if config.input_mode != "text" and not config.native_audio.enabled:
+            asr_model = get_audio_transcriber(engine_type=config.asr_engine)
 
         tts_model: SpeechSynthesizerProtocol
         tts_model = get_speech_synthesizer(config.voice)
@@ -875,6 +1107,12 @@ class Glados:
                 tts_enabled=config.tts_enabled,
                 asr_muted=config.asr_muted,
                 llm_headers=config.llm_headers,
+                native_audio_config=config.native_audio,
+                llm_request_options=config.llm_request_options,
+                inference_config=config.inference,
+                routing_config=config.routing,
+                health_config=config.health,
+                search_config=config.search,
             )
         except Exception:
             cls._close_audio_backend(audio_io)
@@ -950,6 +1188,7 @@ class Glados:
     def _graceful_shutdown(self) -> None:
         """Perform graceful shutdown of all components."""
         logger.info("Beginning graceful shutdown...")
+        self.inference_scheduler.end_interaction(self._quiet_generation, "shutdown")
 
         # Stop subagents first (they may be using shared resources)
         if self.subagent_manager:
@@ -1037,23 +1276,25 @@ class Glados:
         text = text.strip()
         if not text:
             return False
+        generation = self._begin_user_turn()
         if self.observability_bus:
             self.observability_bus.emit(
                 source=source,
                 kind="user_input",
                 message=trim_message(text),
             )
+        self.processing_active_event.set()
         self.llm_queue_priority.put(
             {
                 "role": "user",
                 "content": text,
                 "_enqueued_at": time.time(),
                 "_lane": "priority",
+                "_quiet_generation": generation,
             }
         )
         if self.interaction_state:
             self.interaction_state.mark_user()
-        self.processing_active_event.set()
         return True
 
     def autonomy_inflight(self) -> int:
@@ -1148,7 +1389,7 @@ class Glados:
             CommandSpec(
                 name="autonomy",
                 description="Manage autonomy settings",
-                usage="/autonomy on|off | /autonomy debounce on|off",
+                usage="/autonomy on|off",
                 handler=self._cmd_autonomy,
             )
         )
@@ -1252,7 +1493,7 @@ class Glados:
 
     def _cmd_status(self, _args: list[str]) -> str:
         autonomy_enabled = self.autonomy_config.enabled
-        vision_enabled = self.vision_config is not None
+        vision_enabled = self.vision_state is not None
         jobs_enabled = bool(self.autonomy_config.jobs.enabled) if self.autonomy_config else False
         return (
             f"input_mode={self.input_mode}, "
@@ -1264,6 +1505,7 @@ class Glados:
         )
 
     def _cmd_quit(self, _args: list[str]) -> str:
+        self.inference_scheduler.end_interaction(self._quiet_generation, "shutdown")
         self.shutdown_event.set()
         return "Shutting down."
 
@@ -1304,7 +1546,7 @@ class Glados:
         for slot in slots[:20]:
             summary = slot.summary.strip()
             summary_text = f" - {summary}" if summary else ""
-            lines.append(f"- {slot.title}: {slot.status}{summary_text}")
+            lines.append(f"- [{slot.slot_id}] {slot.title}: {slot.status}{summary_text}")
         if len(slots) > 20:
             lines.append(f"... {len(slots) - 20} more")
         return "\n".join(lines)
@@ -1342,6 +1584,90 @@ class Glados:
         if self._emotion_agent:
             event = EmotionEvent(source=source, description=description)
             self._emotion_agent.push_event(event)
+
+    def _react_to_input(self, message: dict) -> None:
+        self._recall_input(message)
+        if self._emotion_agent and not self.quiet_event.is_set():
+            self._emotion_agent.react(str(message.get("content", "")), message.get("_native_audio"))
+
+    def _clear_input_context(self, message: dict) -> None:
+        """Clear the previous topic before speculative inference; ignored speech cannot launch recall."""
+        if getattr(self, "search_agent", None):
+            self.search_agent.clear_context()
+        if self.compaction_agent:
+            self.compaction_agent.request_recall("", turn_id=str(message.get("_quiet_generation", self._quiet_generation)))
+
+    def _recall_input(self, message: dict) -> None:
+        if self.compaction_agent and not self.quiet_event.is_set():
+            users = [m["content"] for m in self._conversation_store.snapshot()
+                     if m.get("role") == "user" and isinstance(m.get("content"), str)]
+            # Raw audio has no reliable text query when optional transcripts are off.
+            query = message.get("content", "")
+            if message.get("_native_audio") and str(query).startswith("[User spoke via audio"):
+                query = ""
+            self.compaction_agent.request_recall(
+                query if isinstance(query, str) else "", users[-1] if users else "",
+                turn_id=str(message.get("_quiet_generation", self._quiet_generation)),
+                audio=message.get("_native_audio"),
+            )
+
+    def _emotion_prompt(self) -> str | None:
+        if not self._emotion_agent:
+            return None
+        state = self._emotion_agent.state
+        return state.to_prompt() + "\nCurrent tone guidance: " + state.response_instructions()
+
+    def _begin_user_turn(self) -> int:
+        """Invalidate prior work permanently, including speech still being synthesized."""
+        with self._quiet_lock:
+            self._quiet_generation += 1
+            self.inference_scheduler.begin_interaction(self._quiet_generation)
+            if getattr(self, "autonomy_loop", None):
+                self.autonomy_loop.reset()
+            self.processing_active_event.clear()
+            self.audio_io.stop_speaking()
+            for pending in (self.llm_queue_priority, self.tts_queue, self.audio_queue, self.tool_calls_queue):
+                while True:
+                    try:
+                        pending.get_nowait()
+                    except queue.Empty:
+                        break
+            return self._quiet_generation
+
+    def set_quiet_mode(self, enabled: bool) -> None:
+        with self._quiet_lock:
+            if enabled == self.quiet_event.is_set():
+                return
+            self.inference_scheduler.end_interaction(self._quiet_generation, "quiet_changed")
+            self._quiet_generation += 1
+            if getattr(self, "autonomy_loop", None):
+                self.autonomy_loop.reset()
+            if enabled:
+                self.quiet_event.set()
+                self.processing_active_event.clear()
+                self.audio_io.stop_speaking()
+                self.currently_speaking_event.clear()
+                self.speech_animation.set(False)
+                for pending in (self.tts_queue, self.audio_queue, self.llm_queue_autonomy, self.tool_calls_queue):
+                    while True:
+                        try:
+                            pending.get_nowait()
+                        except queue.Empty:
+                            break
+                if self.subagent_manager:
+                    for status in self.subagent_manager.list_agents():
+                        agent = self.subagent_manager.get(status.agent_id)
+                        self._quiet_saved_pauses[status.agent_id] = agent.paused
+                        agent.set_paused(True)
+            else:
+                self.quiet_event.clear()
+                if self.subagent_manager:
+                    for agent_id, paused in self._quiet_saved_pauses.items():
+                        agent = self.subagent_manager.get(agent_id)
+                        if agent:
+                            agent.set_paused(paused)
+                self._quiet_saved_pauses.clear()
+            self.observability_bus.emit("quiet", "control", "Sleeping; listening only for wake requests" if enabled else "Awake")
 
     def _on_tool_event(self, event_type: str, tool_name: str) -> None:
         """Handle tool events for emotional processing."""
@@ -1387,11 +1713,10 @@ class Glados:
         user_count = sum(1 for m in messages if m.get("role") == "user")
         assistant_count = sum(1 for m in messages if m.get("role") == "assistant")
         summary_count = sum(
-            1 for m in messages
-            if isinstance(m.get("content"), str) and m["content"].startswith("[summary]")
+            1 for m in messages if isinstance(m.get("content"), str) and m["content"].startswith("[summary]")
         )
         lines = [
-            f"Context Usage:",
+            "Context Usage:",
             f"  Estimated tokens: {token_count}",
             f"  Total messages: {msg_count}",
             f"    System: {system_count}",
@@ -1447,25 +1772,52 @@ class Glados:
             return (
                 f"Autonomy enabled={self.autonomy_config.enabled}, "
                 f"parallel_calls={self.autonomy_config.autonomy_parallel_calls}, "
-                f"coalesce_ticks={self.autonomy_config.coalesce_ticks}"
+                "coalescing=automatic"
             )
         head = args[0].lower()
         if head in {"on", "off", "true", "false", "enable", "enabled", "disable", "disabled"}:
             enabled = head in {"on", "true", "enable", "enabled"}
-            self.autonomy_config.enabled = enabled
+            self.set_autonomy_enabled(enabled)
             return f"Autonomy {'enabled' if enabled else 'disabled'}."
-        if head not in {"coalesce", "debounce"}:
-            return "Usage: /autonomy on|off | /autonomy debounce on|off"
-        if len(args) == 1:
-            return f"Autonomy coalesce_ticks={self.autonomy_config.coalesce_ticks}"
-        value = args[1].lower()
-        if value in {"on", "true", "enable", "enabled"}:
-            self.autonomy_config.coalesce_ticks = True
-            return "Autonomy tick coalescing enabled."
-        if value in {"off", "false", "disable", "disabled"}:
-            self.autonomy_config.coalesce_ticks = False
-            return "Autonomy tick coalescing disabled."
-        return "Usage: /autonomy on|off | /autonomy debounce on|off"
+        return "Usage: /autonomy on|off (idle checks coalesce automatically)"
+
+    def set_autonomy_enabled(self, enabled: bool) -> None:
+        with self._quiet_lock:
+            if enabled == self.autonomy_config.enabled:
+                return
+            self._autonomy_generation += 1
+            self.autonomy_config.enabled = enabled
+            if self.autonomy_loop:
+                self.autonomy_loop.reset()
+            if not enabled:
+                while True:
+                    try:
+                        self.llm_queue_autonomy.get_nowait()
+                    except queue.Empty:
+                        break
+                if self.speech_player.autonomy_speaking:
+                    self.audio_io.stop_speaking()
+        self.observability_bus.emit("autonomy", "control", "Enabled" if enabled else "Disabled")
+
+    def _autonomy_user_busy(self) -> bool:
+        return (bool(getattr(getattr(self, "speech_listener", None), "_recording_started", False))
+                or self.llm_processor._request_active.is_set()
+                or self._priority_inflight.value() > 0 or not self.llm_queue_priority.empty()
+                or not self.tts_queue.empty() or not self.audio_queue.empty())
+
+    def _on_autonomy_done(self, cycle: str, outcome: str, reason: str) -> None:
+        if self.autonomy_loop:
+            self.autonomy_loop.finish_cycle(cycle, outcome, reason)
+
+    def _on_autonomy_prompt(self, decision: dict, meta: dict) -> bool:
+        with self._quiet_lock:
+            if (meta.get("_quiet_generation") != self._quiet_generation or
+                    meta.get("_autonomy_generation") != self._autonomy_generation or not self.autonomy_loop):
+                return False
+            return self.autonomy_loop.prompt_main(meta["_autonomy_cycle"], decision, self.llm_queue_priority, meta.get("_evidence_versions"))
+
+    def _autonomy_request_current(self, meta: dict) -> bool:
+        return bool(self.autonomy_loop and self.autonomy_loop.request_current(meta["_autonomy_cycle"]))
 
     def _cmd_config(self, _args: list[str]) -> str:
         jobs_enabled = bool(self.autonomy_config.jobs.enabled) if self.autonomy_config else False
@@ -1473,8 +1825,7 @@ class Glados:
             f"input_mode={self.input_mode}, "
             f"autonomy.enabled={self.autonomy_config.enabled}, "
             f"autonomy.jobs.enabled={jobs_enabled}, "
-            f"autonomy.coalesce_ticks={self.autonomy_config.coalesce_ticks}, "
-            f"vision.enabled={self.vision_config is not None}"
+            f"vision.enabled={self.vision_state is not None}"
         )
 
     def _cmd_knowledge(self, args: list[str]) -> str:
@@ -1620,21 +1971,30 @@ class Glados:
         """Format task slots for LLM context."""
         if not self.autonomy_slots:
             return None
-        slots = self.autonomy_slots.list_slots()
-        if not slots:
+        # These cores already have dedicated context: observation, PAD and compacted history.
+        slots = [slot for slot in self.autonomy_slots.list_slots()
+                 if slot.slot_id not in {"vision", "emotion", "compaction", "health"} and not slot.handled]
+        memory = self.autonomy_slots.get_slot("compaction")
+        recall = memory.context if memory else None
+        if not slots and not recall:
             return None
         lines = ["[tasks]"]
+        if recall:
+            lines.append(recall)
         for slot in slots:
             summary = slot.summary.strip()
             summary_text = f" - {summary}" if summary else ""
-            lines.append(f"- {slot.title}: {slot.status}{summary_text}")
+            lines.append(f"- [{slot.slot_id}] {slot.title}: {slot.status}{summary_text}")
+            if slot.context and slot.owner_id is None:
+                lines.append(slot.context[:1200])
         return "\n".join(lines)
 
     def _run_autonomy_ticker(self) -> None:
         assert self.autonomy_event_bus is not None
         logger.info("AutonomyTicker thread started.")
         while not self.shutdown_event.is_set():
-            self.autonomy_event_bus.publish(TimeTickEvent(ticked_at=time.time()))
+            if self.autonomy_config.enabled and not self.quiet_event.is_set():
+                self.autonomy_event_bus.publish(TimeTickEvent(ticked_at=time.time()))
             self.shutdown_event.wait(timeout=self.autonomy_config.tick_interval_s)
         logger.info("AutonomyTicker thread finished.")
 

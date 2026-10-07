@@ -8,9 +8,10 @@ the final system messages for LLM requests.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import threading
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 ContextSource = Callable[[], str | None]
 
@@ -20,7 +21,8 @@ class ContextEntry:
     """A registered context source."""
     name: str
     source: ContextSource
-    priority: int = 0  # Higher = earlier in context
+    priority: int = 0  # Higher = earlier within the same stability class.
+    volatile: bool = False  # Live values go after stable instructions and history.
 
 
 class ContextBuilder:
@@ -34,11 +36,11 @@ class ContextBuilder:
     Usage:
         context = ContextBuilder()
         context.register("preferences", preferences_store.as_prompt, priority=10)
-        context.register("emotion", emotion_state.to_prompt, priority=5)
-        context.register("vision", vision_state.as_message, priority=0)
+        context.register("emotion", emotion_state.to_prompt, priority=5, volatile=True)
+        context.register("vision", vision_state.as_message, priority=0, volatile=True)
 
         # Build context for LLM request
-        messages = context.build_system_messages()
+        messages = [entry["message"] for entry in context.build_system_entries()]
         # Returns: [{"role": "system", "content": "..."}, ...]
     """
 
@@ -51,6 +53,8 @@ class ContextBuilder:
         name: str,
         source: ContextSource,
         priority: int = 0,
+        *,
+        volatile: bool = False,
     ) -> None:
         """
         Register a context source.
@@ -58,14 +62,16 @@ class ContextBuilder:
         Args:
             name: Identifier for this source (for debugging)
             source: Callable that returns prompt string or None
-            priority: Higher values appear earlier in context
+            priority: Higher values appear earlier within the same stability class
+            volatile: Changes each request; keep out of the reusable prompt prefix
         """
         with self._lock:
             # Remove existing source with same name
             self._sources = [s for s in self._sources if s.name != name]
-            self._sources.append(ContextEntry(name=name, source=source, priority=priority))
-            # Sort by priority (descending)
-            self._sources.sort(key=lambda x: x.priority, reverse=True)
+            self._sources.append(ContextEntry(name=name, source=source, priority=priority, volatile=volatile))
+            # Stable configuration always precedes live data, even when a live
+            # source has high priority for its position near the current input.
+            self._sources.sort(key=lambda x: (x.volatile, -x.priority))
 
     def unregister(self, name: str) -> bool:
         """Remove a context source. Returns True if it existed."""
@@ -74,13 +80,9 @@ class ContextBuilder:
             self._sources = [s for s in self._sources if s.name != name]
             return len(self._sources) < before
 
-    def build_system_messages(self) -> list[dict[str, str]]:
-        """
-        Build system messages from all registered sources.
 
-        Returns list of {"role": "system", "content": "..."} dicts.
-        Sources returning None are skipped.
-        """
+    def build_system_entries(self) -> list[dict[str, Any]]:
+        """Resolve sources once, retaining provenance outside the model messages."""
         with self._lock:
             sources = list(self._sources)
 
@@ -89,36 +91,13 @@ class ContextBuilder:
             try:
                 content = entry.source()
                 if content:
-                    messages.append({"role": "system", "content": content})
+                    messages.append({"source": entry.name, "volatile": entry.volatile,
+                                     "message": {"role": "system", "content": content}})
             except Exception:
                 # Skip failed sources silently
                 pass
         return messages
 
-    def build_combined_prompt(self, separator: str = "\n\n") -> str | None:
-        """
-        Build a single combined prompt from all sources.
-
-        Returns None if no sources have content.
-        """
-        with self._lock:
-            sources = list(self._sources)
-
-        parts = []
-        for entry in sources:
-            try:
-                content = entry.source()
-                if content:
-                    parts.append(content)
-            except Exception:
-                pass
-
-        return separator.join(parts) if parts else None
-
-    def list_sources(self) -> list[str]:
-        """Get names of all registered sources."""
-        with self._lock:
-            return [s.name for s in self._sources]
 
     def __len__(self) -> int:
         with self._lock:

@@ -1,0 +1,753 @@
+{
+  "date": "2026-10-05",
+  "model": "face_detection_yunet_2023mar.onnx",
+  "size_bytes": 232589,
+  "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+  "backend": "OpenCV DNN, CPU target",
+  "image_max_side": 320,
+  "score_threshold": 0.7,
+  "method": "Warm-up plus 30 repeated detections on saved webcam frames; small practical check, not general accuracy evaluation. Camera images remain outside the repository.",
+  "checks": [
+    {
+      "input": "webcam-0.jpg",
+      "present": true,
+      "bbox": [
+        0.41603589057922363,
+        0.29524850845336914,
+        0.1589348316192627,
+        0.32590017318725584
+      ],
+      "median_ms": 3.5015
+    },
+    {
+      "input": "webcam-1.jpg",
+      "present": true,
+      "bbox": [
+        0.42255516052246095,
+        0.31281585693359376,
+        0.14720602035522462,
+        0.29669189453125
+      ],
+      "median_ms": 3.3485
+    },
+    {
+      "input": "mirrored.jpg",
+      "present": true,
+      "bbox": [
+        0.41630945205688474,
+        0.28369096120198567,
+        0.13917942047119142,
+        0.2806659698486328
+      ],
+      "median_ms": 3.2865
+    },
+    {
+      "input": "shelf-only.jpg",
+      "present": false,
+      "bbox": null,
+      "median_ms": 2.8265000000000002
+    }
+  ],
+  "configuration": {
+    "caption_interval_s": 2,
+    "face_interval_s": 0.03,
+    "camera_fps_target": 30,
+    "capture_format": "MJPG"
+  },
+  "before_samples": [
+    {
+      "at": 1791192391.3124645,
+      "gpu": "97, 5399",
+      "revision": 797,
+      "inference_ms": 1080.2,
+      "completed_at": 1791192390.7998986
+    },
+    {
+      "at": 1791192391.7388637,
+      "gpu": "97, 5400",
+      "revision": 797,
+      "inference_ms": 1080.2,
+      "completed_at": 1791192390.7998986
+    },
+    {
+      "at": 1791192392.165861,
+      "gpu": "97, 5289",
+      "revision": 798,
+      "inference_ms": 1118.2,
+      "completed_at": 1791192391.918652
+    },
+    {
+      "at": 1791192392.5923889,
+      "gpu": "97, 5399",
+      "revision": 798,
+      "inference_ms": 1118.2,
+      "completed_at": 1791192391.918652
+    },
+    {
+      "at": 1791192393.019229,
+      "gpu": "97, 5400",
+      "revision": 798,
+      "inference_ms": 1118.2,
+      "completed_at": 1791192391.918652
+    },
+    {
+      "at": 1791192393.4465108,
+      "gpu": "97, 5401",
+      "revision": 799,
+      "inference_ms": 1120.6,
+      "completed_at": 1791192393.039751
+    },
+    {
+      "at": 1791192393.8756459,
+      "gpu": "74, 5401",
+      "revision": 799,
+      "inference_ms": 1120.6,
+      "completed_at": 1791192393.039751
+    },
+    {
+      "at": 1791192394.301001,
+      "gpu": "74, 5292",
+      "revision": 800,
+      "inference_ms": 1187.4,
+      "completed_at": 1791192394.227661
+    },
+    {
+      "at": 1791192394.7283378,
+      "gpu": "51, 5400",
+      "revision": 800,
+      "inference_ms": 1187.4,
+      "completed_at": 1791192394.227661
+    },
+    {
+      "at": 1791192395.1552353,
+      "gpu": "51, 5400",
+      "revision": 800,
+      "inference_ms": 1187.4,
+      "completed_at": 1791192394.227661
+    },
+    {
+      "at": 1791192395.5819316,
+      "gpu": "80, 5400",
+      "revision": 801,
+      "inference_ms": 1136.4,
+      "completed_at": 1791192395.3644872
+    },
+    {
+      "at": 1791192396.0090303,
+      "gpu": "80, 5399",
+      "revision": 801,
+      "inference_ms": 1136.4,
+      "completed_at": 1791192395.3644872
+    },
+    {
+      "at": 1791192396.4376774,
+      "gpu": "80, 5398",
+      "revision": 801,
+      "inference_ms": 1136.4,
+      "completed_at": 1791192395.3644872
+    },
+    {
+      "at": 1791192396.8640854,
+      "gpu": "64, 5398",
+      "revision": 801,
+      "inference_ms": 1136.4,
+      "completed_at": 1791192395.3644872
+    },
+    {
+      "at": 1791192397.2918065,
+      "gpu": "64, 5396",
+      "revision": 801,
+      "inference_ms": 1136.4,
+      "completed_at": 1791192395.3644872
+    }
+  ],
+  "after_samples_yuyv": [
+    {
+      "at": 1791192496.2816496,
+      "gpu": "20, 5413",
+      "revision": 32,
+      "inference_ms": 850.5,
+      "completed_at": 1791192494.3780477,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192496.7074575,
+      "gpu": "24, 5417",
+      "revision": 33,
+      "inference_ms": 867.0,
+      "completed_at": 1791192496.3937805,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192497.1340303,
+      "gpu": "24, 5416",
+      "revision": 33,
+      "inference_ms": 867.0,
+      "completed_at": 1791192496.3937805,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192497.5620902,
+      "gpu": "21, 5412",
+      "revision": 33,
+      "inference_ms": 867.0,
+      "completed_at": 1791192496.3937805,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192497.9903975,
+      "gpu": "21, 5414",
+      "revision": 33,
+      "inference_ms": 867.0,
+      "completed_at": 1791192496.3937805,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192498.4165447,
+      "gpu": "21, 5413",
+      "revision": 34,
+      "inference_ms": 856.7,
+      "completed_at": 1791192498.3838367,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192498.841706,
+      "gpu": "26, 5413",
+      "revision": 34,
+      "inference_ms": 856.7,
+      "completed_at": 1791192498.3838367,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192499.2668536,
+      "gpu": "26, 5413",
+      "revision": 34,
+      "inference_ms": 856.7,
+      "completed_at": 1791192498.3838367,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192499.6925206,
+      "gpu": "20, 5304",
+      "revision": 34,
+      "inference_ms": 856.7,
+      "completed_at": 1791192498.3838367,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192500.1186676,
+      "gpu": "20, 5414",
+      "revision": 34,
+      "inference_ms": 856.7,
+      "completed_at": 1791192498.3838367,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192500.5428312,
+      "gpu": "27, 5411",
+      "revision": 35,
+      "inference_ms": 848.2,
+      "completed_at": 1791192500.3752522,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192500.96807,
+      "gpu": "27, 5411",
+      "revision": 35,
+      "inference_ms": 848.2,
+      "completed_at": 1791192500.3752522,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192501.392332,
+      "gpu": "27, 5410",
+      "revision": 35,
+      "inference_ms": 848.2,
+      "completed_at": 1791192500.3752522,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192501.8202112,
+      "gpu": "24, 5409",
+      "revision": 35,
+      "inference_ms": 848.2,
+      "completed_at": 1791192500.3752522,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192502.2469246,
+      "gpu": "24, 5410",
+      "revision": 35,
+      "inference_ms": 848.2,
+      "completed_at": 1791192500.3752522,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192502.671895,
+      "gpu": "19, 5409",
+      "revision": 36,
+      "inference_ms": 874.5,
+      "completed_at": 1791192502.4029617,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192503.0982916,
+      "gpu": "19, 5409",
+      "revision": 36,
+      "inference_ms": 874.5,
+      "completed_at": 1791192502.4029617,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192503.5256238,
+      "gpu": "19, 5409",
+      "revision": 36,
+      "inference_ms": 874.5,
+      "completed_at": 1791192502.4029617,
+      "camera_hz": 18.3,
+      "tracking_hz": 18.3
+    },
+    {
+      "at": 1791192503.9553106,
+      "gpu": "21, 5411",
+      "revision": 36,
+      "inference_ms": 874.5,
+      "completed_at": 1791192502.4029617,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    },
+    {
+      "at": 1791192504.3820915,
+      "gpu": "21, 5413",
+      "revision": 36,
+      "inference_ms": 874.5,
+      "completed_at": 1791192502.4029617,
+      "camera_hz": 18.1,
+      "tracking_hz": 18.1
+    }
+  ],
+  "yuyv_stream": {
+    "frames": 110,
+    "fps": 18.233165119573712
+  },
+  "mjpg_capture_only": {
+    "fps": 29.81328926275455,
+    "shape": [
+      480,
+      640,
+      3
+    ]
+  },
+  "mjpg_live_stream": {
+    "frames": 134,
+    "fps": 16.597939584437167
+  },
+  "mjpg_live_samples": [
+    {
+      "at": 1791192721.7351615,
+      "gpu": "27, 5421",
+      "revision": 25,
+      "completed_at": 1791192721.383585,
+      "inference_ms": 881.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.87
+    },
+    {
+      "at": 1791192722.2774003,
+      "gpu": "27, 5418",
+      "revision": 25,
+      "completed_at": 1791192721.383585,
+      "inference_ms": 881.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.677
+    },
+    {
+      "at": 1791192722.8255384,
+      "gpu": "32, 5422",
+      "revision": 25,
+      "completed_at": 1791192721.383585,
+      "inference_ms": 881.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.686
+    },
+    {
+      "at": 1791192723.3709104,
+      "gpu": "32, 5422",
+      "revision": 25,
+      "completed_at": 1791192721.383585,
+      "inference_ms": 881.3,
+      "camera_hz": 16.4,
+      "tracking_hz": 16.4,
+      "face_ms": 3.534
+    },
+    {
+      "at": 1791192723.9126587,
+      "gpu": "22, 5419",
+      "revision": 26,
+      "completed_at": 1791192723.379081,
+      "inference_ms": 878.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.551
+    },
+    {
+      "at": 1791192724.4564862,
+      "gpu": "22, 5416",
+      "revision": 26,
+      "completed_at": 1791192723.379081,
+      "inference_ms": 878.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.493
+    },
+    {
+      "at": 1791192725.0346956,
+      "gpu": "38, 5420",
+      "revision": 26,
+      "completed_at": 1791192723.379081,
+      "inference_ms": 878.3,
+      "camera_hz": 16.4,
+      "tracking_hz": 16.4,
+      "face_ms": 3.801
+    },
+    {
+      "at": 1791192725.5755868,
+      "gpu": "19, 5422",
+      "revision": 27,
+      "completed_at": 1791192725.3305795,
+      "inference_ms": 830.4,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.217
+    },
+    {
+      "at": 1791192726.153757,
+      "gpu": "19, 5425",
+      "revision": 27,
+      "completed_at": 1791192725.3305795,
+      "inference_ms": 830.4,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.732
+    },
+    {
+      "at": 1791192726.7058063,
+      "gpu": "38, 5424",
+      "revision": 27,
+      "completed_at": 1791192725.3305795,
+      "inference_ms": 830.4,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.892
+    },
+    {
+      "at": 1791192727.249002,
+      "gpu": "38, 5426",
+      "revision": 27,
+      "completed_at": 1791192725.3305795,
+      "inference_ms": 830.4,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.229
+    },
+    {
+      "at": 1791192727.8311474,
+      "gpu": "22, 5426",
+      "revision": 28,
+      "completed_at": 1791192727.356502,
+      "inference_ms": 855.9,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.053
+    },
+    {
+      "at": 1791192728.3782732,
+      "gpu": "22, 5415",
+      "revision": 28,
+      "completed_at": 1791192727.356502,
+      "inference_ms": 855.9,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.752
+    },
+    {
+      "at": 1791192728.9276078,
+      "gpu": "32, 5421",
+      "revision": 28,
+      "completed_at": 1791192727.356502,
+      "inference_ms": 855.9,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 3.465
+    },
+    {
+      "at": 1791192729.5046368,
+      "gpu": "32, 5422",
+      "revision": 29,
+      "completed_at": 1791192729.3402357,
+      "inference_ms": 839.3,
+      "camera_hz": 16.6,
+      "tracking_hz": 16.6,
+      "face_ms": 4.088
+    }
+  ],
+  "capture_buffer_tests": [
+    {
+      "buffers": 1,
+      "fps": 16.59114292196051,
+      "read_ms": 58.123066497500986
+    },
+    {
+      "buffers": 2,
+      "fps": 29.799296205798424,
+      "read_ms": 26.95215749554336
+    },
+    {
+      "buffers": 3,
+      "fps": 29.79987913495404,
+      "read_ms": 22.406512463930994
+    }
+  ],
+  "final_mjpg_two_buffer_stream": {
+    "frames": 228,
+    "fps": 28.462486450256826
+  },
+  "final_live_samples": [
+    {
+      "at": 1791192921.0413651,
+      "gpu": "60, 5384",
+      "revision": 28,
+      "completed_at": 1791192920.4373302,
+      "inference_ms": 940.8,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 9.79
+    },
+    {
+      "at": 1791192921.5951786,
+      "gpu": "19, 5384",
+      "revision": 28,
+      "completed_at": 1791192920.4373302,
+      "inference_ms": 940.8,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.225
+    },
+    {
+      "at": 1791192922.1512177,
+      "gpu": "19, 5383",
+      "revision": 28,
+      "completed_at": 1791192920.4373302,
+      "inference_ms": 940.8,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.391
+    },
+    {
+      "at": 1791192922.7054148,
+      "gpu": "63, 5384",
+      "revision": 29,
+      "completed_at": 1791192922.4423127,
+      "inference_ms": 945.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 4.06
+    },
+    {
+      "at": 1791192923.2640839,
+      "gpu": "63, 5383",
+      "revision": 29,
+      "completed_at": 1791192922.4423127,
+      "inference_ms": 945.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 4.358
+    },
+    {
+      "at": 1791192923.8188982,
+      "gpu": "17, 5384",
+      "revision": 29,
+      "completed_at": 1791192922.4423127,
+      "inference_ms": 945.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.7
+    },
+    {
+      "at": 1791192924.3734674,
+      "gpu": "17, 5381",
+      "revision": 29,
+      "completed_at": 1791192922.4423127,
+      "inference_ms": 945.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 4.63
+    },
+    {
+      "at": 1791192924.9332047,
+      "gpu": "87, 5431",
+      "revision": 30,
+      "completed_at": 1791192924.4699383,
+      "inference_ms": 973.3,
+      "camera_hz": 29.9,
+      "tracking_hz": 29.9,
+      "face_ms": 4.027
+    },
+    {
+      "at": 1791192925.4919224,
+      "gpu": "87, 5434",
+      "revision": 30,
+      "completed_at": 1791192924.4699383,
+      "inference_ms": 973.3,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.337
+    },
+    {
+      "at": 1791192926.049326,
+      "gpu": "98, 5431",
+      "revision": 30,
+      "completed_at": 1791192924.4699383,
+      "inference_ms": 973.3,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.74
+    },
+    {
+      "at": 1791192926.601197,
+      "gpu": "96, 5432",
+      "revision": 30,
+      "completed_at": 1791192924.4699383,
+      "inference_ms": 973.3,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.573
+    },
+    {
+      "at": 1791192927.1604078,
+      "gpu": "96, 5427",
+      "revision": 31,
+      "completed_at": 1791192927.0024564,
+      "inference_ms": 999.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 4.264
+    },
+    {
+      "at": 1791192927.7207265,
+      "gpu": "26, 5439",
+      "revision": 31,
+      "completed_at": 1791192927.0024564,
+      "inference_ms": 999.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.93
+    },
+    {
+      "at": 1791192928.2808557,
+      "gpu": "26, 5442",
+      "revision": 31,
+      "completed_at": 1791192927.0024564,
+      "inference_ms": 999.4,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 3.703
+    },
+    {
+      "at": 1791192928.8426247,
+      "gpu": "97, 5440",
+      "revision": 32,
+      "completed_at": 1791192928.488305,
+      "inference_ms": 990.5,
+      "camera_hz": 29.8,
+      "tracking_hz": 29.8,
+      "face_ms": 4.368
+    }
+  ],
+  "final_vision_state": {
+    "scene": "A man with a beard is visible indoors, standing near some shelving.\nExpressions: The man has a neutral expression, looking slightly off-camera with a closed mouth.",
+    "changes": "No clear visual change.",
+    "revision": 32,
+    "error": null,
+    "expressions": "The man has a neutral expression, looking slightly off-camera with a closed mouth.",
+    "captured_at": 1791192927.2285757,
+    "preview_face": {
+      "available": true,
+      "present": true,
+      "observed_at": 1791192927.2285757,
+      "x": 0.802347469329834,
+      "y": -0.36031786600748694,
+      "bbox": [
+        0.802347469329834,
+        0.11015129089355469,
+        0.19765253067016603,
+        0.4193795522054036
+      ],
+      "closeness": 0.4193795522054036,
+      "tracking_ms": 3.39
+    },
+    "previous_captured_at": 1791192925.7527263,
+    "completed_at": 1791192928.488305,
+    "inference_ms": 990.5,
+    "sharpness": 519.07,
+    "scoring_ms": 0.264,
+    "candidates": 8,
+    "selected_age_ms": 263.2,
+    "paused": false,
+    "running": true,
+    "target_hz": 0.5,
+    "completed_hz": 0.5,
+    "camera": {
+      "connected": true,
+      "error": null,
+      "frames": 1868,
+      "captured_at": 1791192928.8050761,
+      "scoring_ms": 0.492,
+      "enabled": true,
+      "capture_hz": 29.8,
+      "face": {
+        "enabled": true,
+        "source": "yunet",
+        "available": true,
+        "present": true,
+        "error": null,
+        "observed_at": 1791192928.8050761,
+        "x": 0.4861270904541015,
+        "y": -0.3871957143147786,
+        "bbox": [
+          0.6363126754760742,
+          0.10780614217122396,
+          0.21350173950195311,
+          0.39719200134277344
+        ],
+        "closeness": 0.39719200134277344,
+        "tracking_ms": 4.368,
+        "last_seen_at": 1791192928.8050761,
+        "tracking_hz": 29.8,
+        "absent_seconds": 0.0,
+        "sleep_after_s": 5.0
+      }
+    }
+  },
+  "limits": "GPU samples are short observations of normal application activity, not a controlled GPU benchmark. The final live sample includes a person returning and may include concurrent audio/conversation work. Do not infer a general utilization reduction from these numbers."
+}

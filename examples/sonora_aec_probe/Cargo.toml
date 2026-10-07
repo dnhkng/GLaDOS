@@ -1,0 +1,11 @@
+[package]
+name = "sonora-aec-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+publish = false
+
+[dependencies]
+sonora = { git = "https://github.com/dignifiedquire/sonora", rev = "413f64e7404529aaae6980613527f0d6acb21ce7" }
+hound = "3.5"
+serde_json = "1"

@@ -309,11 +309,3 @@ class ShutdownOrchestrator:
                 duration=duration,
                 error=str(e),
             )
-
-    def is_shutting_down(self) -> bool:
-        """Check if shutdown has been initiated."""
-        return self.shutdown_event.is_set()
-
-    def get_results(self) -> list[ShutdownResult]:
-        """Get the results from the last shutdown."""
-        return list(self._results)

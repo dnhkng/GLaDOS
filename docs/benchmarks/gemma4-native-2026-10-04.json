@@ -1,0 +1,42 @@
+[
+  {
+    "transcripts": false,
+    "input": "What is two plus two?",
+    "speech": [
+      {
+        "text": "Two plus two equals four.",
+        "emotion": "neutral"
+      },
+      {
+        "text": " ",
+        "emotion": "neutral"
+      },
+      {
+        "text": "Did you really need my assistance with such a simple calculation?",
+        "emotion": "smug"
+      }
+    ],
+    "total_s": 0.7138530180091038,
+    "stored_user": "[User spoke via audio; transcript disabled.]"
+  },
+  {
+    "transcripts": true,
+    "input": "What is two plus two?",
+    "speech": [
+      {
+        "text": "The answer is four.",
+        "emotion": "neutral"
+      },
+      {
+        "text": " ",
+        "emotion": "neutral"
+      },
+      {
+        "text": "Do you have any more elementary questions?",
+        "emotion": "bored"
+      }
+    ],
+    "total_s": 0.5663512339815497,
+    "stored_user": "What is 2 + 2?"
+  }
+]

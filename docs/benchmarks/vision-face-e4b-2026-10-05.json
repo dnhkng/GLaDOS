@@ -1,0 +1,755 @@
+{
+  "date": "2026-10-05",
+  "model": "gemma-4-E4B Q4_0",
+  "hardware": "RTX 3080 10 GB",
+  "scope": "Small local comparison, not a general accuracy benchmark. Boxes were approximate; no webcam images are retained in this report.",
+  "initial_single_image_comparison": [
+    {
+      "name": "webcam-0",
+      "e4b_ms": 1272,
+      "e4b": {
+        "scene": "A man is standing indoors, possibly in a retail or storage area, surrounded by brown curtains and shelving.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "present",
+          "box": [
+            396,
+            396,
+            638,
+            563
+          ]
+        }
+      },
+      "haar": {
+        "available": true,
+        "present": false,
+        "observed_at": 1791189616.2436693,
+        "tracking_ms": 172.794
+      }
+    },
+    {
+      "name": "webcam-1",
+      "e4b_ms": 1144,
+      "e4b": {
+        "scene": "A man in a dark jacket is standing in a dimly lit room with brown curtains.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "present",
+          "box": [
+            396,
+            396,
+            608,
+            563
+          ]
+        }
+      },
+      "haar": {
+        "available": true,
+        "present": false,
+        "observed_at": 1791189617.5625014,
+        "tracking_ms": 39.955
+      }
+    },
+    {
+      "name": "mirrored",
+      "e4b_ms": 1151,
+      "e4b": {
+        "scene": "A man in a dark sweater is looking down in a room with beige curtains.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "present",
+          "box": [
+            275,
+            360,
+            597,
+            597
+          ]
+        }
+      },
+      "haar": {
+        "available": true,
+        "present": false,
+        "observed_at": 1791189618.754904,
+        "tracking_ms": 40.222
+      }
+    },
+    {
+      "name": "shelf-only",
+      "e4b_ms": 883,
+      "e4b": {
+        "scene": "A close-up view of a shelf with various items and a curtain in the background.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "absent",
+          "box": null
+        }
+      },
+      "haar": {
+        "available": true,
+        "present": false,
+        "observed_at": 1791189619.679451,
+        "tracking_ms": 35.099
+      }
+    }
+  ],
+  "combined_scene_face_prompt_with_previous_image": [
+    {
+      "name": "webcam-0",
+      "ms": 2287,
+      "result": {
+        "scene": "A man with dark hair and a beard is visible in what appears to be a storage or utility area with brown curtains and shelving.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            375,
+            345,
+            615,
+            575
+          ]
+        }
+      }
+    },
+    {
+      "name": "webcam-1",
+      "ms": 2109,
+      "result": {
+        "scene": "A man with dark hair and a beard is visible in an indoor setting with brown curtains and shelving. He is looking down and slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            375,
+            375,
+            625,
+            625
+          ]
+        }
+      }
+    },
+    {
+      "name": "mirrored",
+      "ms": 2535,
+      "result": {
+        "scene": "A man with dark hair and a beard is visible in what appears to be a storage or utility area. He is looking towards the right side of the frame.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            375,
+            375,
+            585,
+            575
+          ]
+        }
+      }
+    },
+    {
+      "name": "shelf-only",
+      "ms": 1511,
+      "result": {
+        "scene": "The image shows a shelf area with some items on a counter. The background is dominated by brown curtains.",
+        "changes": "The person from the previous image is no longer visible in the current image.",
+        "face": {
+          "presence": "absent",
+          "box": null
+        }
+      }
+    }
+  ],
+  "summary": {
+    "present_test_images": 3,
+    "e4b_present": 3,
+    "haar_present": 0,
+    "empty_shelf_correct_both": true,
+    "combined_prompt_under_live_vision_contention_ms": [
+      1511,
+      2535
+    ]
+  },
+  "expressions_prompt_check": [
+    {
+      "name": "webcam-0",
+      "ms": 2215,
+      "result": {
+        "scene": "A man in a dark jacket is visible in a room with brown curtains.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            345,
+            347,
+            649,
+            638
+          ]
+        }
+      }
+    },
+    {
+      "name": "webcam-1",
+      "ms": 1602,
+      "result": {
+        "scene": "A man is standing in a room with brown curtains and shelving.",
+        "expressions": "The man has a neutral expression, looking slightly down and to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            365,
+            345,
+            638,
+            597
+          ]
+        }
+      }
+    },
+    {
+      "name": "mirrored",
+      "ms": 2112,
+      "result": {
+        "scene": "A man is standing in a room with brown curtains and shelving.",
+        "expressions": "The man has a neutral expression, looking slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box": [
+            375,
+            375,
+            625,
+            625
+          ]
+        }
+      }
+    },
+    {
+      "name": "shelf-only",
+      "ms": 1392,
+      "result": {
+        "scene": "The image shows a shelf area with some items on a counter.",
+        "expressions": "No people visible.",
+        "changes": "The person from the previous image is gone.",
+        "face": {
+          "presence": "absent",
+          "box": null
+        }
+      }
+    }
+  ],
+  "native_box_format_resolution_check": [
+    {
+      "max_side": 512,
+      "name": "webcam-0",
+      "ms": 1602,
+      "result": {
+        "scene": "A man is standing in a room with brown curtains and shelving.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            335,
+            477,
+            532
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 112,
+        "prompt_tokens": 718,
+        "total_tokens": 830,
+        "prompt_tokens_details": {
+          "cached_tokens": 1
+        }
+      },
+      "timings": {
+        "cache_n": 1,
+        "prompt_n": 717,
+        "prompt_ms": 443.198,
+        "prompt_per_token_ms": 0.6181283124128312,
+        "prompt_per_second": 1617.7870838767321,
+        "predicted_n": 112,
+        "predicted_ms": 1099.178,
+        "predicted_per_token_ms": 9.814089285714287,
+        "predicted_per_second": 101.89432466807013
+      }
+    },
+    {
+      "max_side": 512,
+      "name": "mirrored",
+      "ms": 1412,
+      "result": {
+        "scene": "A man in a grey jacket is visible in a room with brown curtains.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            381,
+            477,
+            672
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 114,
+        "prompt_tokens": 718,
+        "total_tokens": 832,
+        "prompt_tokens_details": {
+          "cached_tokens": 531
+        }
+      },
+      "timings": {
+        "cache_n": 531,
+        "prompt_n": 187,
+        "prompt_ms": 265.558,
+        "prompt_per_token_ms": 1.420096256684492,
+        "prompt_per_second": 704.1776184487005,
+        "predicted_n": 114,
+        "predicted_ms": 1127.046,
+        "predicted_per_token_ms": 9.886368421052632,
+        "predicted_per_second": 101.14937633424013
+      }
+    },
+    {
+      "max_side": 512,
+      "name": "shelf-only",
+      "ms": 970,
+      "result": {
+        "scene": "A room with brown curtains and some items on a shelf is visible.",
+        "expressions": "No people visible.",
+        "changes": "The person from the previous image is gone.",
+        "face": {
+          "presence": "absent",
+          "box_2d": null
+        }
+      },
+      "usage": {
+        "completion_tokens": 81,
+        "prompt_tokens": 670,
+        "total_tokens": 751,
+        "prompt_tokens_details": {
+          "cached_tokens": 624
+        }
+      },
+      "timings": {
+        "cache_n": 624,
+        "prompt_n": 46,
+        "prompt_ms": 150.439,
+        "prompt_per_token_ms": 3.2704130434782606,
+        "prompt_per_second": 305.77177460631884,
+        "predicted_n": 81,
+        "predicted_ms": 806.631,
+        "predicted_per_token_ms": 9.958407407407407,
+        "predicted_per_second": 100.41766309502115
+      }
+    },
+    {
+      "max_side": 384,
+      "name": "webcam-0",
+      "ms": 1362,
+      "result": {
+        "scene": "A man is visible inside what appears to be a small cabin or room.",
+        "expressions": "The man has a neutral expression, looking down with a closed mouth.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            185,
+            269,
+            381,
+            532
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 113,
+        "prompt_tokens": 638,
+        "total_tokens": 751,
+        "prompt_tokens_details": {
+          "cached_tokens": 531
+        }
+      },
+      "timings": {
+        "cache_n": 531,
+        "prompt_n": 107,
+        "prompt_ms": 252.554,
+        "prompt_per_token_ms": 2.3603177570093457,
+        "prompt_per_second": 423.6717692057936,
+        "predicted_n": 113,
+        "predicted_ms": 1098.843,
+        "predicted_per_token_ms": 9.724274336283187,
+        "predicted_per_second": 102.8354369095494
+      }
+    },
+    {
+      "max_side": 384,
+      "name": "mirrored",
+      "ms": 1385,
+      "result": {
+        "scene": "A man in a dark jacket is visible inside what appears to be a vehicle.",
+        "expressions": "The man has a neutral expression, looking slightly down and to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            296,
+            381,
+            574,
+            638
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 115,
+        "prompt_tokens": 638,
+        "total_tokens": 753,
+        "prompt_tokens_details": {
+          "cached_tokens": 531
+        }
+      },
+      "timings": {
+        "cache_n": 531,
+        "prompt_n": 107,
+        "prompt_ms": 255.799,
+        "prompt_per_token_ms": 2.3906448598130843,
+        "prompt_per_second": 418.29717864416983,
+        "predicted_n": 115,
+        "predicted_ms": 1118.085,
+        "predicted_per_token_ms": 9.722478260869565,
+        "predicted_per_second": 102.8544341440946
+      }
+    },
+    {
+      "max_side": 384,
+      "name": "shelf-only",
+      "ms": 977,
+      "result": {
+        "scene": "The image shows the interior of a room with curtains and some visible objects.",
+        "expressions": "No people visible.",
+        "changes": "The person from the previous image is gone.",
+        "face": {
+          "presence": "absent",
+          "box_2d": null
+        }
+      },
+      "usage": {
+        "completion_tokens": 82,
+        "prompt_tokens": 634,
+        "total_tokens": 716,
+        "prompt_tokens_details": {
+          "cached_tokens": 584
+        }
+      },
+      "timings": {
+        "cache_n": 584,
+        "prompt_n": 50,
+        "prompt_ms": 147.456,
+        "prompt_per_token_ms": 2.9491199999999997,
+        "prompt_per_second": 339.0842013888889,
+        "predicted_n": 82,
+        "predicted_ms": 816.941,
+        "predicted_per_token_ms": 9.96269512195122,
+        "predicted_per_second": 100.37444564540155
+      }
+    },
+    {
+      "max_side": 256,
+      "name": "webcam-0",
+      "ms": 1350,
+      "result": {
+        "scene": "A man is visible inside what appears to be a small cabin.",
+        "expressions": "The man has a neutral expression, looking down with a closed mouth.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            277,
+            303,
+            477,
+            563
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 111,
+        "prompt_tokens": 638,
+        "total_tokens": 749,
+        "prompt_tokens_details": {
+          "cached_tokens": 531
+        }
+      },
+      "timings": {
+        "cache_n": 531,
+        "prompt_n": 107,
+        "prompt_ms": 253.342,
+        "prompt_per_token_ms": 2.367682242990654,
+        "prompt_per_second": 422.3539721009544,
+        "predicted_n": 111,
+        "predicted_ms": 1086.426,
+        "predicted_per_token_ms": 9.787621621621621,
+        "predicted_per_second": 102.1698670687189
+      }
+    },
+    {
+      "max_side": 256,
+      "name": "mirrored",
+      "ms": 1406,
+      "result": {
+        "scene": "A man is visible inside a small, enclosed space with curtains and shelving.",
+        "expressions": "The man has a neutral expression, looking slightly down and to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            381,
+            477,
+            574
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 114,
+        "prompt_tokens": 638,
+        "total_tokens": 752,
+        "prompt_tokens_details": {
+          "cached_tokens": 531
+        }
+      },
+      "timings": {
+        "cache_n": 531,
+        "prompt_n": 107,
+        "prompt_ms": 266.141,
+        "prompt_per_token_ms": 2.487299065420561,
+        "prompt_per_second": 402.042526330028,
+        "predicted_n": 114,
+        "predicted_ms": 1125.922,
+        "predicted_per_token_ms": 9.876508771929824,
+        "predicted_per_second": 101.25035304399417
+      }
+    },
+    {
+      "max_side": 256,
+      "name": "shelf-only",
+      "ms": 1033,
+      "result": {
+        "scene": "The image shows the interior of a room with curtains and a bedside table.",
+        "expressions": "No people visible.",
+        "changes": "The previous image showed a person, but the current image does not.",
+        "face": {
+          "presence": "absent",
+          "box_2d": null
+        }
+      },
+      "usage": {
+        "completion_tokens": 87,
+        "prompt_tokens": 634,
+        "total_tokens": 721,
+        "prompt_tokens_details": {
+          "cached_tokens": 584
+        }
+      },
+      "timings": {
+        "cache_n": 584,
+        "prompt_n": 50,
+        "prompt_ms": 150.865,
+        "prompt_per_token_ms": 3.0173,
+        "prompt_per_second": 331.42213236999964,
+        "predicted_n": 87,
+        "predicted_ms": 865.779,
+        "predicted_per_token_ms": 9.95148275862069,
+        "predicted_per_second": 100.48753781276747
+      }
+    }
+  ],
+  "native_box_current_first_check": [
+    {
+      "max_side": 512,
+      "name": "webcam-0",
+      "ms": 1829,
+      "result": {
+        "scene": "A man in a grey jacket is visible in a room with brown curtains.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his left.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            381,
+            477,
+            563
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 114,
+        "prompt_tokens": 780,
+        "total_tokens": 894,
+        "prompt_tokens_details": {
+          "cached_tokens": 1
+        }
+      },
+      "timings": {
+        "cache_n": 1,
+        "prompt_n": 779,
+        "prompt_ms": 531.16,
+        "prompt_per_token_ms": 0.6818485237483953,
+        "prompt_per_second": 1466.6014007078847,
+        "predicted_n": 114,
+        "predicted_ms": 1258.304,
+        "predicted_per_token_ms": 11.037754385964913,
+        "predicted_per_second": 90.59813844667107
+      }
+    },
+    {
+      "max_side": 512,
+      "name": "mirrored",
+      "ms": 1494,
+      "result": {
+        "scene": "A man in a dark jacket is visible in an indoor setting with shelves.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his right.",
+        "changes": "No clear visual change.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            303,
+            442,
+            461
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 114,
+        "prompt_tokens": 780,
+        "total_tokens": 894,
+        "prompt_tokens_details": {
+          "cached_tokens": 547
+        }
+      },
+      "timings": {
+        "cache_n": 547,
+        "prompt_n": 233,
+        "prompt_ms": 313.21,
+        "prompt_per_token_ms": 1.3442489270386264,
+        "prompt_per_second": 743.9098368506753,
+        "predicted_n": 114,
+        "predicted_ms": 1124.923,
+        "predicted_per_token_ms": 9.867745614035087,
+        "predicted_per_second": 101.34026951177992
+      }
+    },
+    {
+      "max_side": 384,
+      "name": "webcam-0",
+      "ms": 1449,
+      "result": {
+        "scene": "A man in a dark jacket is visible inside what appears to be a vehicle.",
+        "expressions": "The man has a neutral expression, looking slightly down and to his left.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            276,
+            439,
+            477,
+            686
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 117,
+        "prompt_tokens": 700,
+        "total_tokens": 817,
+        "prompt_tokens_details": {
+          "cached_tokens": 547
+        }
+      },
+      "timings": {
+        "cache_n": 547,
+        "prompt_n": 153,
+        "prompt_ms": 267.485,
+        "prompt_per_token_ms": 1.7482679738562092,
+        "prompt_per_second": 571.9946912911004,
+        "predicted_n": 117,
+        "predicted_ms": 1169.973,
+        "predicted_per_token_ms": 9.99976923076923,
+        "predicted_per_second": 100.00230774556337
+      }
+    },
+    {
+      "max_side": 384,
+      "name": "mirrored",
+      "ms": 1431,
+      "result": {
+        "scene": "A man is visible inside what appears to be a small cabin or room.",
+        "expressions": "The man has a neutral expression, looking down and slightly to his right.",
+        "changes": "First observation; no previous image.",
+        "face": {
+          "presence": "present",
+          "box_2d": [
+            178,
+            303,
+            375,
+            513
+          ]
+        }
+      },
+      "usage": {
+        "completion_tokens": 116,
+        "prompt_tokens": 700,
+        "total_tokens": 816,
+        "prompt_tokens_details": {
+          "cached_tokens": 547
+        }
+      },
+      "timings": {
+        "cache_n": 547,
+        "prompt_n": 153,
+        "prompt_ms": 276.804,
+        "prompt_per_token_ms": 1.8091764705882352,
+        "prompt_per_second": 552.7376772011966,
+        "predicted_n": 116,
+        "predicted_ms": 1144.458,
+        "predicted_per_token_ms": 9.86601724137931,
+        "predicted_per_second": 101.35802274963343
+      }
+    }
+  ],
+  "box_format_reference": "https://ai.google.dev/gemma/docs/capabilities/vision/image",
+  "selected_settings": {
+    "face_backend": "e4b",
+    "box_format": "box_2d [y_min,x_min,y_max,x_max] normalized 0..1000",
+    "image_max_side": 512,
+    "question_image_max_side": 1024,
+    "current_image_first": true,
+    "expressions_field": true,
+    "resolution_observation": "384 removed 80 prompt tokens but introduced more location/comparison drift. 256 did not further reduce prompt tokens in this local llama.cpp build. Boxes remain approximate."
+  },
+  "live_final_check": {
+    "scene": "A man in a dark sweater is visible in what appears to be a room with curtains.\nExpressions: The man has a neutral expression, looking down and slightly to his left.",
+    "expressions": "The man has a neutral expression, looking down and slightly to his left.",
+    "completed_hz": 0.67,
+    "inference_ms": 1475.8,
+    "preview_face": {
+      "source": "e4b",
+      "available": true,
+      "present": true,
+      "observed_at": 1791191389.9433641,
+      "bbox": [
+        0.345,
+        0.285,
+        0.138,
+        0.192
+      ],
+      "x": -0.17200000000000004,
+      "y": -0.238,
+      "closeness": 0.192,
+      "tracking_ms": 1475.8
+    },
+    "captured_at": 1791191389.9433641
+  }
+}

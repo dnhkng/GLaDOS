@@ -1,196 +1,200 @@
-# GLaDOS Vision Module
+# Vision mind
 
-GLaDOS can see and react to its environment using Apple's FastVLM running locally via ONNX Runtime.
-
-## Role in Architecture
-
-Vision is a core input to the [autonomy loop](./autonomy.md). When enabled:
-
-1. **Camera captures frames** at configured intervals
-2. **Scene change detection** identifies meaningful changes
-3. **FastVLM generates descriptions** of the current scene
-4. **VisionUpdateEvent triggers** the autonomy loop
-5. **Main agent decides** whether to act on what it sees
-
-```mermaid
-flowchart LR
-    A[Camera<br>Capture] --> B[Scene Change<br>Detection]
-    B --> C[FastVLM<br>Inference]
-    C --> D[VisionUpdate<br>Event]
-    D --> E[Autonomy Loop<br>Main Agent]
-```
-
-Vision takes priority over timer ticks - when vision is enabled, scene changes drive the autonomy loop instead of periodic timers.
-
-## Quick Start
-
-The vision module is disabled by default. To enable it:
-
-```bash
-uv run glados start --config ./configs/glados_vision_config.yaml
-```
+GLaDOS uses Gemma 4 E4B to describe what the camera sees and what changed
+since the previous observed image. The Vision mind runs quietly in the
+background; GLaDOS receives its latest scene, changes, and observation age.
+Camera updates do not trigger unsolicited speech.
+When people are visible, the scene describes their visible expressions, gaze
+and posture before the surroundings. Obscured or small faces are described as
+having unclear expressions, rather than assigning unseen feelings.
+E4B returns these details in a dedicated `expressions` field, which is included
+in **What I see**, the cached `vision_look` result, and camera context for replies.
 
 ## Setup
 
-### 1. Download FastVLM Models
+Start the multimodal E4B server described in [Gemma 4](gemma4.md), including its
+`--mmproj` argument. The default endpoint is port 18080. Then run:
 
 ```bash
-huggingface-cli download onnx-community/FastVLM-0.5B-ONNX \
-  --local-dir models/Vision \
-  --include "onnx/vision_encoder_fp16.onnx" \
-  --include "onnx/embed_tokens_int8.onnx" \
-  --include "onnx/decoder_model_merged_q4f16.onnx" \
-  --include "config.json" \
-  --include "preprocessor_config.json" \
-  --include "tokenizer.json" \
-  --include "tokenizer_config.json" \
-  --include "README.md" \
-  --include "LICENSE"
+uv run glados webapp --config configs/glados_gemma4_llamacpp.yaml
 ```
 
-Or using the newer command:
+Open http://127.0.0.1:8050/ and inspect **Minds → Vision**. The inspector shows
+a live webcam stream with CPU face tracking, plus slower scene captions,
+changes, measured update rate and frame timing.
+The preview overlays the detected face box, gaze crosshair, and normalized X/Y
+coordinates for that exact displayed frame. No face means no overlay. E4B
+continues to receive the original image without annotations.
+**Pause camera** releases the webcam and removes its context from conversation.
+**Run once now** works while paused and releases the camera afterwards.
+**Resume camera** restarts scheduled observations.
 
-```bash
-hf download onnx-community/FastVLM-0.5B-ONNX \
-  --local-dir models/Vision \
-  --include "onnx/vision_encoder_fp16.onnx" \
-  --include "onnx/embed_tokens_int8.onnx" \
-  --include "onnx/decoder_model_merged_q4f16.onnx" \
-  --include "config.json" \
-  --include "preprocessor_config.json" \
-  --include "tokenizer.json" \
-  --include "tokenizer_config.json" \
-  --include "README.md" \
-  --include "LICENSE"
-```
+The front page shows the design's **Original** optic treatment beside the eye
+when the camera is on: thermal colours, motion trails and contour lines. It
+reuses `/api/vision/live?overlay=0`, so the CPU preview box is not burned into
+this view. A circular **SUBJECT** target follows the eye's face-scanning gaze.
+Motion heat fades by 95% in about 0.6 seconds. The feed keeps 80% of the source
+in its limiting dimension, preserves its aspect ratio, and pans within the
+image bounds. It follows the selected person
+when faces are visible and slowly scans the room otherwise. Multiple people
+receive alternating attention about every three seconds; position matching
+keeps detector ordering changes from randomly switching the target.
+Eye colours and eyelids drive the optic treatment. Each actual Vision HTTP
+inference (background or question) emits a sequence cue that starts one short
+blink in both the eye and feed. Queuing alone does not blink or mark the
+user-facing eye as processing. Hiding the page releases its preview stream;
+turning the camera off hides the optic feed and restores mouse gaze.
 
-This downloads the ONNX models (~640MB) to the default location.
+## Configuration
 
-### 2. Configure Vision
+Add this section inside `Glados` in any configuration, including an API conversation profile:
 
 ```yaml
 vision:
   enabled: true
-  model_dir: "models/Vision"
-  camera_index: 0
-  capture_interval_seconds: 5
-  resolution: 384
-  scene_change_threshold: 0.05
-  max_tokens: 200
+  completion_url: "http://127.0.0.1:18080/v1/chat/completions"
+  model: "gemma-4-E4B"
+  camera_spec: 0
+  interval_min_s: 2
+  interval_max_s: 5
+  frame_window_s: 0.25
+  image_max_side: 512
+  max_tokens: 256
+  timeout_s: 10
+  face_tracking: true
+  face_backend: "yunet"
+  face_interval_s: 0.03
+  sleep_after_s: 5.0
 ```
 
-## Configuration Reference
+Omit `vision`, or set `enabled: false`, to disable camera processing.
+`camera_spec` accepts a camera index or OpenCV-supported stream URL.
+`camera_index` is also accepted for existing camera configurations.
+`completion_url`, `model` (the E4B server alias), and optional `api_key` belong
+only to vision. They never inherit the conversation model, API URL, credentials,
+or request options. If GLaDOS speaks using an API model, start E4B locally or
+point vision at a remote E4B server. Webcam images go only to that endpoint;
+the conversation API receives the resulting text.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable vision module |
-| `model_dir` | string | `"models/Vision"` | Path to FastVLM ONNX models |
-| `camera_index` | int | `0` | Camera device index |
-| `capture_interval_seconds` | float | `5.0` | Time between frame captures |
-| `resolution` | int | `384` | Scene-change detection resolution |
-| `scene_change_threshold` | float | `0.05` | Minimum change to trigger inference (0=always, 1=never) |
-| `max_tokens` | int | `200` | Maximum tokens in background description |
+## Frame selection and inference
 
-## Performance
+A camera thread captures at up to 30 fps and keeps at most eight frames.
+Numba scores a small grayscale image using Laplacian variance; higher scores
+usually indicate sharper edges. Frame selection considers only the most recent
+0.25-second window and rejects frames older than one second. It chooses the
+sharpest candidate, breaking ties in favor of the newer frame.
 
-FastVLM provides **85x faster time-to-first-token** compared to Ollama-based VLMs:
+The mind acquires capacity from the shared inference scheduler **before**
+selecting a frame. A busy model therefore cannot create a backlog of old camera
+requests. The schedule stays within the configured 2–5 second bounds. A small
+96×72 grayscale CPU motion tracker measures changed pixels, compensates for
+uniform exposure shifts, and smooths activity with fast attack and slower decay.
+Still scenes favour the maximum delay; active scenes favour the minimum.
+Each observation draws one random quantile. Scheduler polls reuse it, adjusting
+the pending deadline to live motion instead of re-randomising the wait. Actual
+frequency falls when inference takes longer or conversation needs capacity.
+The inspector shows motion activity, current delay and completed frequency.
 
-- **Direct ONNX inference** - no HTTP overhead
-- **Runs on CPU or CUDA** - GPU acceleration when available
-- **Small footprint** - ~640MB model files for 0.5B
-- **Frame differencing** - skips unchanged scenes
+E4B receives up to four observations in one inference, oldest first with CURRENT
+last. Each image is immediately preceded by its actual UTC capture timestamp,
+seconds before CURRENT and the elapsed gap from the preceding observation.
+The request also supplies the exact total span and adjacent gaps as explicit
+metadata. Reports carry the host-computed `window_span_s`; generated recent-events
+prose omits numeric durations so it does not replace those measurements.
+The stable prompt asks for `scene` (what is happening now), `expressions`,
+`changes` (since the immediately preceding image), and `recent_events` (the visible
+sequence across the window). Intermittent snapshots must not be treated as
+continuous video or evidence of unseen intervening actions. The 256-token output
+budget accommodates all four fields.
+Only successful observations advance the bounded four-image window; malformed
+responses and timeouts do not. Changing cameras clears the window. The first
+observation cannot establish recent events. Images and previews stay in bounded
+process memory and are not written to conversation history or persistent mind
+memory. The current scene, changes and recent-events report are included in
+GLaDOS's visual context and in the Vision inspector. The `vision_look` tool reads
+the latest observation and its actual age without another inference when called
+without arguments.
+For a specific detail, call `vision_look(question="Does my jacket have a zipper?")`.
+This selects a fresh sharp frame after acquiring an interactive inference slot
+and asks E4B to inspect that detail. The answer includes visible evidence and
+the capture age; unclear or obscured details must be reported as uncertain.
+Question inspections do not replace the background scene or its four-image
+window. They use the same dedicated E4B endpoint for API conversation profiles.
+A paused camera must be resumed before asking for a fresh inspection.
+The latest question and answer are shown in **Minds → Vision**.
+`question_image_max_side` defaults to 1024 (the native 640×480 camera image is
+kept at that size); `question_max_tokens` defaults to 192.
 
-## Context Injection
+This uses existing OpenCV, NumPy, Numba and requests dependencies. It does not
+require additional Python packages. The 233 KB YuNet face model is bundled
+with its MIT license; it runs through OpenCV on the CPU without GPU memory.
 
-The vision system maintains a single `[vision]` slot that's injected into the LLM context:
+## Face tracking and sleep
 
-```
-[vision] A person sitting at a wooden desk with a laptop. There is a coffee mug
-to their left and a window showing daylight behind them.
-```
+By default, OpenCV's tiny YuNet neural face detector runs independently on the
+CPU at up to 30 fps (`face_interval_s: 0.03`). It processes a
+320-pixel-wide/long image and reports all detected faces. Actual frequency depends
+on camera capture and CPU speed. A 30 ms detector interval lets each 30 fps
+frame be tracked despite small capture timing variations. Local USB webcams
+prefer MJPEG capture with two device buffers, allowing one frame to be queued
+while the CPU processes the other. A single buffer halved this webcam's frame
+rate; two buffers measured 29.8 fps with face tracking enabled and 28.5 fps
+in the served live preview. E4B captions completed at 0.5 Hz. Results are recorded
+in `docs/benchmarks/vision-face-yunet-2026-10-05.json`. On this machine, saved 640×480 webcam frames
+with turned faces took about 3.3 ms per detection; the earlier Haar cascades
+missed those faces. This small check is not a general accuracy benchmark.
 
-This snapshot is updated whenever a new inference completes. The main agent sees the current scene in every request.
+The webcam inspector streams fresh JPEGs at up to 30 fps while open; the E4B
+caption below updates on the motion-aware schedule (2–5 seconds by default). Face boxes, crosshairs and X/Y
+labels come from detection on that exact displayed frame. JPEG encoding only
+runs when a viewer requests the stream, and viewers share a cached encoding of
+the same frame. Closing the inspector stops that viewer's stream. Detection
+continues for avatar gaze and presence even when the inspector is closed.
+E4B receives unannotated sharp frames, independent of the live preview.
+Horizontal coordinates are reversed only when driving the eye; the preview and
+its labels retain the original camera coordinates.
 
-## Detailed Lookups
+The avatar follows faces automatically when **Camera: ON**. When **Camera: OFF**,
+it follows the mouse pointer. Missing or stale faces while the camera is on do
+not switch gaze to the pointer. Face coordinates reach the eye through small
+camera-only SSE updates at up to 30 Hz, separate from dashboard refreshes and
+E4B captions. Idle glances cannot override a tracked face. Scanning alternates
+approximate eye positions with shorter mouth glances, scaled to its bounding
+box, and quiets down while following quick head movement. Blinking and
+expressions remain. Nearness uses the larger of the normalized face width and
+height: a face filling two-thirds of either image dimension gives full zoom.
+The zoom ramps smoothly from ordinary size to 1.6× as a face approaches and
+returns to ordinary size when camera tracking stops. Optional `face_backend: "haar"` uses OpenCV's bundled
+frontal/profile cascades. Optional `face_backend: "e4b"` returns face presence
+and Gemma's documented `face.box_2d: [y_min, x_min, y_max, x_max]` (0..1000) in
+the same slower scene observation; see Google's
+[object detection example](https://ai.google.dev/gemma/docs/capabilities/vision/image).
+E4B boxes remain approximate and are drawn only on the selected observation
+JPEG (`/api/vision/frame`), never on newer live webcam frames. The live preview
+has no face overlay in E4B mode. Invalid or contradictory coordinates never
+drive gaze or imply an empty room.
 
-For specific visual questions (e.g., "What color is my shirt?"), the LLM can call the `vision_look` tool:
+After five seconds of consecutive observations confirming no person, the idle eye closes into its sleeping
+expression. A returning face, microphone speech, a user-facing inference, recent
+user input, or keyboard/click interaction wakes it. Brief detector misses do not
+cause sleep. A paused, disconnected, failed, or stale camera supplies unknown
+presence and cannot put the eye to sleep. Sleep changes only the avatar; camera
+capture, vision observations, and microphone input continue so she can wake.
+An uncertain result, failed observation, or stale gap restarts absence timing.
+All face-detection backends are approximate; this signal is only
+used for animation. Set `face_tracking: false` to disable it.
 
-```
-vision_look(prompt="Describe the person's clothing in detail")
-```
+`image_max_side` already downsizes the background images before transmission.
+The default remains 512 pixels: in local tests, reducing it to 384 reduced two-image
+prompt token counts by 80 but made the face boxes drift more. At 256, the local
+llama.cpp preprocessor's minimum image size meant no further token reduction.
+Text generation dominated the remaining latency. Detailed questions independently
+retain the native camera resolution through `question_image_max_side`.
 
-This triggers:
-1. Fresh camera capture
-2. Custom VLM prompt for the specific question
-3. Detailed response returned to the LLM
-
-Requires an LLM backend that supports tool calling.
-
-## VisionProcessor Thread
-
-Vision runs in a separate thread alongside other processors:
-
-- **Captures frames** at `capture_interval_seconds`
-- **Compares frames** using the configured threshold
-- **Runs VLM inference** when scene changes detected
-- **Updates VisionState** with latest description
-- **Emits VisionUpdateEvent** to trigger autonomy
-
-The thread is fully async and doesn't block voice or text processing.
-
-## Troubleshooting
-
-**Camera not opening:**
-- Check `camera_index` in config (try 0, 1, 2...)
-- Verify camera permissions
-- Test with: `ls /dev/video*` (Linux) or check System Preferences (macOS)
-
-**Models not found:**
-- Ensure models downloaded to `models/Vision/`
-- Check for `vision_encoder_fp16.onnx`, `embed_tokens_int8.onnx`, `decoder_model_merged_q4f16.onnx`
-
-**Slow inference:**
-- Increase `capture_interval_seconds`
-- Ensure CUDA available (`CUDAExecutionProvider`)
-- Raise `scene_change_threshold` (higher = fewer inferences)
-
-**Too many triggers:**
-- Increase `scene_change_threshold` (0.1 or higher)
-- The threshold is a normalized difference score - adjust based on your environment
-
-## Advanced
-
-### Custom Model Path
-
-```yaml
-vision:
-  model_dir: "/path/to/custom/fastvlm"
-```
-
-### Disable Vision
-
-Remove the entire `vision:` section from your config, or set:
-
-```yaml
-vision:
-  enabled: false
-```
-
-## Implementation Details
-
-| Aspect | Value |
-|--------|-------|
-| **Model** | Apple FastVLM-0.5B (ONNX) |
-| **Precision** | fp16 + q4f16 mix |
-| **Architecture** | Vision encoder + text decoder |
-| **Input** | 1024x1024 RGB images (center-cropped) |
-| **Output** | Natural language scene descriptions |
-| **Backend** | ONNX Runtime (CPU/CUDA) |
-| **Integration** | Same ONNX patterns as ASR/TTS |
-
-## See Also
-
-- [README](../README.md) - Full architecture diagram
-- [autonomy.md](./autonomy.md) - How vision triggers the autonomy loop
-- [vision_config.py](../src/glados/vision/vision_config.py) - Configuration source
-- [constants.py](../src/glados/vision/constants.py) - Vision system prompts
+Local E4B checks on 2026-10-05 found the turned face in three test images that
+Haar missed, and correctly reported no person in a shelf-only crop. Face boxes
+remained approximate. Tests of the combined previous/current-image prompt took
+about 1.5–2.5 seconds while the live vision mind was also running. These are a
+small practical check, not a general detector accuracy benchmark. Results are
+recorded in `docs/benchmarks/vision-face-e4b-2026-10-05.json`; camera images are
+not stored there.

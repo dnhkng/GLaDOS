@@ -1,0 +1,19 @@
+{
+  "scope": "Read-only live app context reviewed on local E4B; no prompt enqueued, speech or conversation changes.",
+  "elapsed_s": 1.157,
+  "slot_ids": [
+    "compaction",
+    "emotion",
+    "health",
+    "vision"
+  ],
+  "sources": [
+    "autonomy",
+    "autonomy_decision",
+    "autonomy_chat",
+    "autonomy_slots",
+    "clock"
+  ],
+  "decision": null,
+  "raw_decision": "{\n  \"action\": \"null\"\n}"
+}

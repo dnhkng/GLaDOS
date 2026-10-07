@@ -1,0 +1,12 @@
+{
+  "input_fragments": [
+    "What should I have",
+    "for dinner if I am allergic to peanuts?"
+  ],
+  "merged_transcript": "What should I have for dinner if I'm allergic to peanuts?",
+  "same_turn_id": true,
+  "supersedes_generation": true,
+  "transcription_ms": 280,
+  "passed": true,
+  "note": "Synthetic audio through real SpeechListener continuation and local E4B; no user recording or playback."
+}

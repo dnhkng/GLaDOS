@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import partial
 import math
@@ -22,7 +22,7 @@ from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, S
 from textual.worker import Worker, WorkerState
 
 from glados.core.engine import Glados, GladosConfig
-from glados.glados_ui.text_resources import shortcuts_text, welcome_tips
+from glados.glados_ui.text_resources import welcome_tips
 from glados.observability import ObservabilityEvent
 from glados.utils.resources import resource_path
 
@@ -392,7 +392,6 @@ class AutonomyPanel(Static):
             self.update("Autonomy: unavailable")
             return
         enabled = "[green]ON[/]" if engine.autonomy_config.enabled else "[red]OFF[/]"
-        coalesce = "ON" if engine.autonomy_config.coalesce_ticks else "OFF"
         workers = engine.autonomy_config.autonomy_parallel_calls if engine.autonomy_config.enabled else 0
         inflight = engine.autonomy_inflight()
         queue_depth = engine.llm_queue_autonomy.qsize()
@@ -401,7 +400,6 @@ class AutonomyPanel(Static):
             f"Enabled: {enabled}",
             f"Workers: {workers}  In-flight: {inflight}",
             f"Queue: {queue_depth}  Jobs: {jobs}",
-            f"Coalesce ticks: {coalesce}",
         ]
         self.update("\n".join(lines))
 
@@ -777,7 +775,7 @@ class ObservabilityScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Container(id="observability_dialog"):
             yield Label(self.TITLE, id="observability_title")
-            yield RichLog(id="observability_log")
+            yield RichLog(id="observability_log", max_lines=500)
             yield Static("", id="observability_status")
 
     def on_mount(self) -> None:
@@ -824,7 +822,6 @@ class ObservabilityScreen(ModalScreen[None]):
         priority_q = engine.llm_queue_priority.qsize()
         autonomy_q = engine.llm_queue_autonomy.qsize()
         inflight = engine.autonomy_inflight()
-        coalesce = "ON" if engine.autonomy_config.coalesce_ticks else "OFF"
         if engine.mcp_manager:
             snapshot = engine.mcp_manager.status_snapshot()
             connected = sum(1 for entry in snapshot if entry["connected"])
@@ -840,7 +837,6 @@ class ObservabilityScreen(ModalScreen[None]):
                     f"queue p:{priority_q} a:{autonomy_q}",
                     f"inflight: {inflight}",
                     f"mcp: {connected}/{total}",
-                    f"coalesce: {coalesce}",
                 ]
             )
         )

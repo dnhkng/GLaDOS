@@ -1,0 +1,76 @@
+{
+  "backend": "parakeet",
+  "model": "parakeet-tdt-0.6b-v3",
+  "fixtures": "espeak-ng synthetic speech / OpenCV generated image",
+  "results": [
+    {
+      "case": "english",
+      "repeat": 0,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": null,
+      "total_s": 3.832108255010098,
+      "real_time_factor": 0.859433882988444,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "english",
+      "repeat": 1,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": null,
+      "total_s": 0.31286808801814914,
+      "real_time_factor": 0.07016749471966564,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "english",
+      "repeat": 2,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": null,
+      "total_s": 0.2967439340427518,
+      "real_time_factor": 0.06655130140287668,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "german",
+      "repeat": 0,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": null,
+      "total_s": 0.29337010299786925,
+      "real_time_factor": 0.06065987319840669,
+      "word_error_rate": 0.06666666666666667
+    },
+    {
+      "case": "german",
+      "repeat": 1,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": null,
+      "total_s": 0.2578213670058176,
+      "real_time_factor": 0.053309492925822634,
+      "word_error_rate": 0.06666666666666667
+    },
+    {
+      "case": "german",
+      "repeat": 2,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": null,
+      "total_s": 0.2740417249733582,
+      "real_time_factor": 0.05666336180165327,
+      "word_error_rate": 0.06666666666666667
+    }
+  ],
+  "date": "2026-10-04",
+  "hardware": "NVIDIA RTX 3080 10 GB; Linux; CUDA 12.8",
+  "runtime": "Parakeet TDT 0.6B v3; ONNX Runtime 1.28.0; CUDA preferred"
+}

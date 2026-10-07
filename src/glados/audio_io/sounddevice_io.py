@@ -1,7 +1,10 @@
 """Local microphone and speaker backend implemented with sounddevice."""
 
 import queue
+import sys
 import threading
+import time
+from typing import Any
 
 from loguru import logger
 import numpy as np
@@ -25,7 +28,8 @@ class SoundDeviceAudioIO(AudioIO):
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
 
-    def __init__(self, vad_threshold: float | None = None) -> None:
+    def __init__(self, vad_threshold: float | None = None, input_device: int | str | None = None,
+                 output_device: int | str | None = None) -> None:
         """Initialize the sounddevice audio I/O.
 
         Args:
@@ -45,13 +49,150 @@ class SoundDeviceAudioIO(AudioIO):
 
         self._vad_model = VAD()
 
-        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
+        self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue(maxsize=32)
         self.input_stream: sd.InputStream | None = None
         self._is_playing = False
         self._playback_thread = None
         self._stop_event = threading.Event()
         self._pending_audio: NDArray[np.float32] | None = None
         self._pending_sample_rate: int = self.SAMPLE_RATE
+        self.input_device, self.output_device = input_device, output_device
+        self._pending_output_device: int | str | None = None
+        self._device_lock = threading.RLock()
+        self._listening_enabled = False
+        self._last_callback = 0.0
+        self._last_recovery_attempt = 0.0
+        self._capture_error: str | None = None
+        self._capture_recoveries = 0
+        self._output_underflows = 0
+        self._input_overflows = 0
+        self._capture_discontinuity = threading.Event()
+
+    def _resolve_device(self, device: int | str | None, direction: str) -> int | str | None:
+        if device is not None or not sys.platform.startswith("linux"):
+            return device
+        # Follow the desktop's default source/sink through its routing service.
+        # ALSA's raw default can retain a dead USB handle after a device change.
+        devices = sd.query_devices()
+        for name in ("pulse", "pipewire"):
+            for index, row in enumerate(devices):
+                if row["name"] == name and row[f"max_{direction}_channels"] > 0:
+                    return index
+        return None
+
+    def capture_health(self) -> dict[str, Any]:
+        age = time.monotonic() - self._last_callback if self._last_callback else None
+        active = self.input_stream is not None and self.input_stream.active is not False
+        return {"enabled": self._listening_enabled, "connected": active and age is not None and age < 2,
+                "last_frame_age_s": round(age, 3) if age is not None else None,
+                "error": self._capture_error, "recoveries": self._capture_recoveries,
+                "pending_frames": self._sample_queue.qsize(), "overflows": self._input_overflows}
+
+    def consume_capture_discontinuity(self) -> bool:
+        if not self._capture_discontinuity.is_set():
+            return False
+        self._capture_discontinuity.clear()
+        with self._sample_queue.mutex:
+            self._sample_queue.queue.clear()
+        return True
+
+    def _queue_sample(self, chunk: NDArray[np.float32], speech: bool) -> None:
+        try:
+            self._sample_queue.put_nowait((chunk, speech))
+        except queue.Full:
+            self._input_overflows += 1
+            self._capture_discontinuity.set()
+            # Never block a real-time callback on a consumer doing inference.
+            try:
+                self._sample_queue.get_nowait()
+                self._sample_queue.put_nowait((chunk, speech))
+            except (queue.Empty, queue.Full):
+                pass
+
+    def ensure_listening(self) -> bool:
+        """Called by the listener while draining/waiting; never revives an intentionally stopped input."""
+        if not self._listening_enabled or self.capture_health()["connected"]:
+            return False
+        now = time.monotonic()
+        if now - self._last_recovery_attempt < 3 or not self._device_lock.acquire(blocking=False):
+            return False
+        try:
+            if not self._listening_enabled:
+                return False
+            self._last_recovery_attempt = now
+            logger.warning("Microphone stream stalled; reopening selected input")
+            try:
+                self.start_listening()
+                with self._sample_queue.mutex:
+                    self._sample_queue.queue.clear()
+                self._capture_recoveries += 1
+                return True
+            except (sd.PortAudioError, RuntimeError, ValueError) as exc:
+                self._capture_error = str(exc)
+                self._listening_enabled = True  # Retry when a disconnected device returns.
+                logger.warning("Microphone recovery deferred: {}", exc)
+                return False
+        finally:
+            self._device_lock.release()
+
+    def device_snapshot(self) -> dict[str, Any]:
+        devices, apis = sd.query_devices(), sd.query_hostapis()
+        def choices(direction: str) -> list[dict[str, Any]]:
+            return [{"id": i, "name": device["name"], "host_api": apis[device["hostapi"]]["name"]}
+                    for i, device in enumerate(devices) if device[f"max_{direction}_channels"] > 0]
+        with self._device_lock:
+            return {"available": True, "input": choices("input"), "output": choices("output"),
+                    "selected_input": self.input_device, "selected_output": self.output_device,
+                    "input_health": self.capture_health(), "output_health": {"underflows": self._output_underflows}}
+
+    def select_device(self, kind: str, device: int | None) -> None:
+        if kind not in {"microphone", "speaker"} or (device is not None and (type(device) is not int or device < 0)):
+            raise ValueError("Choose a listed audio device or the system default")
+        with self._device_lock:
+            try:
+                if kind == "microphone":
+                    self._input_settings(device)
+                    old = self.input_device
+                    if device == old and self.capture_health()["connected"]:
+                        return
+                    listening = self.input_stream is not None
+                    self.stop_listening()
+                    self.input_device = device
+                    try:
+                        if listening:
+                            self.start_listening()
+                    except Exception:
+                        self.stop_listening()
+                        self.input_device = old
+                        if listening:
+                            self.start_listening()
+                        raise
+                    with self._sample_queue.mutex:
+                        self._sample_queue.queue.clear()
+                else:
+                    effective = self._resolve_device(device, "output")
+                    rate = sd.query_devices(device=effective, kind="output")["default_samplerate"]
+                    sd.check_output_settings(device=effective, channels=1, samplerate=rate)
+                    if device != self.output_device:
+                        self.stop_speaking()
+                        self.output_device = device
+            except (sd.PortAudioError, RuntimeError) as exc:
+                raise ValueError(f"Cannot open the selected {kind}: {exc}") from exc
+
+    def _input_settings(self, device: int | str | None) -> tuple[int, int]:
+        device = self._resolve_device(device, "input")
+        info = sd.query_devices(device=device, kind="input")
+        native_rate = int(info["default_samplerate"])
+        candidates = [(self.SAMPLE_RATE, 1), (native_rate, 1)]
+        if info["max_input_channels"] >= 2:
+            candidates.append((native_rate, 2))
+        for rate, channels in candidates:
+            try:
+                sd.check_input_settings(device=device, channels=channels, samplerate=rate)
+                return rate, channels
+            except sd.PortAudioError:
+                continue
+        raise ValueError("This microphone does not support a usable mono or stereo capture format")
 
     def start_listening(self) -> None:
         """Start capturing audio from the system microphone.
@@ -66,11 +207,15 @@ class SoundDeviceAudioIO(AudioIO):
         """
         if self.input_stream is not None:
             self.stop_listening()
+        self._listening_enabled = True
+        input_rate, input_channels = self._input_settings(self.input_device)
+        buffered = np.empty(0, dtype=np.float32)
+        self._vad_model.reset_states()
 
         def audio_callback(
             indata: NDArray[np.float32],
             frames: int,
-            time: sd.CallbackStop,
+            time_info: Any,
             status: sd.CallbackFlags,
         ) -> None:
             """Process incoming audio data and put it in the queue with VAD confidence.
@@ -86,23 +231,33 @@ class SoundDeviceAudioIO(AudioIO):
                 - Applies voice activity detection to determine speech presence
                 - Puts processed audio samples and VAD confidence into a thread-safe queue
             """
-            if status:
-                # Log any errors for debugging
-                logger.debug(f"Audio callback status: {status}")
+            nonlocal buffered
+            self._last_callback = time.monotonic()
+            if status and status.input_overflow:
+                self._input_overflows += 1
+                self._capture_discontinuity.set()
 
-            data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
-            vad_value = self._vad_model(np.expand_dims(data, 0))
-            vad_confidence = vad_value > self.vad_threshold
-            self._sample_queue.put((data, bool(vad_confidence)))
+            data = np.asarray(indata, dtype=np.float32).mean(axis=1)
+            if input_rate != self.SAMPLE_RATE:
+                data = resample_audio(data, input_rate, self.SAMPLE_RATE)
+            buffered = np.concatenate((buffered, data))
+            # Native-rate devices still feed exactly 512 mono samples to Silero.
+            while len(buffered) >= 512:
+                chunk, buffered = buffered[:512].copy(), buffered[512:]
+                vad_value = self._vad_model(np.expand_dims(chunk, 0))
+                self._queue_sample(chunk, bool(vad_value > self.vad_threshold))
 
         try:
             self.input_stream = sd.InputStream(
-                samplerate=self.SAMPLE_RATE,
-                channels=1,
+                device=self._resolve_device(self.input_device, "input"),
+                samplerate=input_rate,
+                channels=input_channels,
                 callback=audio_callback,
-                blocksize=int(self.SAMPLE_RATE * self.VAD_SIZE / 1000),
+                blocksize=int(input_rate * (self.VAD_SIZE / 1000 if input_rate == self.SAMPLE_RATE else 0.04)),
             )
             self.input_stream.start()
+            self._last_callback = time.monotonic()
+            self._capture_error = None
         except sd.PortAudioError as e:
             raise RuntimeError(f"Failed to start audio input stream: {e}") from e
 
@@ -113,6 +268,7 @@ class SoundDeviceAudioIO(AudioIO):
         This method should be called when audio input is no longer needed or
         before application shutdown.
         """
+        self._listening_enabled = False
         if self.input_stream is not None:
             try:
                 self.input_stream.stop()
@@ -123,6 +279,10 @@ class SoundDeviceAudioIO(AudioIO):
                 self.input_stream = None
 
     def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None:
+        with self._device_lock:
+            self._start_speaking(audio_data, sample_rate, text)
+
+    def _start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "") -> None:
         """Queue audio for playback through the system speakers.
 
         Stores audio data for playback via measure_percentage_spoken(), which
@@ -152,8 +312,10 @@ class SoundDeviceAudioIO(AudioIO):
         # low-quality built-in sample-rate converter is never used. This avoids
         # the audible crackling/distortion that occurs when the TTS rate differs
         # from the device rate (e.g. 22050 Hz TTS out, 44100 Hz device).
+        output_device = self.output_device
         try:
-            device_rate = int(sd.query_devices(kind="output")["default_samplerate"])
+            output_device = self._resolve_device(self.output_device, "output")
+            device_rate = int(sd.query_devices(device=output_device, kind="output")["default_samplerate"])
         except Exception as e:
             device_rate = 0
             logger.debug(f"Could not query output device sample rate: {e}")
@@ -167,6 +329,7 @@ class SoundDeviceAudioIO(AudioIO):
         self._is_playing = True
         self._pending_audio = audio_data
         self._pending_sample_rate = sample_rate
+        self._pending_output_device = output_device
 
     def measure_percentage_spoken(self, total_samples: int, sample_rate: int | None = None) -> tuple[bool, int]:
         """
@@ -185,6 +348,7 @@ class SoundDeviceAudioIO(AudioIO):
                 - int: Percentage of audio played (0-100)
         """
         audio_data = self._pending_audio
+        output_device = self._pending_output_device
         if audio_data is None:
             return False, 100
 
@@ -214,6 +378,7 @@ class SoundDeviceAudioIO(AudioIO):
 
         position = 0
         interrupted = False
+        underflows_before = self._output_underflows
         completion_event = threading.Event()
         # Capture current stop_event so a new start_speaking() call doesn't affect this session
         stop_event = self._stop_event
@@ -223,6 +388,8 @@ class SoundDeviceAudioIO(AudioIO):
         ) -> None:
             """Fill the next output block and track completion or interruption."""
             nonlocal position, interrupted
+            if status and status.output_underflow:
+                self._output_underflows += 1
 
             if stop_event.is_set():
                 outdata.fill(0)
@@ -249,9 +416,11 @@ class SoundDeviceAudioIO(AudioIO):
             logger.debug(f"Using sample rate: {sample_rate} Hz, total samples: {effective_total}")
             max_timeout = effective_total / sample_rate + 1
             with sd.OutputStream(
+                device=output_device,
                 callback=stream_callback,
                 samplerate=sample_rate,
                 channels=1,
+                latency="high",
             ):
                 completed = completion_event.wait(max_timeout)
                 if not completed:
@@ -270,6 +439,8 @@ class SoundDeviceAudioIO(AudioIO):
         if self._stop_event is stop_event:
             self._is_playing = False
         percentage_played = min(int(position / effective_total * 100), 100)
+        if self._output_underflows > underflows_before:
+            logger.warning("Speech playback had {} buffer underruns", self._output_underflows - underflows_before)
         return interrupted, percentage_played
 
     def check_if_speaking(self) -> bool:

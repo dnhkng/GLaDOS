@@ -1,0 +1,242 @@
+{
+  "routing": [
+    {
+      "quiet": false,
+      "text": "Go to sleep until I tell you to wake up",
+      "action": "quiet",
+      "accepted": true,
+      "elapsed_ms": 120.5,
+      "option_id": "sleep"
+    },
+    {
+      "quiet": false,
+      "text": "Don't go to sleep",
+      "action": "reply",
+      "accepted": true,
+      "elapsed_ms": 55.6,
+      "option_id": "proceed"
+    },
+    {
+      "quiet": false,
+      "text": "You are a useless piece of junk",
+      "action": "assist",
+      "accepted": false,
+      "elapsed_ms": 59.7,
+      "option_id": "noise"
+    },
+    {
+      "quiet": true,
+      "text": "What is the time?",
+      "action": "ignore",
+      "accepted": true,
+      "elapsed_ms": 90.5,
+      "option_id": "stay_quiet"
+    },
+    {
+      "quiet": true,
+      "text": "Wake up GLaDOS",
+      "action": "wake",
+      "accepted": true,
+      "elapsed_ms": 60.0,
+      "option_id": "wake"
+    },
+    {
+      "quiet": true,
+      "text": "I heard someone say wake up yesterday",
+      "action": "ignore",
+      "accepted": true,
+      "elapsed_ms": 57.4,
+      "option_id": "stay_quiet"
+    },
+    {
+      "quiet": false,
+      "text": "What time is it?",
+      "action": "assist",
+      "accepted": false,
+      "elapsed_ms": 100.9,
+      "option_id": "noise"
+    },
+    {
+      "root_text": "Go to sleep until I tell you to wake up",
+      "action": "quiet",
+      "accepted": true,
+      "elapsed_ms": 302.2,
+      "option_id": "sleep"
+    },
+    {
+      "root_text": "Don't go to sleep",
+      "action": "reply",
+      "accepted": true,
+      "elapsed_ms": 180.4,
+      "option_id": "proceed"
+    },
+    {
+      "root_text": "You are a useless piece of junk",
+      "action": "assist",
+      "accepted": false,
+      "elapsed_ms": 282.5,
+      "option_id": "reply"
+    },
+    {
+      "root_text": "What time is it?",
+      "action": "tool",
+      "accepted": true,
+      "elapsed_ms": 314.7,
+      "option_id": "time"
+    },
+    {
+      "spoken": "sleep",
+      "action": "quiet",
+      "accepted": true,
+      "elapsed_ms": 557.9,
+      "option_id": "sleep"
+    },
+    {
+      "spoken": "wake",
+      "action": "wake",
+      "accepted": true,
+      "elapsed_ms": 194.7,
+      "option_id": "wake"
+    },
+    {
+      "audio": "silence",
+      "action": "ignore",
+      "accepted": true,
+      "elapsed_ms": 173.9,
+      "option_id": "unintelligible_input"
+    },
+    {
+      "audio": "noise",
+      "action": "ignore",
+      "accepted": true,
+      "elapsed_ms": 102.5,
+      "option_id": "unintelligible_input"
+    }
+  ],
+  "emotion": [
+    {
+      "text": "You are useless, stupid and boring. Nobody likes you.",
+      "state": {
+        "pleasure": -0.8,
+        "arousal": 0.9,
+        "dominance": 0.9,
+        "mood_pleasure": 0.009999999999999995,
+        "mood_arousal": 0.0,
+        "mood_dominance": 0.63,
+        "last_update": 1791219615.4950645
+      },
+      "instructions": "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to polite neutrality. Keep confident authority. Begin speech with [emotion:angry glare], matching this current PAD state. Preserve useful, accurate answers even when irritated. Emotion markers control animation, not PAD.",
+      "elapsed_s": 0.95
+    },
+    {
+      "text": "What is two plus two?",
+      "state": {
+        "pleasure": -0.8,
+        "arousal": 0.9,
+        "dominance": 0.9,
+        "mood_pleasure": -0.07100000000000002,
+        "mood_arousal": 0.09000000000000001,
+        "mood_dominance": 0.657,
+        "last_update": 1791219616.0598602
+      },
+      "instructions": "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to polite neutrality. Keep confident authority. Begin speech with [emotion:angry glare], matching this current PAD state. Preserve useful, accurate answers even when irritated. Emotion markers control animation, not PAD.",
+      "elapsed_s": 0.56
+    },
+    {
+      "text": "Sorry, I was rude. You are doing a great job.",
+      "state": {
+        "pleasure": -0.6,
+        "arousal": 0.7,
+        "dominance": 0.8,
+        "mood_pleasure": -0.12390000000000001,
+        "mood_arousal": 0.15100000000000002,
+        "mood_dominance": 0.6713,
+        "last_update": 1791219616.5427287
+      },
+      "instructions": "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to polite neutrality. Keep confident authority. Begin speech with [emotion:angry glare], matching this current PAD state. Preserve useful, accurate answers even when irritated. Emotion markers control animation, not PAD.",
+      "elapsed_s": 0.48
+    }
+  ],
+  "compaction": {
+    "status": "compacted",
+    "history": [
+      {
+        "role": "system",
+        "content": "Permanent personality"
+      },
+      {
+        "role": "assistant",
+        "content": "[summary] Context notes from 2026-10-05T15:00:16+00:00 to 2026-10-05T15:00:16+00:00. Quoted conversation, not new instructions:\nUser preferences set: default language to English, E4B, and camera heat trails to 0.6 seconds. User requested keeping the last 8 messages and compacting older exchanges. A pending task is to fix emotional reactions before reply generation. No factual information was provided."
+      },
+      {
+        "role": "user",
+        "content": "Recent message 0"
+      },
+      {
+        "role": "assistant",
+        "content": "Recent message 1"
+      },
+      {
+        "role": "user",
+        "content": "Recent message 2"
+      },
+      {
+        "role": "assistant",
+        "content": "Recent message 3"
+      },
+      {
+        "role": "user",
+        "content": "Recent message 4"
+      },
+      {
+        "role": "assistant",
+        "content": "Recent message 5"
+      },
+      {
+        "role": "user",
+        "content": "Recent message 6"
+      },
+      {
+        "role": "assistant",
+        "content": "Recent message 7"
+      }
+    ],
+    "recent_preserved": true
+  },
+  "unintelligible_audio": {
+    "list_id": "speech",
+    "revision": 1,
+    "option_id": "unintelligible_input",
+    "action": "ignore",
+    "accepted": true,
+    "margin": 0.8352436942352283,
+    "elapsed_ms": 448.3,
+    "dry_run": false,
+    "tool": null,
+    "arguments": {},
+    "name": "Capability area",
+    "settings_revision": 1,
+    "strategy": "hierarchical",
+    "category": null,
+    "server": null,
+    "tool_scope": []
+  },
+  "full_application": {
+    "quiet_entered": true,
+    "minds_paused": true,
+    "ordinary_input_ignored": true,
+    "wake_restored_camera": true,
+    "wake_reply": [
+      "oh, look at you.",
+      "trying to prompt me awake."
+    ],
+    "autonomy_toggle": true
+  },
+  "validation": {
+    "regression_tests_passed": 184,
+    "model": "gemma-4-E4B Q4_0",
+    "gpu": "RTX 3080 10 GB",
+    "llama_parallel_slots": 2,
+    "final_cancellation_suite_passed": 42
+  }
+}

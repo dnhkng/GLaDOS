@@ -1,0 +1,103 @@
+{
+  "backend": "gemma",
+  "model": "gemma-4-E4B",
+  "fixtures": "espeak-ng synthetic speech / OpenCV generated image",
+  "results": [
+    {
+      "case": "english",
+      "repeat": 0,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": 0.14370139501988888,
+      "total_s": 0.287708638003096,
+      "real_time_factor": 0.06452493913892988,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "english",
+      "repeat": 1,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": 0.10080500203184783,
+      "total_s": 0.2348163559800014,
+      "real_time_factor": 0.052662690920916466,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "english",
+      "repeat": 2,
+      "reference": "Please turn off the kitchen lights and set a timer for seven minutes.",
+      "response": "Please turn off the kitchen lights and set a timer for 7 minutes.",
+      "audio_s": 4.458875,
+      "first_text_s": 0.09191577404271811,
+      "total_s": 0.23087507102172822,
+      "real_time_factor": 0.051778771780264805,
+      "word_error_rate": 0.07692307692307693
+    },
+    {
+      "case": "german",
+      "repeat": 0,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stell einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": 0.1022033920744434,
+      "total_s": 0.263667413033545,
+      "real_time_factor": 0.0545182746221517,
+      "word_error_rate": 0.13333333333333333
+    },
+    {
+      "case": "german",
+      "repeat": 1,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stell einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": 0.10056649602483958,
+      "total_s": 0.262202862999402,
+      "real_time_factor": 0.05421545092452194,
+      "word_error_rate": 0.13333333333333333
+    },
+    {
+      "case": "german",
+      "repeat": 2,
+      "reference": "Bitte schalte das Licht in der Küche aus und stelle einen Timer auf sieben Minuten.",
+      "response": "Bitte schalte das Licht in der Küche aus und stell einen Timer auf 7 Minuten.",
+      "audio_s": 4.8363125,
+      "first_text_s": 0.095303223002702,
+      "total_s": 0.2589551790151745,
+      "real_time_factor": 0.053543930218565176,
+      "word_error_rate": 0.13333333333333333
+    },
+    {
+      "case": "image",
+      "repeat": 0,
+      "response": "There is a red square on the left and a blue circle on the right.",
+      "first_text_s": 0.1879920909414068,
+      "total_s": 0.3339940939331427
+    },
+    {
+      "case": "image",
+      "repeat": 1,
+      "response": "There is a red square on the left and a blue circle on the right.",
+      "first_text_s": 0.18268405797425658,
+      "total_s": 0.32797573297284544
+    },
+    {
+      "case": "image",
+      "repeat": 2,
+      "response": "There is a red square on the left and a blue circle on the right.",
+      "first_text_s": 0.18472800904419273,
+      "total_s": 0.3309840209549293
+    },
+    {
+      "case": "emotion_markup",
+      "response": "[emotion:smug]Congratulations on passing the test! [emotion:disappointed]But you broke the equipment.",
+      "first_text_s": 0.08390387403778732,
+      "total_s": 0.2991247170139104
+    }
+  ],
+  "date": "2026-10-04",
+  "hardware": "NVIDIA RTX 3080 10 GB; Linux; CUDA 12.8",
+  "runtime": "llama.cpp 687e7789; Q4_0 + Q8_0 projector; 4096 context; 1 slot; thinking off; cache_prompt false"
+}

@@ -1,6 +1,19 @@
 # Roadmap
 
-Future feature ideas for GLaDOS.
+Product direction and future feature ideas for GLaDOS.
+
+## Delivery Sequence
+
+Bring the current GLaDOS codebase close to feature complete, then migrate it to
+Rust. The working application provides the behavior and user experience against
+which the port is checked. Small feasibility probes can continue during feature
+development to resolve migration risks.
+
+The [Rust migration plan](rust-migration.md) records the desktop and model
+direction, native inference approach, and the tested Sonora AEC results. Native
+AEC is fast enough in the Linux probe and removes playback echo effectively;
+overlapping speech remains intelligible with noticeable degradation and needs
+further validation before production adoption.
 
 ## Audio Setup Wizard
 

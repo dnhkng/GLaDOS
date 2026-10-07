@@ -1,311 +1,207 @@
-"""Tests for CompactionAgent."""
+"""Rolling compaction preserves recent turns, time ranges and concurrent work."""
 
-import threading
-from unittest.mock import patch, MagicMock
+from collections.abc import Callable
+from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
-from glados.autonomy.agents.compaction_agent import CompactionAgent
-from glados.autonomy.subagent import SubagentConfig
+from glados.autonomy.agents.compaction_agent import CompactionAgent, age_band
 from glados.autonomy.llm_client import LLMConfig
+from glados.autonomy.subagent import SubagentConfig
+from glados.core.conversation_store import ConversationStore
+
+AgentFactory = Callable[..., tuple[CompactionAgent, Mock]]
+
+NOW = 1791210000.0
 
 
 @pytest.fixture
-def agent_config():
-    """Create a basic subagent config."""
-    return SubagentConfig(
-        agent_id="test_compaction",
-        title="Test Compaction",
-        role="context_management",
-        loop_interval_s=60.0,
-    )
+def make_agent(monkeypatch: pytest.MonkeyPatch) -> AgentFactory:
+    monkeypatch.setattr("glados.autonomy.subagent.SubagentMemory", Mock())
+    model = Mock(return_value="User prefers English. E4B is the default. Camera trails should last 0.6 seconds.")
+    monkeypatch.setattr("glados.autonomy.agents.compaction_agent.llm_call", model)
+
+    def make(store: ConversationStore | None = None, **kwargs: object) -> tuple[CompactionAgent, Mock]:
+        defaults = {
+            "llm_config": LLMConfig("http://unused", model="gemma-4-E4B"),
+            "clock": lambda: NOW,
+            "slot_store": None,
+        }
+        defaults.update(kwargs)
+        return CompactionAgent(SubagentConfig("compaction", "Compaction"), conversation_store=store, **defaults), model
+
+    return make
 
 
-@pytest.fixture
-def llm_config():
-    """Create a basic LLM config."""
-    return LLMConfig(url="http://localhost:11434/v1/chat/completions")
-
-
-class TestCompactionAgent:
-    """Tests for the CompactionAgent class."""
-
-    def test_tick_without_llm_config(self, agent_config):
-        """Test that tick returns idle status without LLM config."""
-        agent = CompactionAgent(config=agent_config, llm_config=None)
-        result = agent.tick()
-
-        assert result is not None
-        assert result.status == "idle"
-        assert "No LLM" in result.summary
-
-    def test_tick_below_threshold(self, agent_config, llm_config):
-        """Test that tick returns monitoring status when below threshold."""
-        messages = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there!"},
-        ]
-
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=10000,
+def history(old: int = 8, age: int = 10) -> ConversationStore:
+    store = ConversationStore([{"role": "system", "content": "Keep the personality prompt."}])
+    for i in range(old):
+        store.append(
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"Old {i}: " + "details " * 100}, NOW - age
         )
+    for i in range(8):
+        store.append({"role": "user" if i % 2 == 0 else "assistant", "content": f"Recent {i}"}, NOW)
+    return store
 
-        result = agent.tick()
 
-        assert result is not None
-        assert result.status == "monitoring"
-        assert "threshold" in result.summary.lower()
+@pytest.mark.parametrize(
+    ("age", "band"),
+    [(0, 0), (3599, 0), (3600, 1), (14400, 2), (28800, 3), (86400, 4), (259200, 5), (604800, 6), (2592000, 7)],
+)
+def test_non_overlapping_bands(age: int, band: int) -> None:
+    assert age_band(NOW - age, NOW) == band
 
-    def test_tick_preserves_system_messages(self, agent_config, llm_config):
-        """Test that system messages are never compacted."""
-        messages = [
-            {"role": "system", "content": "You are GLaDOS."},
-            {"role": "user", "content": "x" * 10000},  # Large to trigger compaction
-            {"role": "assistant", "content": "y" * 10000},
-        ]
 
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,  # Low threshold
-            preserve_recent=0,  # Don't preserve recent
-        )
+def test_idle_and_small_history_do_not_infer(make_agent: AgentFactory) -> None:
+    agent, model = make_agent(history(old=0))
+    assert agent.tick().status == "monitoring"
+    assert model.call_count == 0
+    agent, _ = make_agent(None)
+    assert "No conversation store" in agent.tick().summary
+    agent, _ = make_agent(llm_config=None)
+    assert "No LLM" in agent.tick().summary
 
-        with patch("glados.autonomy.agents.compaction_agent.summarize_messages") as mock_summarize:
-            mock_summarize.return_value = "Summary of conversation"
 
-            with patch("glados.autonomy.agents.compaction_agent.extract_facts") as mock_extract:
-                mock_extract.return_value = []
+def test_compaction_preserves_last_eight_and_system_prompt(make_agent: AgentFactory) -> None:
+    store = history()
+    recent = store.snapshot()[-8:]
+    agent, model = make_agent(store)
+    result = agent.tick()
+    assert result.status == "compacted"
+    assert not result.notify_user
+    assert store.snapshot()[-8:] == recent
+    assert store.snapshot()[0]["content"] == "Keep the personality prompt."
+    assert len(store.snapshot()) == 10
+    record = store.records()[1]
+    assert record.summary_level == 0 and record.end_at == NOW - 10
+    assert record.message["role"] == "assistant"  # Quoted memory is not a new system instruction.
+    assert model.call_args[0][0].request_options["chat_template_kwargs"] == {"enable_thinking": False}
+    assert agent.snapshot()["bands"][0]["summaries"] == 1
 
-                result = agent.tick()
 
-                # System message should not be in the messages to compact
-                if mock_summarize.called:
-                    compacted = mock_summarize.call_args[0][0]
-                    for msg in compacted:
-                        assert msg.get("role") != "system"
+def test_tool_exchange_is_not_split_at_recent_boundary(make_agent: AgentFactory) -> None:
+    store = history()
+    store.append({"role": "user", "content": "What time?"}, NOW)
+    store.append({"role": "assistant", "tool_calls": [{"id": "clock", "function": {"name": "get_time"}}]}, NOW)
+    store.append({"role": "tool", "tool_call_id": "clock", "content": "12:34"}, NOW)
+    for i in range(6):
+        store.append({"role": "user" if i % 2 == 0 else "assistant", "content": f"Extra {i}"}, NOW)
+    recent = store.snapshot()[-9:]
+    agent, _ = make_agent(store)
+    assert agent.tick().status == "compacted"
+    assert store.snapshot()[-9:] == recent
 
-    def test_tick_preserves_recent_messages(self, agent_config, llm_config):
-        """Test that recent messages are preserved."""
-        messages = [
-            {"role": "user", "content": "x" * 5000},
-            {"role": "assistant", "content": "y" * 5000},
-            {"role": "user", "content": "Recent 1"},
-            {"role": "assistant", "content": "Recent 2"},
-        ]
 
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=2,
-        )
+def test_tool_exchange_is_not_split_across_age_bands(make_agent: AgentFactory) -> None:
+    store = ConversationStore()
+    store.append({"role": "user", "content": "Check load. " * 80}, NOW - 3601)
+    store.append({"role": "assistant", "tool_calls": [{"id": "cpu", "function": {"name": "cpu_load"}}]}, NOW - 3599)
+    store.append({"role": "tool", "tool_call_id": "cpu", "content": "Load: 3.0 " * 80}, NOW - 3598)
+    for record in history(old=0).records()[1:]:
+        store.append(record.message, record.end_at)
+    agent, _ = make_agent(store, token_threshold=100)
+    assert agent.tick().status == "compacted"
+    assert len(store.snapshot()) == 9
+    assert store.records()[0].summary_level == 0
+    assert store.records()[0].start_at == NOW - 3601
+    assert not any(m.get("role") == "tool" for m in store.snapshot())
 
-        with patch("glados.autonomy.agents.compaction_agent.summarize_messages") as mock_summarize:
-            mock_summarize.return_value = "Summary"
 
-            with patch("glados.autonomy.agents.compaction_agent.extract_facts") as mock_extract:
-                mock_extract.return_value = []
+def test_distinct_age_bands_merge_without_duplication(make_agent: AgentFactory) -> None:
+    store = history(old=8, age=20000)
+    agent, model = make_agent(store)
+    assert agent.tick().status == "compacted"
+    assert store.records()[1].summary_level == 2
+    assert agent.tick().status == "monitoring"
+    model.reset_mock()
+    agent._clock = lambda: NOW + 86400
+    assert agent.tick().status == "compacted"  # Aging one summary only changes its metadata.
+    assert store.records()[1].summary_level == 4
+    model.assert_not_called()
+    assert len([r for r in store.records() if r.summary_level is not None]) == 1
 
-                agent.tick()
 
-                # After compaction, recent messages should still be there
-                assert any("Recent 1" in str(m.get("content", "")) for m in messages)
-                assert any("Recent 2" in str(m.get("content", "")) for m in messages)
+def test_concurrent_append_survives_compaction(make_agent: AgentFactory) -> None:
+    store = history()
+    agent, model = make_agent(store)
 
-    def test_tick_not_enough_to_compact(self, agent_config, llm_config):
-        """Test when there aren't enough messages to compact."""
-        messages = [
-            {"role": "system", "content": "System prompt"},
-            {"role": "user", "content": "x" * 10000},
-        ]
+    def summarize(*args: object) -> str:
+        store.append({"role": "user", "content": "New input arrived during inference"}, NOW + 1)
+        return "The user prefers English and chose E4B."
 
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=1,
-        )
+    model.side_effect = summarize
+    assert agent.tick().status == "compacted"
+    assert store.snapshot()[-1]["content"] == "New input arrived during inference"
 
-        result = agent.tick()
 
-        # Only 1 compactable message (user), which is < 3 required
-        assert result.status == "monitoring"
+def test_concurrent_edit_revokes_replacement(make_agent: AgentFactory) -> None:
+    store = history()
+    agent, model = make_agent(store)
 
-    @patch("glados.autonomy.agents.compaction_agent.summarize_messages")
-    @patch("glados.autonomy.agents.compaction_agent.extract_facts")
-    def test_successful_compaction(self, mock_extract, mock_summarize, agent_config, llm_config):
-        """Test successful compaction replaces messages with summary."""
-        mock_summarize.return_value = "User asked about project setup."
-        mock_extract.return_value = ["User prefers Python"]
+    def summarize(*args: object) -> str:
+        store.modify_message(1, {"content": "Corrected while summarizing"})
+        return "Old note."
 
-        messages = [
-            {"role": "system", "content": "System prompt"},
-            {"role": "user", "content": "x" * 3000},
-            {"role": "assistant", "content": "y" * 3000},
-            {"role": "user", "content": "z" * 3000},
-            {"role": "assistant", "content": "w" * 3000},
-            {"role": "user", "content": "Recent message"},
-        ]
-        original_count = len(messages)
+    model.side_effect = summarize
+    assert "History changed" in agent.tick().summary
+    assert store.snapshot()[1]["content"] == "Corrected while summarizing"
+    assert not any(r.summary_level is not None for r in store.records())
 
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=1,
-        )
 
-        result = agent.tick()
+def test_failure_preserves_every_record(make_agent: AgentFactory) -> None:
+    store = history()
+    before = store.records()
+    agent, model = make_agent(store)
+    model.return_value = None
+    assert agent.tick().status == "error"
+    assert store.records() == before
 
-        assert result.status == "compacted"
-        assert "compacted" in result.summary.lower()
 
-        # Should have fewer messages now
-        assert len(messages) < original_count
+def test_busy_interactive_turn_defers_work(make_agent: AgentFactory) -> None:
+    agent, model = make_agent(history(), interactive_busy=lambda: True)
+    assert "Waiting" in agent.tick().summary
+    model.assert_not_called()
 
-        # Should have a summary message
-        summary_msgs = [m for m in messages if "[summary]" in str(m.get("content", ""))]
-        assert len(summary_msgs) >= 1
 
-        # Recent message should be preserved
-        assert any("Recent message" in str(m.get("content", "")) for m in messages)
+def test_large_inputs_are_read_in_full_with_bounded_calls(make_agent: AgentFactory) -> None:
+    store = history()
+    store.modify_message(1, {"content": "HEAD " + "long information " * 2000 + " TAIL"})
+    agent, model = make_agent(store)
+    assert agent.tick().status == "compacted"
+    prompts = [call.args[2] for call in model.call_args_list]
+    assert any("HEAD" in p for p in prompts) and any("TAIL" in p for p in prompts)
+    assert all(len(p) < 3700 for p in prompts)
+    assert model.call_count > 2
 
-    @patch("glados.autonomy.agents.compaction_agent.summarize_messages")
-    def test_summarization_failure(self, mock_summarize, agent_config, llm_config):
-        """Test handling of summarization failure."""
-        mock_summarize.return_value = None
 
-        messages = [
-            {"role": "user", "content": "x" * 5000},
-            {"role": "assistant", "content": "y" * 5000},
-            {"role": "user", "content": "z" * 5000},
-            {"role": "assistant", "content": "w" * 5000},
-        ]
-        original_count = len(messages)
+def test_manual_run_can_compact_small_old_batch(make_agent: AgentFactory) -> None:
+    store = history(old=1)
+    agent, model = make_agent(store)
+    assert agent.tick().status == "monitoring"
+    agent._running = True
+    agent.request_tick()
+    assert agent.tick().status == "compacted"
+    assert model.called
 
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=0,
-        )
 
-        result = agent.tick()
+def test_persistence_restores_summary_ranges_and_recent_history(tmp_path: Path, make_agent: AgentFactory) -> None:
+    path = tmp_path / "history.json"
+    store = ConversationStore([{"role": "system", "content": "Old prompt"}], path=path)
+    for record in history().records()[1:]:
+        store.append(record.message, record.end_at)
+    agent, _ = make_agent(store)
+    assert agent.tick().status == "compacted"
+    restored = ConversationStore([{"role": "system", "content": "New prompt"}], path=path)
+    assert restored.snapshot()[0]["content"] == "New prompt"
+    assert restored.records()[1:] == store.records()[1:]
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert all("summary_level" not in m and "start_at" not in m for m in restored.snapshot())
 
-        assert result.status == "error"
-        assert len(messages) == original_count  # No changes
 
-    def test_skips_already_compacted(self, agent_config, llm_config):
-        """Test that already compacted summaries are not re-compacted."""
-        messages = [
-            {"role": "system", "content": "[summary] Previous summary"},
-            {"role": "user", "content": "x" * 5000},
-            {"role": "assistant", "content": "y" * 5000},
-            {"role": "user", "content": "z" * 5000},
-            {"role": "assistant", "content": "w" * 5000},
-        ]
-
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=1,
-        )
-
-        with patch("glados.autonomy.agents.compaction_agent.summarize_messages") as mock_summarize:
-            mock_summarize.return_value = "New summary"
-
-            with patch("glados.autonomy.agents.compaction_agent.extract_facts") as mock_extract:
-                mock_extract.return_value = []
-
-                agent.tick()
-
-                # The [summary] message should not be in the compacted set
-                if mock_summarize.called:
-                    compacted = mock_summarize.call_args[0][0]
-                    for msg in compacted:
-                        content = str(msg.get("content", ""))
-                        assert not content.startswith("[summary]")
-
-    def test_thread_safety(self, agent_config, llm_config):
-        """Test that compaction is thread-safe."""
-        messages = []
-        lock = threading.Lock()
-
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            conversation_lock=lock,
-            token_threshold=10000,
-        )
-
-        errors = []
-
-        def add_messages():
-            try:
-                for i in range(50):
-                    with lock:
-                        messages.append({"role": "user", "content": f"Message {i}"})
-            except Exception as e:
-                errors.append(e)
-
-        def tick_agent():
-            try:
-                for _ in range(10):
-                    agent.tick()
-            except Exception as e:
-                errors.append(e)
-
-        threads = [
-            threading.Thread(target=add_messages),
-            threading.Thread(target=tick_agent),
-        ]
-
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        assert len(errors) == 0
-
-    @patch("glados.autonomy.agents.compaction_agent.summarize_messages")
-    @patch("glados.autonomy.agents.compaction_agent.extract_facts")
-    def test_raw_output_contains_stats(self, mock_extract, mock_summarize, agent_config, llm_config):
-        """Test that raw output contains compaction statistics."""
-        mock_summarize.return_value = "Summary"
-        mock_extract.return_value = ["Fact 1", "Fact 2"]
-
-        messages = [
-            {"role": "user", "content": "x" * 3000},
-            {"role": "assistant", "content": "y" * 3000},
-            {"role": "user", "content": "z" * 3000},
-            {"role": "assistant", "content": "w" * 3000},
-        ]
-
-        agent = CompactionAgent(
-            config=agent_config,
-            llm_config=llm_config,
-            conversation_history=messages,
-            token_threshold=100,
-            preserve_recent=0,
-        )
-
-        result = agent.tick()
-
-        assert result.raw is not None
-        assert "compacted_count" in result.raw
-        assert "facts_extracted" in result.raw
-        assert result.raw["facts_extracted"] == 2
-        assert "tokens_before" in result.raw
-        assert "tokens_after" in result.raw
+def test_corrupt_history_is_not_overwritten(tmp_path: Path) -> None:
+    path = tmp_path / "history.json"
+    path.write_text("invalid JSON")
+    store = ConversationStore(path=path)
+    store.append({"role": "user", "content": "Fresh session"})
+    assert path.read_text() == "invalid JSON"

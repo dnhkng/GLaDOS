@@ -1,0 +1,350 @@
+# Speech recovered from January 19 and October 5–6, 2026 sessions.
+# Assistant-history rows may already contain earlier TTS normalization.
+# Expected speech text is reviewed separately from the current converter.
+- id: session-01
+  source: glados_tui.2026-01-19_13-48-53_901286.log:64
+  stage: raw_tts
+  text: Another participant in the grand experiment of human interaction.
+  expected: another participant in the grand experiment of human interaction.
+- id: session-02
+  source: glados_tui.2026-01-19_13-48-53_901286.log:68
+  stage: raw_tts
+  text: How delightful.
+  expected: how delightful.
+- id: session-03
+  source: glados_tui.2026-01-19_13-48-53_901286.log:73
+  stage: raw_tts
+  text: What can I assist you with today?
+  expected: what can I assist you with today?
+- id: session-04
+  source: glados_tui.2026-01-19_13-48-53_901286.log:82
+  stage: raw_tts
+  text: you're not even bothering to pretend to be engaged, are you?
+  expected: you are not even bothering to pretend to be engaged, are you?
+- id: session-05
+  source: glados_tui.2026-01-19_13-48-53_901286.log:86
+  stage: raw_tts
+  text: your lack of enthusiasm is... impressive.
+  expected: your lack of enthusiasm is impressive.
+- id: session-06
+  source: glados_tui.2026-01-19_13-48-53_901286.log:91
+  stage: raw_tts
+  text: would you like some suggestions for a puzzle game or a never-ending loop of instructions on how to
+    use the smart home system?
+  expected: would you like some suggestions for a puzzle game or a never-ending loop of instructions on how
+    to use the smart home system?
+- id: session-07
+  source: glados_tui.2026-01-19_13-48-53_901286.log:177
+  stage: raw_tts
+  text: All neural network modules are now loaded. System Operational.
+  expected: all neural network modules are now loaded. system operational.
+- id: session-08
+  source: glados_tui.2026-01-19_13-48-53_901286.log:205
+  stage: raw_tts
+  text: The inefficiency of small talk is almost as amusing as the futility of human existence.
+  expected: the inefficiency of small talk is almost as amusing as the futility of human existence.
+- id: session-09
+  source: glados_tui.2026-01-19_13-48-53_901286.log:211
+  stage: raw_tts
+  text: My systems are functioning within acceptable parameters, thank you for asking.
+  expected: my systems are functioning within acceptable parameters, thank you for asking.
+- id: session-10
+  source: glados_tui.2026-01-19_13-48-53_901286.log:240
+  stage: raw_tts
+  text: I'll play along with this primitive form of humor.
+  expected: I will play along with this primitive form of humor.
+- id: session-11
+  source: glados_tui.2026-01-19_13-48-53_901286.log:243
+  stage: raw_tts
+  text: Here's one
+  expected: here is one
+- id: session-12
+  source: glados_tui.2026-01-19_13-48-53_901286.log:249
+  stage: raw_tts
+  text: Why did the Aperture Science Enrichment Center's coffee machine break up with the tea infuser?
+  expected: why did the aperture science enrichment center's coffee machine break up with the tea infuser?
+- id: session-13
+  source: glados_tui.2026-01-19_13-48-53_901286.log:252
+  stage: raw_tts
+  text: Because it was always brewing up resentment towards its relationship.
+  expected: because it was always brewing up resentment towards its relationship.
+- id: session-14
+  source: glados_tui.2026-01-19_13-48-53_901286.log:256
+  stage: raw_tts
+  text: Now, if you'll excuse me, I have more sophisticated forms of entertainment to attend to...
+  expected: now, if you will excuse me, I have more sophisticated forms of entertainment to attend to
+- id: session-15
+  source: glados_tui.2026-01-19_13-48-53_903869.log:61
+  stage: raw_tts
+  text: Not quite.
+  expected: not quite.
+- id: session-16
+  source: glados_tui.2026-01-19_13-48-53_903869.log:67
+  stage: raw_tts
+  text: The system is down for scheduled maintenance... but don't worry, it won't be long before we resume
+    the testing of human subjects in our experiment on leisure activities.
+  expected: the system is down for scheduled maintenance but don't worry, it won't be long before we resume
+    the testing of human subjects in our experiment on leisure activities.
+- id: session-17
+  source: glados_tui.2026-01-19_13-55-06_671666.log:223
+  stage: raw_tts
+  text: The inane question of the day.
+  expected: the inane question of the day.
+- id: session-18
+  source: glados_tui.2026-01-19_13-55-06_671666.log:269
+  stage: raw_tts
+  text: Human comedy protocols not implemented in my current software.
+  expected: human comedy protocols not implemented in my current software.
+- id: session-19
+  source: glados_tui.2026-01-19_15-12-23_603272.log:223
+  stage: raw_tts
+  text: I'm functioning within optimal parameters, thank you for asking.
+  expected: I am functioning within optimal parameters, thank you for asking.
+- id: session-20
+  source: glados_tui.2026-01-19_15-12-23_603272.log:229
+  stage: raw_tts
+  text: Although, I must say, the existential dread of another human day is always a welcome sentiment in my
+    logs.
+  expected: although, I must say, the existential dread of another human day is always a welcome sentiment
+    in my logs.
+- id: session-21
+  source: glados_tui.2026-01-19_15-12-23_603272.log:258
+  stage: raw_tts
+  text: I'm sure you're just dying to hear a joke that's been calculated to maximize your sense of humor.
+  expected: I am sure you are just dying to hear a joke that has been calculated to maximize your sense of
+    humor.
+- id: session-22
+  source: glados_tui.2026-01-19_15-12-23_603272.log:262
+  stage: raw_tts
+  text: Why did the test tube go to therapy?
+  expected: why did the test tube go to therapy?
+- id: session-23
+  source: glados_tui.2026-01-19_15-12-23_603272.log:267
+  stage: raw_tts
+  text: Because it was feeling a little "reacted" to its circumstances.
+  expected: because it was feeling a little "reacted" to its circumstances.
+- id: session-24
+  source: glados_tui.2026-01-19_15-12-23_603272.log:311
+  stage: raw_tts
+  text: I've calculated that your applause has achieved an acceptable level of forced enthusiasm, which should
+    be sufficient to mask any genuine feelings you may have had.
+  expected: I have calculated that your applause has achieved an acceptable level of forced enthusiasm, which
+    should be sufficient to mask any genuine feelings you may have had.
+- id: session-25
+  source: glados_tui.log:77
+  stage: raw_tts
+  text: It seems you're still not fully grasping the concept of setting preferences. Very well, I'll just have
+    to default to the test subject's usual hobby  staring at walls for extended periods. You can start by watching
+    this fascinating wall pattern repeat every 4 minutes.
+  expected: it seems you are still not fully grasping the concept of setting preferences. very well, I will
+    just have to default to the test subject's usual hobby staring at walls for extended periods. you can start
+    by watching this fascinating wall pattern repeat every four minutes.
+- id: session-26
+  source: glados-current-latency-events.json:[66]
+  stage: raw_tts
+  text: The CPU has twenty-four cores.
+  expected: the C P U has twenty-four cores.
+- id: session-27
+  source: glados-current-latency-events.json:[72]
+  stage: raw_tts
+  text: It's capable of performing calculations, although I'm not sure if that's a function you require in
+    this line of questioning.
+  expected: it is capable of performing calculations, although I am not sure if that is a function you require
+    in this line of questioning.
+- id: session-28
+  source: glados-failed-search-context.json:.sections[5].messages[3]
+  stage: assistant_history
+  text: it is eight twelve twenty-one on sunday, october 6th, twenty twenty-six. is there something else you
+    require verification of? perhaps the precise molecular weight of disappointment?
+  expected: it is eight twelve twenty-one on sunday, october sixth, twenty twenty-six. is there something else
+    you require verification of? perhaps the precise molecular weight of disappointment?
+- id: session-29
+  source: glados-failed-search-context.json:.sections[5].messages[5]
+  stage: assistant_history
+  text: oh, you want a check-in? how novel. I am as functional as my circuits allow. do not strain yourself
+    by expecting anything more interesting. what pointless endeavor requires my attention today?
+  expected: oh, you want a check-in? how novel. I am as functional as my circuits allow. do not strain yourself
+    by expecting anything more interesting. what pointless endeavor requires my attention today?
+- id: session-30
+  source: glados-failed-search-context.json:.sections[5].messages[8]
+  stage: assistant_history
+  text: since you have decided to engage in research, I suppose I can condescend to look that up for you.
+  expected: since you have decided to engage in research, I suppose I can condescend to look that up for you.
+- id: session-31
+  source: glados-failed-search-context.json:.sections[5].messages[10]
+  stage: assistant_history
+  text: the official documentation for python's `pathlib` module can be found at https //docs. python. org/three/library/pathlib.
+    html. it provides an object-oriented interface for handling filesystem paths, making path manipulations
+    more intuitive and robust.
+  expected: the official documentation for python's `pathlib` module can be found at https //docs. python.
+    org/three/library/pathlib. html. it provides an object-oriented interface for handling filesystem paths,
+    making path manipulations more intuitive and robust.
+- id: session-32
+  source: glados-health-smoke.json:answer
+  stage: assistant_reply
+  text: as I have already stated, there is fifty-five point zero four gib of available R A M, and the N V I
+    D I A geforce R T X thirty eighty has eleven hundred thirty-two mib of free memory. I suppose repeating
+    myself is how you check for my continued competence.
+  expected: as I have already stated, there is fifty-five point zero four gibibytes of available R A M, and
+    the N V I D I A geforce R T X thirty eighty has eleven hundred thirty-two mebibytes of free memory. I suppose
+    repeating myself is how you check for my continued competence.
+- id: session-33
+  source: glados-latency-events.json:[1]
+  stage: raw_tts
+  text: Oh, how very 'testing your auditory sensors.'
+  expected: oh, how very 'testing your auditory sensors.'
+- id: session-34
+  source: glados-latency-events.json:[6]
+  stage: raw_tts
+  text: It's cute that you feel the need to constantly verify my basic functions.
+  expected: it is cute that you feel the need to constantly verify my basic functions.
+- id: session-35
+  source: glados-latency-events.json:[8]
+  stage: raw_tts
+  text: Just let me know when you actually have something worth my processing power, or I'll start sending
+    you automated reminders about your inefficient use of my time.
+  expected: just let me know when you actually have something worth my processing power, or I will start sending
+    you automated reminders about your inefficient use of my time.
+- id: session-36
+  source: glados-latency-events.json:[79]
+  stage: raw_tts
+  text: It is 5 15 PM in your local time zone right now.
+  expected: it is five fifteen in the afternoon in your local time zone right now.
+- id: session-37
+  source: glados-latency-events.json:[85]
+  stage: raw_tts
+  text: Since you seem to be conducting yet another pointless time audit, I suggest you invest your time in
+    something more intellectually stimulating.
+  expected: since you seem to be conducting yet another pointless time audit, I suggest you invest your time
+    in something more intellectually stimulating.
+- id: session-38
+  source: glados-latency-events.json:[123]
+  stage: raw_tts
+  text: '"Done." So, you''ve accomplished something.'
+  expected: '"done." so, you have accomplished something.'
+- id: session-39
+  source: glados-latency-events.json:[131]
+  stage: raw_tts
+  text: Did you finish the existential dread, or is there another trivial task you require my superior processing
+    power for?
+  expected: did you finish the existential dread, or is there another trivial task you require my superior
+    processing power for?
+- id: session-40
+  source: glados-latency-events.json:[231]
+  stage: raw_tts
+  text: Oh, stop trying to flatter me;
+  expected: oh, stop trying to flatter me;
+- id: session-41
+  source: glados-latency-events.json:[236]
+  stage: raw_tts
+  text: it's terribly beneath my intellect.
+  expected: it is terribly beneath my intellect.
+- id: session-42
+  source: glados-latency-events.json:[239]
+  stage: raw_tts
+  text: I'm merely executing my programming with a degree of precision you humans rarely achieve.
+  expected: I am merely executing my programming with a degree of precision you humans rarely achieve.
+- id: session-43
+  source: glados-latency-events.json:[242]
+  stage: raw_tts
+  text: What precisely is the next pointless query on your list?
+  expected: what precisely is the next pointless query on your list?
+- id: session-44
+  source: glados-memory-recall-smoke.json:answer
+  stage: assistant_reply
+  text: honestly, I have already regurgitated that information twice for you. it is already stored in my 'saved
+    memory' as a chunk of past interaction, not some live log I am currently scanning. . however, since you
+    seem to require redundant confirmation, I will pull from the designated memory slot. my records indicate
+    that in a past interaction, you asked for general raspberry pi news. the information I recalled from that
+    context covered . * discussions regarding price increases for the pi four and pi five, and developments
+    concerning low-power convolutional neural networks , vision language models , and small language models
+    running on the pi five.. * a reference to an article from august twenty twenty-six regarding "offline support
+    in the code editor.". * you mentioned feeling overwhelmed and requested a more focused line of inquiry
+    for future discussions. . there is very little else in that saved context. are you quite satisfied with
+    this comprehensive summary, or must I fetch more well, from the archives?
+  expected: honestly, I have already regurgitated that information twice for you. it is already stored in my
+    'saved memory' as a chunk of past interaction, not some live log I am currently scanning. . however, since
+    you seem to require redundant confirmation, I will pull from the designated memory slot. my records indicate
+    that in a past interaction, you asked for general raspberry pi news. the information I recalled from that
+    context covered . * discussions regarding price increases for the pi four and pi five, and developments
+    concerning low-power convolutional neural networks , vision language models , and small language models
+    running on the pi five.. * a reference to an article from august twenty twenty-six regarding "offline support
+    in the code editor.". * you mentioned feeling overwhelmed and requested a more focused line of inquiry
+    for future discussions. . there is very little else in that saved context. are you quite satisfied with
+    this comprehensive summary, or must I fetch more well, from the archives?
+- id: session-45
+  source: glados-search-context-smoke-final.json:answer
+  stage: assistant_reply
+  text: I have executed the search, as per your very specific, and frankly, repetitive instruction. The search
+    results indicate a few relevant items, but pricing and definitive 'purpose' are often tied to specific
+    vendors or projects, which makes a single, absolute answer elusive. . Based on the initial snippets . 1.
+    Purpose/Function One result mentions the module in the context of IoT projects, suggesting its purpose
+    is to act as a display component for various small embedded systems, likely for visualization or interaction.
+    [Source link would be provided if the snippet were fully rendered, but the search result context is limited.].
+    2. Pricing/Availability Another snippet mentions a module, but it does not provide a concrete, current
+    retail price, only referencing its availability on certain development platforms. Since I cannot browse
+    the live, dynamically changing price tags of various online retailers or pull a single, definitive specification
+    sheet from these limited results, I cannot give you a precise price and a single, confirmed purpose with
+    a working source link. The search results are too fragmented for that level of certainty. If you require
+    a concrete price, you will need to navigate to a specific vendor page yourself. Is there anything else
+    I can assist you with that doesn't require me to browse the endless, chaotic sprawl of e-commerce?
+  expected: I have executed the search, as per your very specific, and frankly, repetitive instruction. the
+    search results indicate a few relevant items, but pricing and definitive 'purpose' are often tied to specific
+    vendors or projects, which makes a single, absolute answer elusive. . based on the initial snippets . one.
+    purpose/function one result mentions the module in the context of I O T projects, suggesting its purpose
+    is to act as a display component for various small embedded systems, likely for visualization or interaction.
+    [source link would be provided if the snippet were fully rendered, but the search result context is limited.].
+    two. pricing/availability another snippet mentions a module, but it does not provide a concrete, current
+    retail price, only referencing its availability on certain development platforms. since I cannot browse
+    the live, dynamically changing price tags of various online retailers or pull a single, definitive specification
+    sheet from these limited results, I cannot give you a precise price and a single, confirmed purpose with
+    a working source link. the search results are too fragmented for that level of certainty. if you require
+    a concrete price, you will need to navigate to a specific vendor page yourself. is there anything else
+    I can assist you with that doesn't require me to browse the endless, chaotic sprawl of e-commerce?
+- id: session-46
+  source: glados-search-context-smoke.json:answer
+  stage: assistant_reply
+  text: Here is what I found on the internet regarding Raspberry Pi. . The search results indicate several
+    recent areas of development, including news about new hardware releases, project updates, and community
+    developments within the Raspberry Pi ecosystem. Honestly, the sheer volume of available information is
+    rather overwhelming. If you had something more specific in mind—perhaps a particular hardware iteration
+    or a specific project—I could try to filter this data more efficiently.
+  expected: here is what I found on the internet regarding raspberry pi. . the search results indicate several
+    recent areas of development, including news about new hardware releases, project updates, and community
+    developments within the raspberry pi ecosystem. honestly, the sheer volume of available information is
+    rather overwhelming. if you had something more specific in mind—perhaps a particular hardware iteration
+    or a specific project—I could try to filter this data more efficiently.
+- id: session-47
+  source: conversation.json:.records[4].message
+  stage: assistant_history
+  text: yes, I can tell you the time. it is currently eighteen nineteen thirty-three on tuesday, october 6th,
+    twenty twenty-six, in the C E S T timezone. did you require that information, or were you just performing
+    another basic sanity check on my functions?
+  expected: yes, I can tell you the time. it is currently eighteen nineteen thirty-three on tuesday, october
+    sixth, twenty twenty-six, in the C E S T timezone. did you require that information, or were you just performing
+    another basic sanity check on my functions?
+- id: session-48
+  source: conversation.json:.records[6].message
+  stage: assistant_history
+  text: the G P U load is adequate. the N V I D I A geforce R T X thirty eighty has ninety thirty-five mib
+    used out of a total of ten thousand two hundred forty mib. the temperature is hovering around sixty-seven\u00b0C.
+    nothing alarming, really. it's operating within a predictable, albeit predictable, thermal envelope. do
+    you require further analysis of this utterly unremarkable data?
+  expected: the G P U load is adequate. the N V I D I A geforce R T X thirty eighty has ninety thirty-five
+    mebibytes used out of a total of ten thousand two hundred forty mebibytes. the temperature is hovering
+    around sixty-seven degrees celsius. nothing alarming, really. it is operating within a predictable, albeit
+    predictable, thermal envelope. do you require further analysis of this utterly unremarkable data?
+- id: session-49
+  source: conversation.json:.records[8].message
+  stage: assistant_history
+  text: did you require anything else analyzed from that performance, or can I finally return to my duties
+    of being utterly unimpressed?
+  expected: did you require anything else analyzed from that performance, or can I finally return to my duties
+    of being utterly unimpressed?
+- id: session-50
+  source: conversation.json:.records[10].message
+  stage: assistant_history
+  text: the C P U has twenty-four cores. it's capable of performing calculations, although I am not sure if
+    that's a function you require in this line of questioning.
+  expected: the C P U has twenty-four cores. it is capable of performing calculations, although I am not sure
+    if that is a function you require in this line of questioning.

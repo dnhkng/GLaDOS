@@ -1,50 +1,9 @@
 """Tests for the emotion system."""
 
-import importlib.util
-import sys
 import time
-from pathlib import Path
 
-import pytest
-
-# Load modules directly to avoid the full autonomy __init__ import chain
-_src_path = Path(__file__).parent.parent / "src"
-
-
-def _load_module(name: str, path: Path):
-    """Load a module directly from a file path."""
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-# Load config first
-_config_module = _load_module(
-    "glados.autonomy.config",
-    _src_path / "glados" / "autonomy" / "config.py",
-)
-EmotionConfig = _config_module.EmotionConfig
-HEXACOConfig = _config_module.HEXACOConfig
-
-# Load emotion_state
-_emotion_state_module = _load_module(
-    "glados.autonomy.emotion_state",
-    _src_path / "glados" / "autonomy" / "emotion_state.py",
-)
-EmotionState = _emotion_state_module.EmotionState
-EmotionEvent = _emotion_state_module.EmotionEvent
-
-# Load constitution
-_constitution_module = _load_module(
-    "glados.autonomy.constitution",
-    _src_path / "glados" / "autonomy" / "constitution.py",
-)
-Constitution = _constitution_module.Constitution
-ConstitutionalState = _constitution_module.ConstitutionalState
-PromptModifier = _constitution_module.PromptModifier
-EmotionConstitutionBridge = _constitution_module.EmotionConstitutionBridge
+from glados.autonomy.config import EmotionConfig, HEXACOConfig
+from glados.autonomy.emotion_state import EmotionEvent, EmotionState
 
 
 class TestEmotionState:
@@ -140,9 +99,10 @@ class TestEmotionConfig:
         """Test default configuration."""
         config = EmotionConfig()
         assert config.enabled is True
-        assert config.tick_interval_s == 30.0
+        assert config.tick_interval_s == 5.0
         assert config.max_events == 20
-        assert config.baseline_dominance == 0.6  # GLaDOS feels in control
+        assert config.baseline_dominance == 0.0
+        assert config.decay_settle_s == 360.0
 
     def test_hexaco_defaults(self) -> None:
         """Test HEXACO personality defaults match GLaDOS."""
@@ -170,84 +130,3 @@ class TestHEXACOConfig:
         assert hexaco.honesty_humility == 0.8
         assert hexaco.emotionality == 0.3
         assert hexaco.extraversion == 0.9
-
-
-class TestEmotionConstitutionBridge:
-    """Tests for EmotionConstitutionBridge."""
-
-    def test_low_pleasure_increases_snark(self) -> None:
-        """Test that low pleasure increases snark level."""
-        bridge = EmotionConstitutionBridge()
-        emotion = EmotionState(pleasure=-0.5, arousal=0.0, dominance=0.0)
-        constitution = Constitution.default()
-
-        modifiers = bridge.compute_modifiers(emotion, constitution)
-
-        snark_mods = [m for m in modifiers if m.field_name == "snark_level"]
-        assert len(snark_mods) == 1
-        assert snark_mods[0].value > bridge.default_snark
-
-    def test_high_arousal_increases_proactivity(self) -> None:
-        """Test that high arousal increases proactivity."""
-        bridge = EmotionConstitutionBridge()
-        emotion = EmotionState(pleasure=0.0, arousal=0.5, dominance=0.0)
-        constitution = Constitution.default()
-
-        modifiers = bridge.compute_modifiers(emotion, constitution)
-
-        proactive_mods = [m for m in modifiers if m.field_name == "proactivity"]
-        assert len(proactive_mods) == 1
-        assert proactive_mods[0].value > bridge.default_proactivity
-
-    def test_low_dominance_decreases_verbosity(self) -> None:
-        """Test that low dominance decreases verbosity."""
-        bridge = EmotionConstitutionBridge()
-        emotion = EmotionState(pleasure=0.0, arousal=0.0, dominance=-0.5)
-        constitution = Constitution.default()
-
-        modifiers = bridge.compute_modifiers(emotion, constitution)
-
-        verbosity_mods = [m for m in modifiers if m.field_name == "verbosity"]
-        assert len(verbosity_mods) == 1
-        assert verbosity_mods[0].value < bridge.default_verbosity
-
-    def test_neutral_emotion_no_modifiers(self) -> None:
-        """Test that neutral emotion produces no modifiers."""
-        bridge = EmotionConstitutionBridge()
-        emotion = EmotionState(pleasure=0.0, arousal=0.0, dominance=0.0)
-        constitution = Constitution.default()
-
-        modifiers = bridge.compute_modifiers(emotion, constitution)
-
-        assert len(modifiers) == 0
-
-    def test_apply_emotion_modifiers(self) -> None:
-        """Test applying modifiers to constitutional state."""
-        bridge = EmotionConstitutionBridge()
-        emotion = EmotionState(pleasure=-0.5, arousal=0.5, dominance=-0.5)
-        state = ConstitutionalState()
-
-        applied = bridge.apply_emotion_modifiers(emotion, state)
-
-        # Should have applied snark, proactivity, and verbosity
-        assert "snark_level" in applied
-        assert "proactivity" in applied
-        assert "verbosity" in applied
-
-        # Check modifiers are in state
-        assert "snark_level" in state.active_modifiers
-        assert "proactivity" in state.active_modifiers
-        assert "verbosity" in state.active_modifiers
-
-    def test_modifiers_respect_bounds(self) -> None:
-        """Test that modifiers stay within constitutional bounds."""
-        bridge = EmotionConstitutionBridge()
-        # Extreme emotion
-        emotion = EmotionState(pleasure=-1.0, arousal=1.0, dominance=-1.0)
-        constitution = Constitution.default()
-
-        modifiers = bridge.compute_modifiers(emotion, constitution)
-
-        for modifier in modifiers:
-            min_val, max_val = constitution.modifiable_bounds[modifier.field_name]
-            assert min_val <= modifier.value <= max_val

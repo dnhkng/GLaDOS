@@ -9,19 +9,20 @@ from collections import deque
 import queue
 import threading
 import time
-from typing import Any
+import uuid
+from typing import Any, Callable
 
 from Levenshtein import distance
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 
-from typing import Callable
-
+from ..autonomy.interaction_state import InteractionState
 from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
-from .audio_state import AudioState
 from ..observability import ObservabilityBus, trim_message
+from .audio_state import AudioState
+from .native_audio import NativeAudioInput
 
 # Callback signature: (event_type: str) -> None
 InterruptCallback = Callable[[str], None]
@@ -39,7 +40,7 @@ class SpeechListener:
 
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     BUFFER_SIZE: int = 800  # Milliseconds of buffer BEFORE VAD detection
-    PAUSE_LIMIT: int = 640  # Milliseconds of pause allowed before processing
+    PAUSE_LIMIT: int = 416  # 13 consecutive silent VAD chunks of 32 ms
     SIMILARITY_THRESHOLD: int = 2  # Threshold for wake word similarity
 
     def __init__(
@@ -49,7 +50,7 @@ class SpeechListener:
         shutdown_event: threading.Event,
         currently_speaking_event: threading.Event,
         processing_active_event: threading.Event,
-        asr_model: TranscriberProtocol,
+        asr_model: TranscriberProtocol | None,
         wake_word: str | None,
         pause_time: float,
         interruptible: bool = True,
@@ -58,6 +59,10 @@ class SpeechListener:
         asr_muted_event: threading.Event | None = None,
         audio_state: AudioState | None = None,
         on_interrupt: InterruptCallback | None = None,
+        native_audio: NativeAudioInput | None = None,
+        begin_user_turn: Callable[[], int] | None = None,
+        end_user_turn: Callable[[int, str], None] = lambda generation, reason: None,
+        turn_is_current: Callable[[int], bool] = lambda generation: True,
     ) -> None:
         """
         Initializes the SpeechListener with audio I/O, inter-thread communication, and ASR model.
@@ -87,6 +92,7 @@ class SpeechListener:
         self._recording_started = False
         self._samples: list[NDArray[np.float32]] = []
         self._gap_counter = 0
+        self._native_audio_overflow = False
 
         self.shutdown_event = shutdown_event
         self.currently_speaking_event = currently_speaking_event
@@ -96,6 +102,19 @@ class SpeechListener:
         self._asr_muted_event = asr_muted_event
         self._audio_state = audio_state
         self._on_interrupt = on_interrupt
+        self._native_audio = native_audio
+        self._last_capture_check = 0.0
+        self._begin_user_turn = begin_user_turn
+        self._end_user_turn = end_user_turn
+        self._turn_generation: int | None = None
+        self._speech_onset = 0
+        self._turn_is_current = turn_is_current
+        self._continuation_lock = threading.RLock()
+        self._pending_voice: tuple[list[NDArray[np.float32]], int | None, str, float] | None = None
+        self._voice_turn_id: str | None = None
+        self._voice_continuation = False
+        if native_audio and wake_word:
+            raise ValueError("Native audio does not support transcript-based wake words; use Parakeet mode")
 
     def run(self) -> None:
         """
@@ -117,10 +136,24 @@ class SpeechListener:
         try:
             while not self.shutdown_event.is_set():  # Check event BEFORE blocking get
                 try:
+                    now = time.monotonic()
+                    if now - self._last_capture_check >= 1:
+                        self._last_capture_check = now
+                        ensure = getattr(self.audio_io, "ensure_listening", None)
+                        if ensure and ensure():
+                            self.reset()
+                            if self._observability_bus:
+                                self._observability_bus.emit("audio", "recovered", "Microphone capture resumed")
                     # Use a timeout for the queue get
                     sample, vad_confidence = self._sample_queue.get(timeout=self.pause_time)
+                    discontinuity = getattr(self.audio_io, "consume_capture_discontinuity", None)
+                    if discontinuity and discontinuity() is True:
+                        self.reset()
+                        if self._observability_bus:
+                            self._observability_bus.emit("audio", "gap", "Microphone gap; discarded incomplete speech", level="warning")
+                        continue
                     if self._asr_muted_event and self._asr_muted_event.is_set():
-                        if self._recording_started or self._samples or self._buffer:
+                        if self._recording_started or self._samples or self._buffer or self._pending_voice:
                             self.reset()
                         continue
                     self._handle_audio_sample(sample, vad_confidence)
@@ -135,6 +168,7 @@ class SpeechListener:
             logger.info("Shutdown event detected in listen loop, exiting loop.")
 
         finally:
+            self.reset()
             self.audio_io.stop_listening()
             logger.info("Listen event loop is stopping/exiting.")
 
@@ -178,9 +212,19 @@ class SpeechListener:
             sample: The current audio sample (numpy array) to be added to the buffer.
             vad_confidence: True if voice activity is detected in the sample, False otherwise.
         """
+        with self._continuation_lock:
+            if self._pending_voice:
+                _, generation, _, submitted = self._pending_voice
+                if (time.monotonic() - submitted > 30 or self.currently_speaking_event.is_set()
+                        or (generation is not None and not self._turn_is_current(generation))):
+                    self._pending_voice = None
         self._buffer.append(sample)  # Automatically handles overflow
+        self._speech_onset = self._speech_onset + 1 if vad_confidence else 0
 
-        if vad_confidence:
+        # A single noisy 32 ms frame must not stop a reply. Keep pre-roll so
+        # confirming sustained speech does not lose the beginning of a word.
+        onset_frames = 5 if self.currently_speaking_event.is_set() else 3
+        if self._speech_onset >= onset_frames:
             if not self.interruptible and self.currently_speaking_event.is_set():
                 logger.debug(f"Detected voice activity but interruptibility is disabled: {self.interruptible=}, {self.currently_speaking_event.is_set()=}")
                 return
@@ -190,7 +234,16 @@ class SpeechListener:
 
             self.audio_io.stop_speaking()
             self.processing_active_event.clear()
-            self._samples = list(self._buffer)  # Clean conversion
+            # Invalidate the old reply before claiming its unanswered audio.
+            self._turn_generation = self._begin_user_turn() if self._begin_user_turn else None
+            with self._continuation_lock:
+                pending, self._pending_voice = self._pending_voice, None
+                self._voice_continuation = pending is not None and not was_speaking
+                self._voice_turn_id = pending[2] if self._voice_continuation else uuid.uuid4().hex
+                self._samples = (list(pending[0]) if self._voice_continuation else []) + list(self._buffer)
+            if self._voice_continuation and self._observability_bus:
+                self._observability_bus.emit("audio", "continuation",
+                                            "Resumed speech; replaced unanswered turn with combined audio")
             self._recording_started = True
 
             if was_speaking and self._on_interrupt:
@@ -209,6 +262,26 @@ class SpeechListener:
             sample: A single audio sample (numpy array) from the input stream.
             vad_confidence: True if voice activity is currently detected, False otherwise.
         """
+        if self._native_audio_overflow:
+            self._gap_counter = 0 if vad_confidence else self._gap_counter + 1
+            if self._gap_counter >= self.PAUSE_LIMIT // self.VAD_SIZE:
+                self.reset()
+            return
+        if self._native_audio:
+            limit = self._native_audio.config.max_duration_s * self._native_audio.SAMPLE_RATE
+            if sum(len(chunk) for chunk in self._samples) + len(sample) > limit:
+                # Do not answer a truncated request or accumulate unbounded audio.
+                self._native_audio_overflow = True
+                self._samples.clear()
+                self._gap_counter = 0 if vad_confidence else self._gap_counter + 1
+                warning = f"Voice input exceeded {self._native_audio.config.max_duration_s:g}s; use a shorter turn."
+                logger.warning(warning)
+                if self._observability_bus:
+                    self._observability_bus.emit("audio", "input_too_long", warning, level="warning")
+                if self._gap_counter >= self.PAUSE_LIMIT // self.VAD_SIZE:
+                    self.reset()
+                return
+
         self._samples.append(sample)
 
         if not vad_confidence:
@@ -240,10 +313,12 @@ class SpeechListener:
             raise ValueError("Wake word should not be None")
 
         words = text.split()
+        if not words:
+            return False
         closest_distance = min(distance(word.lower(), self.wake_word) for word in words)
         return closest_distance < self.SIMILARITY_THRESHOLD
 
-    def reset(self) -> None:
+    def reset(self, *, preserve_pending: bool = False) -> None:
         """
         Resets the internal state of the speech listener, clearing all audio buffers and counters.
 
@@ -253,15 +328,55 @@ class SpeechListener:
         - Resetting the `_gap_counter`.
         - Emptying the pre-activation circular buffer (`_buffer.queue`), safely using its internal mutex.
         """
+        if not preserve_pending:
+            if self._turn_generation is not None:
+                self._end_user_turn(self._turn_generation, "recording_reset")
+            with self._continuation_lock:
+                self._pending_voice = None
+        self._voice_turn_id = None
+        self._voice_continuation = False
         logger.debug("Resetting recorder...")
         self._recording_started = False
         self._samples.clear()
         self._gap_counter = 0
         self._buffer.clear()
+        self._native_audio_overflow = False
+        self._speech_onset = 0
+        self._turn_generation = None
         if self._audio_state is not None:
             self._audio_state.reset()
 
+    def response_started(self, generation: int) -> None:
+        """Playback (or a text-only delivered response) seals the pending voice turn."""
+        with self._continuation_lock:
+            if self._pending_voice and self._pending_voice[1] == generation:
+                self._pending_voice = None
+
+    def _remember_unanswered_audio(self) -> dict[str, Any]:
+        """Retain bounded PCM only in RAM; never place it in conversation history."""
+        self._voice_turn_id = self._voice_turn_id or uuid.uuid4().hex
+        max_samples = int((self._native_audio.config.max_duration_s if self._native_audio else 30) * 16000)
+        with self._continuation_lock:
+            self._pending_voice = ((list(self._samples), self._turn_generation, self._voice_turn_id, time.monotonic())
+                                   if sum(len(s) for s in self._samples) <= max_samples else None)
+        return {"_voice_turn_id": self._voice_turn_id, "_voice_continuation": self._voice_continuation}
+
     def _process_detected_audio(self) -> None:
+        generation = self._turn_generation
+        try:
+            self._submit_detected_audio()
+        except Exception:
+            if generation is not None:
+                self._end_user_turn(generation, "input_error")
+            self.reset()
+            raise
+        finally:
+            with self._continuation_lock:
+                submitted = self._pending_voice is not None and self._pending_voice[1] == generation
+            if generation is not None and not submitted:
+                self._end_user_turn(generation, "no_input")
+
+    def _submit_detected_audio(self) -> None:
         """
         Processes the accumulated audio samples once a speech pause is detected.
 
@@ -274,6 +389,24 @@ class SpeechListener:
         3. Resets the listener's internal state using `self.reset()`, preparing for the next input.
         """
         logger.debug("Detected pause after speech. Processing...")
+
+        if self._native_audio:
+            try:
+                message = self._native_audio.message(self._samples)
+                if message:
+                    message.update(self._remember_unanswered_audio())
+                    message.update({"_enqueued_at": time.time(), "_lane": "priority", "_spoken": True})
+                    if self._turn_generation is not None:
+                        message["_quiet_generation"] = self._turn_generation
+                    self.processing_active_event.set()
+                    self.llm_queue.put(message)
+                    if self._interaction_state:
+                        self._interaction_state.mark_user()
+                    if self._observability_bus:
+                        self._observability_bus.emit("audio", "user_input", "Voice input received")
+            finally:
+                self.reset(preserve_pending=True)
+            return
 
         detected_text = self.asr(self._samples)
 
@@ -289,19 +422,23 @@ class SpeechListener:
                         kind="user_input",
                         message=trim_message(detected_text),
                     )
+                self.processing_active_event.set()
                 self.llm_queue.put(
                     {
+                        **self._remember_unanswered_audio(),
                         "role": "user",
                         "content": detected_text,
                         "_enqueued_at": time.time(),
+                        "_spoken": True,
                         "_lane": "priority",
+                        **({"_quiet_generation": self._turn_generation} if self._turn_generation is not None else {}),
                     }
                 )
                 if self._interaction_state:
                     self._interaction_state.mark_user()
                 self.processing_active_event.set()
 
-        self.reset()
+        self.reset(preserve_pending=True)
 
     def asr(self, samples: list[NDArray[np.float32]]) -> str:
         """
@@ -332,5 +469,7 @@ class SpeechListener:
         # Normalize to full range [-1.0, 1.0]
         audio = audio / max_abs_val
 
+        if self.asr_model is None:
+            raise RuntimeError("No speech recognizer configured")
         detected_text = self.asr_model.transcribe(audio)
         return detected_text

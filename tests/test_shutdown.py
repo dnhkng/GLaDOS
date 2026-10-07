@@ -4,7 +4,6 @@ import queue
 import threading
 import time
 
-import pytest
 
 from glados.core.shutdown import (
     ComponentEntry,
@@ -66,12 +65,6 @@ class TestShutdownOrchestrator:
         # Unregistering again should be a no-op
         orchestrator.unregister("test")
 
-    def test_is_shutting_down(self) -> None:
-        """Test shutdown state tracking."""
-        orchestrator = ShutdownOrchestrator()
-        assert orchestrator.is_shutting_down() is False
-        orchestrator.shutdown_event.set()
-        assert orchestrator.is_shutting_down() is True
 
     def test_shutdown_sets_event(self) -> None:
         """Test that shutdown sets the shutdown event."""
@@ -133,10 +126,6 @@ class TestShutdownOrchestrator:
         """Test that components are shut down in priority order."""
         orchestrator = ShutdownOrchestrator(global_timeout=10.0)
 
-        # Track when each component's join was called (not when thread exits)
-        join_order: list[str] = []
-        lock = threading.Lock()
-
         def make_worker(name: str) -> callable:
             def worker() -> None:
                 while not orchestrator.shutdown_event.is_set():
@@ -196,30 +185,13 @@ class TestShutdownOrchestrator:
         failed = [r for r in results if not r.success]
         assert len(failed) > 0
 
-    def test_get_results(self) -> None:
-        """Test that results can be retrieved after shutdown."""
-        orchestrator = ShutdownOrchestrator()
-
-        def worker() -> None:
-            while not orchestrator.shutdown_event.is_set():
-                time.sleep(0.01)
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
-        orchestrator.register("worker", thread)
-
-        orchestrator.initiate_shutdown()
-        results = orchestrator.get_results()
-
-        assert len(results) > 0
-        assert all(isinstance(r, ShutdownResult) for r in results)
 
     def test_shutdown_with_no_components(self) -> None:
         """Test shutdown with no registered components."""
         orchestrator = ShutdownOrchestrator()
         results = orchestrator.initiate_shutdown()
         assert results == []
-        assert orchestrator.is_shutting_down()
+        assert orchestrator.shutdown_event.is_set()
 
 
 class TestShutdownResult:

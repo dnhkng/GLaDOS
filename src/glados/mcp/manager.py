@@ -13,6 +13,7 @@ from typing import Any
 from loguru import logger
 
 from .config import MCPServerConfig
+from .search_results import SEARCH_TOOL, compact_search_results
 from ..observability import ObservabilityBus, trim_message
 
 try:
@@ -147,6 +148,25 @@ class MCPManager:
             entries = list(self._tool_registry.items())
         entries.sort(key=lambda item: item[0])
         return [self._tool_entry_to_definition(tool_name, entry) for tool_name, entry in entries]
+
+    def get_routing_catalog(self) -> list[dict[str, Any]]:
+        """Describe currently registered, allowed tools without fetching resources."""
+        with self._tool_lock:
+            entries = list(self._tool_registry.items())
+        servers: dict[str, dict[str, Any]] = {}
+        for name, entry in sorted(entries):
+            config = self._servers.get(entry.server)
+            category = config.routing_category if config else "mcp"
+            if entry.server.casefold() == "memory":
+                category = "memory"
+            server = servers.setdefault(entry.server, {
+                "name": entry.server,
+                "description": config.description if config else "",
+                "category": category,
+                "tools": [],
+            })
+            server["tools"].append({"name": name, "description": entry.description or ""})
+        return [servers[name] for name in sorted(servers)]
 
     def get_context_messages(self, timeout: float = 5.0, block: bool = True) -> list[dict[str, str]]:
         if not self._servers:
@@ -378,6 +398,8 @@ class MCPManager:
         content = self._render_contents(self._get_field(result, "content") or [])
         if error_flag:
             raise MCPToolError(content or "MCP tool reported an error.")
+        if self._build_tool_name(server_name, tool_name) == SEARCH_TOOL:
+            content = compact_search_results(content)
         return content or "success"
 
     async def _read_resource(self, session: ClientSession, server_name: str, uri: str) -> dict[str, str] | None:

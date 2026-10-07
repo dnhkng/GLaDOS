@@ -1,0 +1,675 @@
+{
+  "mixed_workload": {
+    "baseline_gpu": {
+      "used_mib": 4824,
+      "free_mib": 5034
+    },
+    "results": [
+      {
+        "name": "32k_x4_f16_rolling_mixed",
+        "context_total": 131072,
+        "slots": 4,
+        "cache_type": "f16",
+        "swa_full": false,
+        "startup_ok": true,
+        "context_per_slot": 32768,
+        "reported_slots": 4,
+        "idle_gpu": {
+          "used_mib": 6587,
+          "free_mib": 3272
+        },
+        "requests": [
+          {
+            "owner": "GLaDOS",
+            "status": 200,
+            "seconds": 10.41,
+            "nonempty": true,
+            "usage": null,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 8546.977,
+              "prompt_per_token_ms": 0.275708935483871,
+              "prompt_per_second": 3627.0133873064124,
+              "predicted_n": 128,
+              "predicted_ms": 1750.828,
+              "predicted_per_token_ms": 13.67834375,
+              "predicted_per_second": 73.10826648876989
+            },
+            "prompt_tokens": 31000,
+            "generated_tokens": 128
+          },
+          {
+            "owner": "Vision",
+            "status": 200,
+            "seconds": 9.76,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 77,
+              "prompt_tokens": 869,
+              "total_tokens": 946,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 869,
+              "prompt_ms": 4164.356,
+              "prompt_per_token_ms": 4.792124280782509,
+              "prompt_per_second": 208.67572320906282,
+              "predicted_n": 77,
+              "predicted_ms": 5485.758,
+              "predicted_per_token_ms": 71.24361038961038,
+              "predicted_per_second": 14.036346481197313
+            },
+            "json_valid": true
+          },
+          {
+            "owner": "Compaction",
+            "status": 200,
+            "seconds": 9.58,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 53,
+              "prompt_tokens": 1111,
+              "total_tokens": 1164,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1111,
+              "prompt_ms": 749.359,
+              "prompt_per_token_ms": 0.6744905490549056,
+              "prompt_per_second": 1482.600462528641,
+              "predicted_n": 53,
+              "predicted_ms": 863.243,
+              "predicted_per_token_ms": 16.287603773584905,
+              "predicted_per_second": 61.39638549052816
+            }
+          },
+          {
+            "owner": "Emotion",
+            "status": 200,
+            "seconds": 9.36,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 41,
+              "prompt_tokens": 429,
+              "total_tokens": 470,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 429,
+              "prompt_ms": 8467.47,
+              "prompt_per_token_ms": 19.737692307692306,
+              "prompt_per_second": 50.6644841965782,
+              "predicted_n": 41,
+              "predicted_ms": 886.307,
+              "predicted_per_token_ms": 21.617243902439025,
+              "predicted_per_second": 46.25936611129101
+            },
+            "json_valid": true
+          }
+        ],
+        "peak_gpu": {
+          "used_mib": 6677,
+          "free_mib": 3182
+        }
+      },
+      {
+        "name": "32k_x4_q8_full_mixed",
+        "context_total": 131072,
+        "slots": 4,
+        "cache_type": "q8_0",
+        "swa_full": true,
+        "startup_ok": true,
+        "context_per_slot": 32768,
+        "reported_slots": 4,
+        "idle_gpu": {
+          "used_mib": 8699,
+          "free_mib": 1160
+        },
+        "requests": [
+          {
+            "owner": "GLaDOS",
+            "status": 200,
+            "seconds": 15.0,
+            "nonempty": true,
+            "usage": null,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 11580.469,
+              "prompt_per_token_ms": 0.3735635161290322,
+              "prompt_per_second": 2676.920943357303,
+              "predicted_n": 128,
+              "predicted_ms": 3102.824,
+              "predicted_per_token_ms": 24.2408125,
+              "predicted_per_second": 41.25274266281297
+            },
+            "prompt_tokens": 31000,
+            "generated_tokens": 128
+          },
+          {
+            "owner": "Vision",
+            "status": 200,
+            "seconds": 13.88,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 74,
+              "prompt_tokens": 869,
+              "total_tokens": 943,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 869,
+              "prompt_ms": 3312.063,
+              "prompt_per_token_ms": 3.811349827387802,
+              "prompt_per_second": 262.37423623886383,
+              "predicted_n": 74,
+              "predicted_ms": 10262.034,
+              "predicted_per_token_ms": 138.67613513513513,
+              "predicted_per_second": 7.211046075271238
+            },
+            "json_valid": true
+          },
+          {
+            "owner": "Compaction",
+            "status": 200,
+            "seconds": 13.17,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 54,
+              "prompt_tokens": 1111,
+              "total_tokens": 1165,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1111,
+              "prompt_ms": 300.811,
+              "prompt_per_token_ms": 0.27075697569756974,
+              "prompt_per_second": 3693.3489799242716,
+              "predicted_n": 54,
+              "predicted_ms": 12858.259,
+              "predicted_per_token_ms": 238.1159074074074,
+              "predicted_per_second": 4.199635424982495
+            }
+          },
+          {
+            "owner": "Emotion",
+            "status": 200,
+            "seconds": 12.73,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 41,
+              "prompt_tokens": 429,
+              "total_tokens": 470,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 429,
+              "prompt_ms": 427.853,
+              "prompt_per_token_ms": 0.9973263403263404,
+              "prompt_per_second": 1002.6808272934863,
+              "predicted_n": 41,
+              "predicted_ms": 11996.151,
+              "predicted_per_token_ms": 292.5890487804878,
+              "predicted_per_second": 3.417762914121371
+            },
+            "json_valid": true
+          }
+        ],
+        "peak_gpu": {
+          "used_mib": 8790,
+          "free_mib": 1069
+        }
+      },
+      {
+        "name": "64k_shared_x4_f16_full_mixed",
+        "context_total": 65536,
+        "slots": 4,
+        "cache_type": "f16",
+        "swa_full": true,
+        "startup_ok": true,
+        "context_per_slot": 65536,
+        "reported_slots": 4,
+        "idle_gpu": {
+          "used_mib": 8055,
+          "free_mib": 1803
+        },
+        "requests": [
+          {
+            "owner": "GLaDOS",
+            "status": 200,
+            "seconds": 13.88,
+            "nonempty": true,
+            "usage": null,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 11697.21,
+              "prompt_per_token_ms": 0.37732935483870966,
+              "prompt_per_second": 2650.2046214439174,
+              "predicted_n": 128,
+              "predicted_ms": 2166.28,
+              "predicted_per_token_ms": 16.9240625,
+              "predicted_per_second": 59.0874679173514
+            },
+            "prompt_tokens": 31000,
+            "generated_tokens": 128
+          },
+          {
+            "owner": "Vision",
+            "status": 200,
+            "seconds": 12.92,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 73,
+              "prompt_tokens": 869,
+              "total_tokens": 942,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 869,
+              "prompt_ms": 3628.655,
+              "prompt_per_token_ms": 4.1756674338319915,
+              "prompt_per_second": 239.4826733321299,
+              "predicted_n": 73,
+              "predicted_ms": 8833.109,
+              "predicted_per_token_ms": 121.00149315068494,
+              "predicted_per_second": 8.264360826974965
+            },
+            "json_valid": true
+          },
+          {
+            "owner": "Compaction",
+            "status": 200,
+            "seconds": 12.51,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 54,
+              "prompt_tokens": 1111,
+              "total_tokens": 1165,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1111,
+              "prompt_ms": 445.523,
+              "prompt_per_token_ms": 0.40101080108010806,
+              "prompt_per_second": 2493.6984173656574,
+              "predicted_n": 54,
+              "predicted_ms": 12057.847,
+              "predicted_per_token_ms": 223.29346296296296,
+              "predicted_per_second": 4.478411444431166
+            }
+          },
+          {
+            "owner": "Emotion",
+            "status": 200,
+            "seconds": 12.57,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 41,
+              "prompt_tokens": 429,
+              "total_tokens": 470,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 429,
+              "prompt_ms": 1095.808,
+              "prompt_per_token_ms": 2.5543310023310024,
+              "prompt_per_second": 391.49194019390256,
+              "predicted_n": 41,
+              "predicted_ms": 698.259,
+              "predicted_per_token_ms": 17.030707317073173,
+              "predicted_per_second": 58.717467300815315
+            },
+            "json_valid": true
+          }
+        ],
+        "peak_gpu": {
+          "used_mib": 8148,
+          "free_mib": 1711
+        }
+      }
+    ]
+  },
+  "prompt_reuse": {
+    "baseline_gpu": {
+      "used_mib": 4818,
+      "free_mib": 5041
+    },
+    "results": [
+      {
+        "name": "32k_x4_f16_rolling_mixed",
+        "context_total": 131072,
+        "slots": 4,
+        "cache_type": "f16",
+        "swa_full": false,
+        "startup_ok": true,
+        "context_per_slot": 32768,
+        "reported_slots": 4,
+        "idle_gpu": {
+          "used_mib": 6584,
+          "free_mib": 3274
+        },
+        "requests": [
+          {
+            "owner": "GLaDOS",
+            "status": 200,
+            "seconds": 10.42,
+            "nonempty": true,
+            "usage": null,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 8591.018,
+              "prompt_per_token_ms": 0.2771296129032258,
+              "prompt_per_second": 3608.419863629665,
+              "predicted_n": 128,
+              "predicted_ms": 1736.789,
+              "predicted_per_token_ms": 13.5686640625,
+              "predicted_per_second": 73.69922310654893
+            },
+            "prompt_tokens": 31000,
+            "generated_tokens": 128
+          },
+          {
+            "owner": "Vision",
+            "status": 200,
+            "seconds": 9.73,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 72,
+              "prompt_tokens": 869,
+              "total_tokens": 941,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 869,
+              "prompt_ms": 4129.735,
+              "prompt_per_token_ms": 4.752284234752588,
+              "prompt_per_second": 210.42512413024082,
+              "predicted_n": 72,
+              "predicted_ms": 5508.272,
+              "predicted_per_token_ms": 76.50377777777777,
+              "predicted_per_second": 13.071249931012847
+            },
+            "json_valid": true
+          },
+          {
+            "owner": "Compaction",
+            "status": 200,
+            "seconds": 9.6,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 53,
+              "prompt_tokens": 1111,
+              "total_tokens": 1164,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1111,
+              "prompt_ms": 8676.869,
+              "prompt_per_token_ms": 7.809963096309631,
+              "prompt_per_second": 128.04157813146654,
+              "predicted_n": 53,
+              "predicted_ms": 916.042,
+              "predicted_per_token_ms": 17.28381132075472,
+              "predicted_per_second": 57.857609148925484
+            }
+          },
+          {
+            "owner": "Emotion",
+            "status": 200,
+            "seconds": 9.29,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 41,
+              "prompt_tokens": 429,
+              "total_tokens": 470,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 429,
+              "prompt_ms": 762.632,
+              "prompt_per_token_ms": 1.7776969696969696,
+              "prompt_per_second": 562.5255693440612,
+              "predicted_n": 41,
+              "predicted_ms": 610.817,
+              "predicted_per_token_ms": 14.897975609756097,
+              "predicted_per_second": 67.123213663012
+            },
+            "json_valid": true
+          }
+        ],
+        "peak_gpu": {
+          "used_mib": 6679,
+          "free_mib": 3179
+        },
+        "continuations": [
+          {
+            "name": "changed_last_2000_tokens",
+            "status": 200,
+            "seconds": 7.67,
+            "nonempty": true,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 7004.359,
+              "prompt_per_token_ms": 0.22594706451612903,
+              "prompt_per_second": 4425.815410089632,
+              "predicted_n": 64,
+              "predicted_ms": 651.471,
+              "predicted_per_token_ms": 10.179234375,
+              "predicted_per_second": 98.23921555986375
+            }
+          },
+          {
+            "name": "unchanged_prompt",
+            "status": 200,
+            "seconds": 0.67,
+            "nonempty": true,
+            "timings": {
+              "cache_n": 30999,
+              "prompt_n": 1,
+              "prompt_ms": 20.473,
+              "prompt_per_token_ms": 20.473,
+              "prompt_per_second": 48.844820006838276,
+              "predicted_n": 64,
+              "predicted_ms": 642.417,
+              "predicted_per_token_ms": 10.037765625,
+              "predicted_per_second": 99.6237646264031
+            }
+          }
+        ]
+      },
+      {
+        "name": "32k_x4_q8_full_mixed",
+        "context_total": 131072,
+        "slots": 4,
+        "cache_type": "q8_0",
+        "swa_full": true,
+        "startup_ok": true,
+        "context_per_slot": 32768,
+        "reported_slots": 4,
+        "idle_gpu": {
+          "used_mib": 8698,
+          "free_mib": 1161
+        },
+        "requests": [
+          {
+            "owner": "GLaDOS",
+            "status": 200,
+            "seconds": 14.64,
+            "nonempty": true,
+            "usage": null,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 31000,
+              "prompt_ms": 11638.341,
+              "prompt_per_token_ms": 0.3754303548387097,
+              "prompt_per_second": 2663.6098736065564,
+              "predicted_n": 128,
+              "predicted_ms": 2985.474,
+              "predicted_per_token_ms": 23.324015625,
+              "predicted_per_second": 42.87426385223921
+            },
+            "prompt_tokens": 31000,
+            "generated_tokens": 128
+          },
+          {
+            "owner": "Vision",
+            "status": 200,
+            "seconds": 13.49,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 72,
+              "prompt_tokens": 869,
+              "total_tokens": 941,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 869,
+              "prompt_ms": 3385.769,
+              "prompt_per_token_ms": 3.8961668584579976,
+              "prompt_per_second": 256.6625189137239,
+              "predicted_n": 72,
+              "predicted_ms": 9695.573,
+              "predicted_per_token_ms": 134.6607361111111,
+              "predicted_per_second": 7.426069609294881
+            },
+            "json_valid": true
+          },
+          {
+            "owner": "Compaction",
+            "status": 200,
+            "seconds": 12.83,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 53,
+              "prompt_tokens": 1111,
+              "total_tokens": 1164,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1111,
+              "prompt_ms": 486.082,
+              "prompt_per_token_ms": 0.43751755175517554,
+              "prompt_per_second": 2285.6225904271296,
+              "predicted_n": 53,
+              "predicted_ms": 11931.544,
+              "predicted_per_token_ms": 225.1234716981132,
+              "predicted_per_second": 4.442006834991347
+            }
+          },
+          {
+            "owner": "Emotion",
+            "status": 200,
+            "seconds": 12.46,
+            "nonempty": true,
+            "usage": {
+              "completion_tokens": 41,
+              "prompt_tokens": 429,
+              "total_tokens": 470,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 429,
+              "prompt_ms": 487.726,
+              "prompt_per_token_ms": 1.136890442890443,
+              "prompt_per_second": 879.5922300636013,
+              "predicted_n": 41,
+              "predicted_ms": 11559.003,
+              "predicted_per_token_ms": 281.9269024390244,
+              "predicted_per_second": 3.547018717790799
+            },
+            "json_valid": true
+          }
+        ],
+        "peak_gpu": {
+          "used_mib": 8790,
+          "free_mib": 1068
+        },
+        "continuations": [
+          {
+            "name": "changed_last_2000_tokens",
+            "status": 200,
+            "seconds": 2.04,
+            "nonempty": true,
+            "timings": {
+              "cache_n": 29000,
+              "prompt_n": 2000,
+              "prompt_ms": 945.27,
+              "prompt_per_token_ms": 0.47263499999999997,
+              "prompt_per_second": 2115.7976028013163,
+              "predicted_n": 64,
+              "predicted_ms": 1082.019,
+              "predicted_per_token_ms": 16.906546875,
+              "predicted_per_second": 59.14868408040894
+            }
+          },
+          {
+            "name": "unchanged_prompt",
+            "status": 200,
+            "seconds": 1.11,
+            "nonempty": true,
+            "timings": {
+              "cache_n": 30999,
+              "prompt_n": 1,
+              "prompt_ms": 20.162,
+              "prompt_per_token_ms": 20.162,
+              "prompt_per_second": 49.59825414145422,
+              "predicted_n": 64,
+              "predicted_ms": 1071.717,
+              "predicted_per_token_ms": 16.745578125,
+              "predicted_per_second": 59.71725744762843
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

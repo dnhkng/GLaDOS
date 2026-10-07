@@ -29,7 +29,7 @@ Glados:
   voice: "glados"
   announcement: "All neural network modules are now loaded. System Operational."
   autonomy:
-    enabled: false
+    enabled: true
     tick_interval_s: 10
     cooldown_s: 20
   mcp_servers:

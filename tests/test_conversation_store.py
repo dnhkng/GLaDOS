@@ -1,10 +1,8 @@
 """Tests for the thread-safe ConversationStore."""
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
 
 from glados.core.conversation_store import ConversationStore
 
@@ -63,14 +61,6 @@ class TestConversationStore:
         snapshot1.append({"role": "assistant", "content": "Hi"})
         assert len(store) == 1
 
-    def test_deep_snapshot(self) -> None:
-        """Test deep snapshot returns fully independent copy."""
-        store = ConversationStore([{"role": "user", "content": "Hello"}])
-        deep = store.deep_snapshot()
-
-        # Modifying message in deep snapshot should not affect store
-        deep[0]["content"] = "Modified"
-        assert store.snapshot()[0]["content"] == "Hello"
 
     def test_replace_all(self) -> None:
         """Test atomic replacement of all messages."""

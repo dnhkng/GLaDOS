@@ -1,0 +1,89 @@
+{
+  "method": "Three alternating matched pairs per cold/warm condition. Synthetic approximately 3K-token laboratory context plus text question, E4B 4x16K. Two synthetic background LLM workers. Hold starts during simulated 2s speech interval and admits no new background requests; already-admitted calls finish. Measures first token and first speakable clause, excludes routing/ASR/TTS and playback. Harness keeps hold until foreground stream finishes; this does not affect measured first-clause latency. App offline; only benchmark requests are sent.",
+  "results": [
+    {
+      "repeat": 0,
+      "cache": "cold",
+      "hold": false,
+      "first_token_ms": 644.6172059950186,
+      "first_clause_ms": 855.7375899981707
+    },
+    {
+      "repeat": 0,
+      "cache": "cold",
+      "hold": true,
+      "first_token_ms": 618.1582939898362,
+      "first_clause_ms": 767.283431996475
+    },
+    {
+      "repeat": 0,
+      "cache": "warm",
+      "hold": false,
+      "first_token_ms": 56.81103699316736,
+      "first_clause_ms": 240.3234589874046
+    },
+    {
+      "repeat": 0,
+      "cache": "warm",
+      "hold": true,
+      "first_token_ms": 36.15552200062666,
+      "first_clause_ms": 182.00911200256087
+    },
+    {
+      "repeat": 1,
+      "cache": "cold",
+      "hold": true,
+      "first_token_ms": 644.7492989973398,
+      "first_clause_ms": 790.5022159975488
+    },
+    {
+      "repeat": 1,
+      "cache": "cold",
+      "hold": false,
+      "first_token_ms": 663.2251760020154,
+      "first_clause_ms": 981.8465490097879
+    },
+    {
+      "repeat": 1,
+      "cache": "warm",
+      "hold": true,
+      "first_token_ms": 44.64413000096101,
+      "first_clause_ms": 192.13968400435988
+    },
+    {
+      "repeat": 1,
+      "cache": "warm",
+      "hold": false,
+      "first_token_ms": 48.47691299801227,
+      "first_clause_ms": 367.46687701088376
+    },
+    {
+      "repeat": 2,
+      "cache": "cold",
+      "hold": false,
+      "first_token_ms": 666.9278850022238,
+      "first_clause_ms": 855.4537120071473
+    },
+    {
+      "repeat": 2,
+      "cache": "cold",
+      "hold": true,
+      "first_token_ms": 643.0830439931015,
+      "first_clause_ms": 789.2850629868917
+    },
+    {
+      "repeat": 2,
+      "cache": "warm",
+      "hold": false,
+      "first_token_ms": 54.72807100159116,
+      "first_clause_ms": 237.12911299662665
+    },
+    {
+      "repeat": 2,
+      "cache": "warm",
+      "hold": true,
+      "first_token_ms": 36.1262210062705,
+      "first_clause_ms": 179.87903401080985
+    }
+  ]
+}

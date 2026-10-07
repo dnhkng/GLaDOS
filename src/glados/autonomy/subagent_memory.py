@@ -8,13 +8,15 @@ subagents to track what the user has already heard about.
 
 from __future__ import annotations
 
-import json
-import sys
-import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
+import json
 from pathlib import Path
-from typing import IO, Any, Iterator
+import sys
+import threading
+import time
+from typing import IO, Any
 
 from loguru import logger
 
@@ -84,57 +86,63 @@ class SubagentMemory:
 
         self.file_path = self.storage_dir / f"{agent_id}.jsonl"
         self._entries: dict[str, MemoryEntry] = {}
+        self._lock = threading.RLock()
         self._load()
 
     def get(self, key: str) -> MemoryEntry | None:
         """Get an entry by key."""
-        return self._entries.get(key)
+        with self._lock:
+            return self._entries.get(key)
 
-    def set(self, key: str, value: Any) -> MemoryEntry:
+    def set(self, key: str, value: object) -> MemoryEntry:
         """Store a value. Overwrites if key exists."""
-        if key in self._entries:
-            entry = self._entries[key]
-            entry.value = value
-        else:
-            entry = MemoryEntry(key=key, value=value)
-            self._entries[key] = entry
+        with self._lock:
+            if key in self._entries:
+                entry = self._entries[key]
+                entry.value = value
+            else:
+                entry = MemoryEntry(key=key, value=value)
+                self._entries[key] = entry
 
-        self._prune_if_needed()
-        self._save()
+            self._prune_if_needed()
+            self._save()
         return entry
 
     def mark_shown(self, key: str) -> bool:
         """Mark an entry as shown to the user. Returns True if found."""
-        entry = self._entries.get(key)
-        if entry is None:
-            return False
-
-        entry.shown_at = time.time()
-        self._save()
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return False
+            entry.shown_at = time.time()
+            self._save()
         return True
 
     def list_unshown(self) -> list[MemoryEntry]:
         """Get all entries not yet shown to the user, oldest first."""
-        unshown = [e for e in self._entries.values() if not e.is_shown()]
-        return sorted(unshown, key=lambda e: e.created_at)
+        with self._lock:
+            unshown = [e for e in self._entries.values() if not e.is_shown()]
+            return sorted(unshown, key=lambda e: e.created_at)
 
     def list_all(self) -> list[MemoryEntry]:
         """Get all entries, oldest first."""
-        return sorted(self._entries.values(), key=lambda e: e.created_at)
+        with self._lock:
+            return sorted(self._entries.values(), key=lambda e: e.created_at)
 
     def delete(self, key: str) -> bool:
         """Delete an entry. Returns True if it existed."""
-        if key not in self._entries:
-            return False
-
-        del self._entries[key]
-        self._save()
+        with self._lock:
+            if key not in self._entries:
+                return False
+            del self._entries[key]
+            self._save()
         return True
 
     def clear(self) -> None:
         """Clear all entries."""
-        self._entries.clear()
-        self._save()
+        with self._lock:
+            self._entries.clear()
+            self._save()
 
     def _prune_if_needed(self) -> None:
         """Remove oldest entries if over capacity."""
@@ -155,7 +163,7 @@ class SubagentMemory:
             return
 
         try:
-            with open(self.file_path, "r") as f:
+            with open(self.file_path) as f:
                 with _file_lock(f, exclusive=False):
                     for line in f:
                         line = line.strip()
@@ -174,17 +182,26 @@ class SubagentMemory:
 
     def _save(self) -> None:
         """Save entries to disk."""
-        try:
-            with open(self.file_path, "w") as f:
-                with _file_lock(f, exclusive=True):
-                    for entry in self._entries.values():
-                        line = json.dumps(asdict(entry), ensure_ascii=False)
-                        f.write(line + "\n")
-        except Exception as exc:
-            logger.warning("Failed to save memory for %s: %s", self.agent_id, exc)
+        with self._lock:
+            try:
+                # Append mode avoids truncating before the cross-process lock
+                # is held; seek/truncate happens only inside both locks.
+                with open(self.file_path, "a+", encoding="utf-8") as f:
+                    f.seek(0)
+                    with _file_lock(f, exclusive=True):
+                        f.seek(0)
+                        f.truncate()
+                        for entry in self._entries.values():
+                            line = json.dumps(asdict(entry), ensure_ascii=False)
+                            f.write(line + "\n")
+                        f.flush()
+            except Exception as exc:
+                logger.warning("Failed to save memory for %s: %s", self.agent_id, exc)
 
     def __len__(self) -> int:
-        return len(self._entries)
+        with self._lock:
+            return len(self._entries)
 
     def __contains__(self, key: str) -> bool:
-        return key in self._entries
+        with self._lock:
+            return key in self._entries

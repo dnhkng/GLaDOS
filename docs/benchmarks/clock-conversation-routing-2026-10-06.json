@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-06",
+  "model": "gemma-4-E4B",
+  "scope": "Live webapp routing previews only; no tools executed, synthetic audio.",
+  "results": [
+    {
+      "input": "What time is it?",
+      "mode": "text",
+      "action": "reply",
+      "accepted": true,
+      "category": null,
+      "tool_scope": [],
+      "tool": null,
+      "elapsed_ms": 404.0,
+      "stages": 1
+    },
+    {
+      "input": "What is the date?",
+      "mode": "text",
+      "action": "reply",
+      "accepted": true,
+      "category": null,
+      "tool_scope": [],
+      "tool": null,
+      "elapsed_ms": 66.1,
+      "stages": 1
+    },
+    {
+      "input": "What day is it?",
+      "mode": "text",
+      "action": "reply",
+      "accepted": true,
+      "category": null,
+      "tool_scope": [],
+      "tool": null,
+      "elapsed_ms": 65.7,
+      "stages": 1
+    },
+    {
+      "input": "What time is it in Tokyo?",
+      "mode": "text",
+      "action": "assist",
+      "accepted": false,
+      "category": null,
+      "tool_scope": [],
+      "tool": null,
+      "elapsed_ms": 30.9,
+      "stages": 1
+    },
+    {
+      "input": "What is the CPU load?",
+      "mode": "text",
+      "action": "assist",
+      "accepted": false,
+      "category": "system",
+      "tool_scope": [],
+      "tool": null,
+      "elapsed_ms": 108.8,
+      "stages": 2
+    },
+    {
+      "input": "What time is it?",
+      "mode": "synthetic English audio",
+      "action": "reply",
+      "accepted": true,
+      "category": null,
+      "tool_scope": [],
+      "elapsed_ms": 283.8,
+      "stages": 1
+    }
+  ]
+}

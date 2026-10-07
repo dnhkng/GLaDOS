@@ -1,0 +1,450 @@
+{
+  "method": "Three espeak questions, identical 16kHz clips. E4B 4x16K Q8 KV and GPU Parakeet resident together. Background cores paused. Cold prompt uses nonce before actual app context (0-9 cached tokens); warm primes shared prefix with a different text turn (2796-2799 cached tokens), never reuses audio. Text input is actual Parakeet transcript. Timings exclude endpoint pause, routing, TTS and playback. Combined times sum measured ASR and reply stages. GPU Parakeet ORT 1.23.2 isolated runtime; app ORT 1.28 falls back to CPU because CUDA13 libraries missing. Single LLM sample per case/condition; not an accuracy evaluation.",
+  "asr": {
+    "load_ms": 2703.9200519939186,
+    "providers": [
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "results": [
+      {
+        "case": 0,
+        "repeat": 0,
+        "transcript": "What time is it?",
+        "ms": 3647.0617299928563
+      },
+      {
+        "case": 0,
+        "repeat": 1,
+        "transcript": "What time is it?",
+        "ms": 15.318862002459355
+      },
+      {
+        "case": 0,
+        "repeat": 2,
+        "transcript": "What time is it?",
+        "ms": 15.272150005330332
+      },
+      {
+        "case": 1,
+        "repeat": 0,
+        "transcript": "How many CPU cores does this computer have?",
+        "ms": 92.56922699569259
+      },
+      {
+        "case": 1,
+        "repeat": 1,
+        "transcript": "How many CPU cores does this computer have?",
+        "ms": 18.310401996131986
+      },
+      {
+        "case": 1,
+        "repeat": 2,
+        "transcript": "How many CPU cores does this computer have?",
+        "ms": 15.900047001196072
+      },
+      {
+        "case": 2,
+        "repeat": 0,
+        "transcript": "Explain why the sky is blue briefly.",
+        "ms": 93.75024800829124
+      },
+      {
+        "case": 2,
+        "repeat": 1,
+        "transcript": "Explain why the sky is blue briefly.",
+        "ms": 16.914974999963306
+      },
+      {
+        "case": 2,
+        "repeat": 2,
+        "transcript": "Explain why the sky is blue briefly.",
+        "ms": 19.02185099606868
+      }
+    ]
+  },
+  "llm": [
+    {
+      "question": "What time is it?",
+      "case": 0,
+      "mode": "direct_audio",
+      "cache": "cold",
+      "first_token_ms": 751.7726569931256,
+      "first_clause_ms": 1056.675997999264,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 2849,
+        "prompt_ms": 722.171,
+        "prompt_per_token_ms": 0.2534822744822745,
+        "prompt_per_second": 3945.049025784752,
+        "predicted_n": 48,
+        "predicted_ms": 438.475,
+        "predicted_per_token_ms": 9.134895833333333,
+        "predicted_per_second": 109.47032327954844
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 1056.675997999264
+    },
+    {
+      "question": "What time is it?",
+      "case": 0,
+      "mode": "direct_audio",
+      "cache": "warm",
+      "first_token_ms": 110.34942499827594,
+      "first_clause_ms": 395.2158970059827,
+      "timings": {
+        "cache_n": 2799,
+        "prompt_n": 50,
+        "prompt_ms": 65.48,
+        "prompt_per_token_ms": 1.3096,
+        "prompt_per_second": 763.5919364691508,
+        "predicted_n": 48,
+        "predicted_ms": 412.616,
+        "predicted_per_token_ms": 8.596166666666667,
+        "predicted_per_second": 116.33092269810187
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 395.2158970059827
+    },
+    {
+      "question": "What time is it?",
+      "case": 0,
+      "mode": "parakeet_text",
+      "cache": "cold",
+      "first_token_ms": 544.278043002123,
+      "first_clause_ms": 859.2006740072975,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 2806,
+        "prompt_ms": 492.249,
+        "prompt_per_token_ms": 0.1754272986457591,
+        "prompt_per_second": 5700.367090639087,
+        "predicted_n": 56,
+        "predicted_ms": 490.215,
+        "predicted_per_token_ms": 8.753839285714285,
+        "predicted_per_second": 114.23559050620646
+      },
+      "asr_ms": 15.295506003894843,
+      "combined_first_clause_ms": 874.4961800111923
+    },
+    {
+      "question": "What time is it?",
+      "case": 0,
+      "mode": "parakeet_text",
+      "cache": "warm",
+      "first_token_ms": 63.22846800321713,
+      "first_clause_ms": 311.832596999011,
+      "timings": {
+        "cache_n": 2797,
+        "prompt_n": 10,
+        "prompt_ms": 22.047,
+        "prompt_per_token_ms": 2.2047,
+        "prompt_per_second": 453.57645031069984,
+        "predicted_n": 60,
+        "predicted_ms": 515.374,
+        "predicted_per_token_ms": 8.589566666666666,
+        "predicted_per_second": 116.42030835859006
+      },
+      "asr_ms": 15.295506003894843,
+      "combined_first_clause_ms": 327.12810300290585
+    },
+    {
+      "question": "How many CPU cores does this computer have?",
+      "case": 1,
+      "mode": "direct_audio",
+      "cache": "cold",
+      "first_token_ms": 647.8244940080913,
+      "first_clause_ms": 732.6297920080833,
+      "timings": {
+        "cache_n": 9,
+        "prompt_n": 2885,
+        "prompt_ms": 574.951,
+        "prompt_per_token_ms": 0.1992897746967071,
+        "prompt_per_second": 5017.818909785356,
+        "predicted_n": 75,
+        "predicted_ms": 651.531,
+        "predicted_per_token_ms": 8.68708,
+        "predicted_per_second": 115.11347886746756
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 732.6297920080833
+    },
+    {
+      "question": "How many CPU cores does this computer have?",
+      "case": 1,
+      "mode": "direct_audio",
+      "cache": "warm",
+      "first_token_ms": 103.24706400569994,
+      "first_clause_ms": 235.56488900794648,
+      "timings": {
+        "cache_n": 2798,
+        "prompt_n": 94,
+        "prompt_ms": 56.419,
+        "prompt_per_token_ms": 0.6002021276595745,
+        "prompt_per_second": 1666.1053900281822,
+        "predicted_n": 32,
+        "predicted_ms": 273.703,
+        "predicted_per_token_ms": 8.55321875,
+        "predicted_per_second": 116.91505025520364
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 235.56488900794648
+    },
+    {
+      "question": "How many CPU cores does this computer have?",
+      "case": 1,
+      "mode": "parakeet_text",
+      "cache": "cold",
+      "first_token_ms": 581.40177000314,
+      "first_clause_ms": 757.9217419988709,
+      "timings": {
+        "cache_n": 8,
+        "prompt_n": 2804,
+        "prompt_ms": 527.122,
+        "prompt_per_token_ms": 0.18798930099857344,
+        "prompt_per_second": 5319.451663941175,
+        "predicted_n": 43,
+        "predicted_ms": 418.358,
+        "predicted_per_token_ms": 9.729255813953488,
+        "predicted_per_second": 102.78278412268918
+      },
+      "asr_ms": 17.10522449866403,
+      "combined_first_clause_ms": 775.0269664975349
+    },
+    {
+      "question": "How many CPU cores does this computer have?",
+      "case": 1,
+      "mode": "parakeet_text",
+      "cache": "warm",
+      "first_token_ms": 73.6675490043126,
+      "first_clause_ms": 188.57026599289384,
+      "timings": {
+        "cache_n": 2798,
+        "prompt_n": 14,
+        "prompt_ms": 21.113,
+        "prompt_per_token_ms": 1.5080714285714285,
+        "prompt_per_second": 663.0985648652488,
+        "predicted_n": 55,
+        "predicted_ms": 497.055,
+        "predicted_per_token_ms": 9.037363636363636,
+        "predicted_per_second": 110.65173874118557
+      },
+      "asr_ms": 17.10522449866403,
+      "combined_first_clause_ms": 205.67549049155787
+    },
+    {
+      "question": "Explain why the sky is blue briefly.",
+      "case": 2,
+      "mode": "direct_audio",
+      "cache": "cold",
+      "first_token_ms": 605.2107389987214,
+      "first_clause_ms": 878.7088870012667,
+      "timings": {
+        "cache_n": 8,
+        "prompt_n": 2868,
+        "prompt_ms": 543.253,
+        "prompt_per_token_ms": 0.18941875871687588,
+        "prompt_per_second": 5279.308167649327,
+        "predicted_n": 71,
+        "predicted_ms": 614.567,
+        "predicted_per_token_ms": 8.65587323943662,
+        "predicted_per_second": 115.52849404540108
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 878.7088870012667
+    },
+    {
+      "question": "Explain why the sky is blue briefly.",
+      "case": 2,
+      "mode": "direct_audio",
+      "cache": "warm",
+      "first_token_ms": 101.8633470084751,
+      "first_clause_ms": 386.79547200445086,
+      "timings": {
+        "cache_n": 2797,
+        "prompt_n": 77,
+        "prompt_ms": 55.576,
+        "prompt_per_token_ms": 0.7217662337662337,
+        "prompt_per_second": 1385.4901396286166,
+        "predicted_n": 71,
+        "predicted_ms": 624.157,
+        "predicted_per_token_ms": 8.790943661971832,
+        "predicted_per_second": 113.75343062723
+      },
+      "asr_ms": 0,
+      "combined_first_clause_ms": 386.79547200445086
+    },
+    {
+      "question": "Explain why the sky is blue briefly.",
+      "case": 2,
+      "mode": "parakeet_text",
+      "cache": "cold",
+      "first_token_ms": 573.2965120114386,
+      "first_clause_ms": 686.3344690063968,
+      "timings": {
+        "cache_n": 9,
+        "prompt_n": 2801,
+        "prompt_ms": 495.9,
+        "prompt_per_token_ms": 0.1770439128882542,
+        "prompt_per_second": 5648.316192780803,
+        "predicted_n": 96,
+        "predicted_ms": 867.588,
+        "predicted_per_token_ms": 9.037374999999999,
+        "predicted_per_second": 110.65159960718682
+      },
+      "asr_ms": 17.968412998015992,
+      "combined_first_clause_ms": 704.3028820044128
+    },
+    {
+      "question": "Explain why the sky is blue briefly.",
+      "case": 2,
+      "mode": "parakeet_text",
+      "cache": "warm",
+      "first_token_ms": 59.79496600048151,
+      "first_clause_ms": 171.91590799484402,
+      "timings": {
+        "cache_n": 2796,
+        "prompt_n": 13,
+        "prompt_ms": 20.125,
+        "prompt_per_token_ms": 1.5480769230769231,
+        "prompt_per_second": 645.9627329192547,
+        "predicted_n": 98,
+        "predicted_ms": 860.156,
+        "predicted_per_token_ms": 8.777102040816326,
+        "predicted_per_second": 113.93282148819517
+      },
+      "asr_ms": 17.968412998015992,
+      "combined_first_clause_ms": 189.88432099286
+    }
+  ],
+  "redux_cpu": {
+    "source": "https://huggingface.co/eschmidbauer/parakeet-redux-onnx",
+    "revision": "1c285ba78d6f1880803f65355133a5ad3559a407",
+    "load_ms": 951.1290949885733,
+    "threads": 6,
+    "providers": [
+      "CPUExecutionProvider"
+    ],
+    "results": [
+      {
+        "case": 0,
+        "repeat": 0,
+        "ms": 79.28258999891113,
+        "text": "What time is it?"
+      },
+      {
+        "case": 0,
+        "repeat": 1,
+        "ms": 72.00197500060312,
+        "text": "What time is it?"
+      },
+      {
+        "case": 0,
+        "repeat": 2,
+        "ms": 71.58471300499514,
+        "text": "What time is it?"
+      },
+      {
+        "case": 1,
+        "repeat": 0,
+        "ms": 128.2160550035769,
+        "text": "How many CPU calls does this computer have?"
+      },
+      {
+        "case": 1,
+        "repeat": 1,
+        "ms": 130.564138002228,
+        "text": "How many CPU calls does this computer have?"
+      },
+      {
+        "case": 1,
+        "repeat": 2,
+        "ms": 129.80180699378252,
+        "text": "How many CPU calls does this computer have?"
+      },
+      {
+        "case": 2,
+        "repeat": 0,
+        "ms": 111.57940799603239,
+        "text": "Explain why the sky is blue briefly."
+      },
+      {
+        "case": 2,
+        "repeat": 1,
+        "ms": 110.86140800034627,
+        "text": "Explain why the sky is blue briefly."
+      },
+      {
+        "case": 2,
+        "repeat": 2,
+        "ms": 110.70977500639856,
+        "text": "Explain why the sky is blue briefly."
+      }
+    ]
+  },
+  "sherpa_cpu": {
+    "source": "https://huggingface.co/Codyfederer/sherpa-onnx-nemo-parakeet-redux",
+    "revision": "1436e63fdb2f03c4c5772589dc7bc95a3f9b32fe",
+    "runtime": "sherpa-onnx 1.13.8",
+    "note": "App background cores restored during this CPU-only run; small timing differences versus the other Redux export are not conclusive.",
+    "load_ms": 967.2056190029252,
+    "threads": 6,
+    "provider": "cpu",
+    "results": [
+      {
+        "case": 0,
+        "repeat": 0,
+        "ms": 109.54170300101396,
+        "text": "What time is it?"
+      },
+      {
+        "case": 0,
+        "repeat": 1,
+        "ms": 77.38752898876555,
+        "text": "What time is it?"
+      },
+      {
+        "case": 0,
+        "repeat": 2,
+        "ms": 75.98146201053169,
+        "text": "What time is it?"
+      },
+      {
+        "case": 1,
+        "repeat": 0,
+        "ms": 132.6139129960211,
+        "text": "How many CPU tones does this computer have?"
+      },
+      {
+        "case": 1,
+        "repeat": 1,
+        "ms": 130.7588440104155,
+        "text": "How many CPU tones does this computer have?"
+      },
+      {
+        "case": 1,
+        "repeat": 2,
+        "ms": 135.92138199601322,
+        "text": "How many CPU tones does this computer have?"
+      },
+      {
+        "case": 2,
+        "repeat": 0,
+        "ms": 115.1253129937686,
+        "text": "Explain why the sky is blue briefly."
+      },
+      {
+        "case": 2,
+        "repeat": 1,
+        "ms": 113.09211800107732,
+        "text": "Explain why the sky is blue briefly."
+      },
+      {
+        "case": 2,
+        "repeat": 2,
+        "ms": 113.39467599464115,
+        "text": "Explain why the sky is blue briefly."
+      }
+    ]
+  }
+}
