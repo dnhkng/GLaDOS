@@ -164,12 +164,15 @@ recording or private image is needed. For speech-driven avatar controls, see
 
 ## Cache and latency tuning, 2026-10-06
 
-The default profile uses four independent 32K contexts, Q8_0 key/value cache and
+The default profile uses four independent 16K contexts, Q8_0 key/value cache and
 full sliding-window retention. Two application slots are reserved for interactive
-work; background minds share the remaining two. The mixed conversation, four-image
-vision, emotion and memory test left about 1 GiB of GPU memory free on the 10 GiB
-RTX 3080. Compaction starts around 19.7K estimated stored tokens, leaving room for
-instructions, tools, current input and output. See the
+work; background minds share the remaining two. Compaction starts around 9.8K
+estimated stored tokens, leaving room for instructions, tools, current input
+and output.
+
+The earlier 32K-per-slot capacity test with mixed conversation, four-image
+vision, emotion and memory left about 1 GiB of GPU memory free on the 10 GiB
+RTX 3080. See the
 [four-slot capacity and prompt-reuse measurements](benchmarks/gemma4-four-slot-capacity.md).
 
 The initial two-slot latency tuning below retained full sliding-window KV state with `--swa-full`.

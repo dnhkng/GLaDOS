@@ -86,7 +86,7 @@ Glados:
       tick_interval_s: 30
       model_context_window: 16384
       token_threshold: 20000
-      target_utilization: 0.6  # Compact at ~19.7K stored tokens; reserve room for tools/input/output.
+      target_utilization: 0.6  # Compact at ~9.8K stored tokens (16K slot); reserve room for tools/input/output.
       state_path: "~/.glados/conversation.json"
     jobs:
       enabled: true

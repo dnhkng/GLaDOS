@@ -1,7 +1,7 @@
-from copy import deepcopy
 """Independent slot producers wake a reviewer; Central Core owns the delivered reply."""
 
 from collections.abc import Iterator
+from copy import deepcopy
 import json
 import queue
 import threading

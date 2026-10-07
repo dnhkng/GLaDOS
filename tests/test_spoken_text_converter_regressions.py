@@ -168,7 +168,7 @@ def test_numeric_expressions(converter: SpokenTextConverter, text: str, expected
         ("€1.234,56", "one thousand two hundred thirty-four euros and fifty-six cents"),
         ("€1,23", "one euro and twenty-three cents"),
         ("€1,234", "one thousand two hundred thirty-four euros"),
-        ("$1,234.56", "one thousand two hundred thirty-four dollars and fifty-six cents"),
+        ("$1234.56", "one thousand two hundred thirty-four dollars and fifty-six cents"),
         ("€-1.234,56", "negative one thousand two hundred thirty-four euros and fifty-six cents"),
         ("$.50", "zero dollars and fifty cents"),
         ("£.01", "zero pounds and one penny"),

@@ -1,7 +1,7 @@
-from copy import deepcopy
 """Autonomy yields to users, preserves notifications and terminates private checks."""
 
 from collections.abc import Callable, Iterator
+from copy import deepcopy
 import json
 import queue
 import threading
