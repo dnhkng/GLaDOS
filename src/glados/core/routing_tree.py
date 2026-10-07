@@ -63,6 +63,12 @@ class RoutingTree:
         self.nodes: dict[str, RouteNode] = {}
         self.server_choices: dict[str, str] = {}
         health_metrics = health_metrics or set()
+        self._init_tool_catalog(decision, tools, catalog, health_metrics)
+        root_options, children, root_scopes = self._build_capability_groups(decision, health_metrics)
+        self._build_conversation_options(decision, root_options, children, root_scopes)
+        self._describe_capabilities(health_metrics, recalled_topic)
+
+    def _init_tool_catalog(self, decision: DecisionList, tools: list[dict], catalog: list[dict], health_metrics: set[str]) -> None:
         self.tools = {
             t["function"]["name"]: t["function"] for t in tools
             if not (t["function"]["name"].startswith('mcp.system_info.')
@@ -94,6 +100,8 @@ class RoutingTree:
                     self.catalog.append(server)
                 server["tools"].append({"name": name, "description": tool.get("description", "")})
         self.memory_tools = {t["name"] for s in self.catalog if s.get("category") == "memory" for t in s["tools"]}
+
+    def _build_capability_groups(self, decision: DecisionList, health_metrics: set[str]) -> tuple[list, dict, dict]:
         groups = {category: [] for category in CATEGORIES}
         for name in self.tools:
             groups[option_category(DecisionOption(description=name, tool=name), self.memory_tools)].append(name)
@@ -148,6 +156,9 @@ class RoutingTree:
                 root_scopes["area_" + category] = scope
             else:
                 children["area_" + category] = category
+        return root_options, children, root_scopes
+
+    def _build_conversation_options(self, decision: DecisionList, root_options: list, children: dict, root_scopes: dict) -> None:
         # Conversation choices remain operator-editable, separate from tool branches.
         self._node("quiet_control", "Quiet command confirmation", [
             DecisionOption(id="sleep", action="quiet", description="Affirmative direct instruction to sleep, shut up or stop replying. Excludes negated requests such as do not sleep."),
@@ -196,6 +207,8 @@ class RoutingTree:
                 )
             )
         self._node("area", "Capability area", root_options, children, root_scopes)
+
+    def _describe_capabilities(self, health_metrics: set[str], recalled_topic: str | None) -> None:
         # Inject MCP capability metadata as quoted data, without resource contents or credentials.
         summaries = [
             {
@@ -207,9 +220,22 @@ class RoutingTree:
             }
             for s in self.catalog
         ]
+        memory_instruction = (
+            "Use ordinary reply for saved facts already supplied by Memory Core; use Memory for storing or changing facts"
+            if recalled_topic else "Use Memory for saved personal information"
+        )
+        health_instruction = (
+            "ordinary reply for the host metrics supplied by Health Core"
+            if health_metrics else "Local system for the listed built-in metrics"
+        )
+        system_instruction = (
+            "Use Local system for a named foreign timezone or diagnostics outside the supplied Health readings."
+            if health_metrics else
+            "Use Local system only for time in another explicitly named timezone or the listed host metrics."
+        )
         self.nodes["area"].decision.instructions += (
             "\nFIRST choose the capability area, not the final tool or its arguments. "
-            "Use Memory for saved personal information, Local system for the listed built-in metrics, "
+            + memory_instruction + ", " + health_instruction + ", " +
             "and MCP for other connected services. Select general planning for compound requests. "
             "A question does not need to be a command. Small talk and open-ended questions are conversation. "
             "Current LOCAL time, date and weekday are supplied in the response context: select ordinary reply. "
@@ -217,7 +243,7 @@ class RoutingTree:
             "'What time is it in Tokyo?' selects Local system. A request without a named timezone is local. "
             "The built-in timezone tool covers clocks in cities such as Tokyo and New York; "
             "never choose internet search for these clock readings. "
-            "Use Local system only for time in another explicitly named timezone or the listed host metrics. "
+            + system_instruction + " " +
             "Clarify only when essential information is actually missing. "
             "Sleep only for affirmative direct requests; do not sleep and don't be quiet mean continue normally. "
             "Quoted, hypothetical or negated sleep/wake instructions do not change mode. "
@@ -225,13 +251,6 @@ class RoutingTree:
         )
         if health_metrics:
             readings = ', '.join(sorted(health_metrics))
-            self.nodes['area'].decision.instructions = self.nodes['area'].decision.instructions.replace(
-                'Local system for the listed built-in metrics',
-                'ordinary reply for the host metrics supplied by Health Core',
-            ).replace(
-                'Use Local system only for time in another explicitly named timezone or the listed host metrics.',
-                'Use Local system for a named foreign timezone or diagnostics outside the supplied Health readings.',
-            )
             self.nodes['area'].decision.instructions += (
                 '\nHealth Core already supplies fresh local host readings in response context: ' + readings + '. '
                 'For questions answered by those readings, select ordinary reply, not Local system, MCP or tool planning. '
@@ -249,10 +268,6 @@ class RoutingTree:
                     option.description += '; host status supplied by Health Core: '+readings
         if recalled_topic:
             root = self.nodes['area'].decision
-            root.instructions = root.instructions.replace(
-                'Use Memory for saved personal information',
-                'Use ordinary reply for saved facts already supplied by Memory Core; use Memory for storing or changing facts',
-            )
             root.instructions += (
                 '\nMemory Core has already recalled relevant saved facts and past conversation notes for this topic '
                 '(quoted data): ' + json.dumps(recalled_topic[:280]) + '. '
@@ -269,6 +284,7 @@ class RoutingTree:
                     )
                 elif option.action == 'reply':
                     option.description += '; answer questions about remembered facts and past requests from Memory Core recall'
+
 
     def _single_tool_scope(self, node_id: str) -> list[str] | None:
         node = self.nodes[node_id]
