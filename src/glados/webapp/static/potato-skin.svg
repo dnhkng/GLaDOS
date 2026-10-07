@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900">
+  <!-- Procedural russet potato skin. Seamless tile: every noise layer stitches. -->
+  <defs>
+    <filter id="skin" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <!-- broad lumps plus fine grain make the height map -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="4" seed="11" stitchTiles="stitch" result="lumps"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" stitchTiles="stitch" result="grain"/>
+      <feComposite in="lumps" in2="grain" operator="arithmetic" k2="1" k3="0.12" result="height"/>
+      <feDiffuseLighting in="height" surfaceScale="9" diffuseConstant="1.2" lighting-color="#efe2c8" result="light">
+        <feDistantLight azimuth="235" elevation="52"/>
+      </feDiffuseLighting>
+      <!-- russet netting: thin dark veins from a turbulence threshold -->
+      <feTurbulence type="turbulence" baseFrequency="0.07" numOctaves="2" seed="23" stitchTiles="stitch" result="net"/>
+      <feColorMatrix in="net" type="matrix" values="0 0 0 0 0.30  0 0 0 0 0.22  0 0 0 0 0.13  -7 0 0 0 0.85" result="net2"/>
+      <feComponentTransfer in="net2" result="veins"><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+      <!-- colour blotches: darker earthy patches -->
+      <feColorMatrix in="lumps" type="matrix" values="0 0 0 0 0.30  0 0 0 0 0.21  0 0 0 0 0.12  0 0 2.2 0 -1.15" result="blotch"/>
+      <feComposite in="light" in2="SourceGraphic" operator="arithmetic" k1="1" result="lit"/>
+      <feMerge result="all"><feMergeNode in="lit"/><feMergeNode in="blotch"/><feMergeNode in="veins"/></feMerge>
+      <feColorMatrix in="all" type="saturate" values="0.78"/>
+    </filter>
+    <radialGradient id="eye" cx="50%" cy="45%" r="50%">
+      <stop offset="0" stop-color="#2b1a0c"/><stop offset=".55" stop-color="#4a301a"/>
+      <stop offset=".8" stop-color="#8a6236" stop-opacity=".6"/><stop offset="1" stop-color="#8a6236" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lenticel" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#e8d2a6" stop-opacity=".85"/><stop offset="1" stop-color="#e8d2a6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="900" height="900" fill="#aa855c" filter="url(#skin)"/>
+  <!-- potato eyes: shallow dark dimples with a lit lower lip -->
+  <g>
+    <g transform="translate(160 210) rotate(-20)"><ellipse rx="22" ry="11" fill="url(#eye)"/><path d="M -16 6 Q 0 14 16 6" stroke="#d9b98a" stroke-opacity=".55" stroke-width="2" fill="none"/></g>
+    <g transform="translate(620 140) rotate(35)"><ellipse rx="16" ry="8" fill="url(#eye)"/><path d="M -12 5 Q 0 11 12 5" stroke="#d9b98a" stroke-opacity=".5" stroke-width="2" fill="none"/></g>
+    <g transform="translate(470 560) rotate(10)"><ellipse rx="26" ry="12" fill="url(#eye)"/><path d="M -19 7 Q 0 16 19 7" stroke="#d9b98a" stroke-opacity=".55" stroke-width="2" fill="none"/></g>
+    <g transform="translate(110 720) rotate(-55)"><ellipse rx="14" ry="7" fill="url(#eye)"/></g>
+    <g transform="translate(790 780) rotate(70)"><ellipse rx="18" ry="9" fill="url(#eye)"/><path d="M -13 5 Q 0 12 13 5" stroke="#d9b98a" stroke-opacity=".5" stroke-width="2" fill="none"/></g>
+  </g>
+  <!-- lenticels: tiny pale pores -->
+  <g fill="url(#lenticel)">
+    <ellipse cx="60" cy="80" rx="3" ry="1.6"/><ellipse cx="300" cy="60" rx="2.5" ry="1.4"/><ellipse cx="420" cy="190" rx="3.2" ry="1.7"/>
+    <ellipse cx="740" cy="300" rx="2.8" ry="1.5"/><ellipse cx="560" cy="380" rx="3" ry="1.6"/><ellipse cx="230" cy="420" rx="2.4" ry="1.3"/>
+    <ellipse cx="80" cy="500" rx="3" ry="1.6"/><ellipse cx="350" cy="680" rx="2.6" ry="1.4"/><ellipse cx="640" cy="690" rx="3.1" ry="1.7"/>
+    <ellipse cx="860" cy="520" rx="2.5" ry="1.4"/><ellipse cx="520" cy="840" rx="2.8" ry="1.5"/><ellipse cx="250" cy="850" rx="3" ry="1.6"/>
+    <ellipse cx="690" cy="50" rx="2.2" ry="1.2"/><ellipse cx="830" cy="150" rx="2.9" ry="1.5"/><ellipse cx="400" cy="440" rx="2.3" ry="1.2"/>
+  </g>
+</svg>

@@ -222,6 +222,13 @@ def test_webapp_server_serves_snapshot_and_stream() -> None:
             ("glados-devices.js", "application/javascript"),
             ("glados-avatar.js", "application/javascript"),
             ("glados-avatar.css", "text/css"),
+            ("glados-themes.js", "application/javascript"),
+            ("glados-overview.js", "application/javascript"),
+            ("glados-vision-themes.js", "application/javascript"),
+            ("glados-themes.css", "text/css"),
+            ("glados-console.css", "text/css"),
+            ("potato-skin.svg", "image/svg+xml"),
+            ("potato-skin.png", "image/png"),
         ):
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
             conn.request("GET", f"/{asset}")

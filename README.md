@@ -185,14 +185,20 @@ device permissions and configuration.
 
 ## Using the console
 
+The top bar switches between the operator console and a Presence screen for
+tablets. Both use the same live engine state, controls and eye animation.
+Choose Dark, Clinical, Terminal or PotatOS in the top bar or Facility Settings;
+the theme is remembered by this browser.
+
 - **Central Core / Brainstem:** control input, spoken output, camera observations
   and Quiet mode. Quiet pauses replies and background cores until a wake request
   or the Wake control; disabling autonomy only disables proactive responses.
-- **Minds:** inspect and control the workers that produce observations and results.
-- **Slots:** inspect the current context contributed by those workers. A slot is
-  stored information, not another model process.
-- **Test Chamber:** inspect the actual request context and its sources, plus saved
-  facts and summaries. The live system clock is included in reply context.
+- **Cores:** inspect and control the workers that produce observations and results,
+  including their shared inference capacity and waiting requests. Context slots
+  hold stored information; they are separate from inference capacity.
+- **Test Chamber:** browse saved facts and historical summaries.
+- **Neural Buffer:** inspect the actual request context and its sources.
+  The live system clock is included in reply context.
 - **Facility Settings:** edit response instructions, routing choices and thresholds,
   preferred search sources, vision timing and optional transcripts.
 

@@ -5,6 +5,29 @@ live parallel state — the two autonomy lanes, subagent contexts, tool state,
 PAD emotion, audio/MCP health — to a browser over HTTP + Server-Sent Events.
 No separate UI service to run. Tool argument validation uses jsonschema.
 
+## Console and Presence surfaces
+
+The existing menu names and order are shared across the themed operator console.
+The Enrichment Center shows live routing choices, inference channels and queues,
+core reports, PAD state, autonomy decisions, and the observation log.
+The top bar's **Presence screen** link opens `/?surface=presence`: a tablet view
+with the eye, current reply, camera description, recent core reports and input
+controls. It uses the same controller and backend camera as the console.
+
+Dark is the default. Clinical, Terminal and PotatOS are available from the top
+bar and Facility Settings. The choice is saved in browser storage, independently
+of engine configuration. All styling and images are local; fonts use installed
+fonts with system fallbacks. Camera treatments are false colour, greyscale,
+ASCII and ordered dither; they do not change what the vision model receives.
+The eye and camera shutter still blink on actual image analysis. Reduced-motion
+preferences disable animation and scanlines.
+
+Latest-turn timing plots recorded server milestones from input acceptance to
+the first playback request. Turn IDs exclude stale replies and autonomy output;
+later speech clauses do not change the first-playback measurement. This is not
+end-to-end voice latency: it excludes speech endpoint silence and browser audio
+buffering. A muted reply is labelled as text delivery, not audio playback.
+
 ## Decoupled launcher (key design)
 
 The webapp console is **not** part of the core engine. It is started by a

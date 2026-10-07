@@ -176,7 +176,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._file("index.html")
         # Sibling URLs keep index.html usable as a local-file demo too.
-        if path in ("/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js", "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js"):
+        if path in (
+            "/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js",
+            "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
+            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js",
+            "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
+        ):
             return self._file(path[1:])
         if path.startswith("/static/"):
             return self._file(path[len("/static/"):])
