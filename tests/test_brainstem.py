@@ -9,11 +9,13 @@ from glados.autonomy.config import AutonomyConfig
 from glados.autonomy.llm_client import LLMConfig, llm_call
 from glados.core.conversation_store import ConversationStore
 from glados.core.engine import Glados
+from glados.vision.vision_config import VisionConfig
 
 
 @pytest.mark.parametrize("autonomy,jobs,emotion", [(False, True, True), (True, False, True), (False, True, False)])
+@pytest.mark.parametrize("vision_enabled", [None, False, True])
 def test_emotion_registration_is_independent(
-    monkeypatch: pytest.MonkeyPatch, autonomy: bool, jobs: bool, emotion: bool
+    monkeypatch: pytest.MonkeyPatch, autonomy: bool, jobs: bool, emotion: bool, vision_enabled: bool | None
 ) -> None:
     factory = Mock(return_value=SimpleNamespace(agent_id="emotion"))
     monkeypatch.setattr("glados.core.engine.EmotionAgent", factory)
@@ -26,8 +28,8 @@ def test_emotion_registration_is_independent(
         inference_scheduler=None,
         autonomy_config=config,
         completion_url="http://localhost/v1/chat/completions",
-        api_key=None,
-        llm_model="gemma-4-E4B",
+        api_key="conversation-key",
+        llm_model="conversation-model",
         llm_request_options={"chat_template_kwargs": {"enable_thinking": False}},
         autonomy_slots=Mock(),
         mind_registry=Mock(),
@@ -37,17 +39,30 @@ def test_emotion_registration_is_independent(
         autonomy_loop=None,
         _emotion_agent=None,
         vision_state=None,
-        vision_config=None,
+        vision_config=VisionConfig(
+            enabled=vision_enabled, completion_url="http://vision/v1/chat/completions", api_key="vision-key"
+        )
+        if vision_enabled is not None
+        else None,
         _conversation_store=ConversationStore(),
     )
     Glados._register_subagents(engine)
     assert manager.register.call_count == int(emotion) + 1
-    assert engine.compaction_agent.model == "gemma-4-E4B"
+    memory_llm = engine.compaction_agent._llm_config
+    assert memory_llm.model == ("gemma-4-E4B" if vision_enabled else engine.llm_model)
+    assert memory_llm.url == (engine.vision_config.completion_url if vision_enabled else engine.completion_url)
+    assert memory_llm.api_key == ("vision-key" if vision_enabled else engine.api_key)
+    assert memory_llm.owner == "Compaction"
+    assert memory_llm.scheduler is engine.inference_scheduler
+    assert memory_llm.shutdown_event is engine.shutdown_event
+    assert memory_llm.cancelled() is False
+    if not vision_enabled:
+        assert memory_llm.request_options == engine.llm_request_options
     assert engine.compaction_agent.snapshot()["preserve_recent"] == 8
     if emotion:
         assert engine._emotion_agent is factory.return_value
         settings = factory.call_args.kwargs
-        assert settings["llm_config"].model == "gemma-4-E4B"
+        assert settings["llm_config"].model == engine.llm_model
         assert settings["config"].loop_interval_s == 5.0
         assert settings["llm_config"].request_options == engine.llm_request_options
     else:

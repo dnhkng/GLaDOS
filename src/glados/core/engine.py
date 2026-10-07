@@ -934,13 +934,19 @@ class Glados:
             threshold = tokens.token_threshold
             if tokens.model_context_window:
                 threshold = min(threshold, int(tokens.model_context_window * tokens.target_utilization))
-            small = self.vision_config or VisionConfig()
+            vision = self.vision_config if self.vision_config and self.vision_config.enabled else None
+            memory_llm = (
+                LLMConfig(
+                    url=vision.completion_url, model=vision.model, api_key=vision.api_key,
+                    timeout=vision.timeout_s, owner="Compaction", scheduler=self.inference_scheduler,
+                    shutdown_event=self.shutdown_event, cancelled=self.quiet_event.is_set,
+                )
+                if vision else replace(llm_config, owner="Compaction")
+            )
             self.compaction_agent = CompactionAgent(
                 config=SubagentConfig(agent_id="compaction", title="Memory Core", role="Recall and context management",
                                       loop_interval_s=tokens.tick_interval_s, run_on_start=True),
-                llm_config=LLMConfig(url=small.completion_url, model=small.model, api_key=small.api_key,
-                                     owner="Compaction", scheduler=self.inference_scheduler,
-                                     shutdown_event=self.shutdown_event, cancelled=self.quiet_event.is_set),
+                llm_config=memory_llm,
                 conversation_store=self._conversation_store, token_threshold=threshold,
                 preserve_recent=tokens.preserve_recent_messages, summary_max_tokens=tokens.summary_max_tokens,
                 summary_input_tokens=tokens.summary_input_tokens,
