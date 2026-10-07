@@ -7,6 +7,7 @@ import onnxruntime as ort  # type: ignore
 import soundfile as sf  # type: ignore
 import yaml
 
+from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
@@ -52,19 +53,7 @@ class AudioTranscriber:
                 raise ValueError(f"Error parsing YAML file {config_path}: {e}") from e
 
         # 2. Configure ONNX Runtime session
-        providers = ort.get_available_providers()
-
-        # Exclude providers known to cause issues or not desired
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
-
-        # Prioritize CUDA if available, otherwise CPU
-        if "CUDAExecutionProvider" in providers:
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            providers = ["CPUExecutionProvider"]
+        providers = audio_providers()
 
         session_opts = ort.SessionOptions()
 
@@ -77,6 +66,7 @@ class AudioTranscriber:
             sess_options=session_opts,
             providers=providers,
         )
+        report_session_providers(self.session, "ctc_asr")
 
         # 3. Load the vocabulary from the YAML configuration file
         if "labels" not in self.config:
