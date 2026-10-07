@@ -87,3 +87,9 @@ def test_lowercase_article_keeps_word_pronunciation(phonemizer: Phonemizer) -> N
     phonemizer.phoneme_dict["a"] = "ɐ"
     assert phonemizer.convert_to_phonemes(["a C P U"]) == ["ɐ sˈiː pˈiː jˈuː"]
     phonemizer.ort_session.run.assert_not_called()
+
+
+def test_glados_pronunciation_coexists_with_contractions(phonemizer: Phonemizer) -> None:
+    text = SpokenTextConverter().text_to_spoken("GLaDOS can't")
+    assert phonemizer.convert_to_phonemes([text]) == ["ɡlˈædoʊs kˈænt"]
+    phonemizer.ort_session.run.assert_not_called()
