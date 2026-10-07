@@ -1,12 +1,19 @@
 """Atomic JSONL memory edits shared by the in-process core and MCP writer."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
+
+_WINDOWS = sys.platform == "win32"
+if _WINDOWS:
+    import msvcrt
+else:
+    import fcntl
 
 
 def revision(content: str) -> str:
@@ -14,14 +21,22 @@ def revision(content: str) -> str:
 
 
 @contextmanager
-def locked(directory: Path):
+def locked(directory: Path) -> Iterator[None]:
     directory.mkdir(parents=True, exist_ok=True)
-    with (directory / ".memory.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with (directory / ".memory.lock").open("a+b") as lock:
+        if _WINDOWS:
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(lock, fcntl.LOCK_EX)
         try:
             yield
         finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+            if _WINDOWS:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def append_record(path: Path, record: dict) -> None:
