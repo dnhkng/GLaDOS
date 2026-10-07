@@ -1,5 +1,7 @@
 # GLaDOS Personality Core
 
+> *"Science isn't about asking why. It's about asking, 'Why not?'"* — Cave Johnson
+
 A voice assistant with GLaDOS’s custom voice, dry humour, camera observations,
 persistent memory and tools. Talk through a local microphone or the browser,
 watch the animated core respond, and inspect what each mind is doing.
@@ -19,6 +21,8 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 ## What it does
 
+> *"We've both said a lot of things that you're going to regret"* — GLaDOS
+
 - **Voice conversation:** Gemma 4 E4B can receive audio directly. An extended
   profile uses Parakeet transcription with a different conversation model.
 - **GLaDOS speech and animation:** spoken emotion directions move the browser
@@ -35,6 +39,8 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
   Core to review. User interactions take priority over new background inference.
 
 ## Quick start
+
+> *"The Enrichment Center is required to remind you that the Weighted Companion Cube cannot talk. In the event that it does talk The Enrichment Centre asks you to ignore its advice."* — GLaDOS
 
 You need Git and Python 3.12 or newer to run the installer. It creates a Python
 3.12.8 environment, installs GLaDOS and downloads the local ONNX speech models.
@@ -231,6 +237,8 @@ all loaded: direct-audio mode skips Parakeet at runtime.
 
 ## Configuration
 
+> *"As part of a required test protocol, we will not monitor the next test chamber. You will be entirely on your own. Good luck."* — GLaDOS
+
 Configuration files contain a top-level `Glados:` mapping. Repeat `--config` to
 layer files; values in later files override earlier values. Start with a complete
 shipped profile and add small overlays for your changes.
@@ -260,6 +268,8 @@ check your provider’s current model names and request options before using it.
 
 ## How the cores work
 
+> *"Let's be honest. Neither one of us knows what that thing does. Just put it in the corner and I'll deal with it later."* — GLaDOS
+
 ```mermaid
 flowchart LR
     mic[Microphone] --> vad[VAD and utterance buffer]
@@ -276,6 +286,10 @@ flowchart LR
     central --> tts[GLaDOS or Kokoro TTS]
     tts --> output[Speaker and animated avatar]
 ```
+
+### Core components
+
+> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."* — Cave Johnson
 
 Independent cores publish regular updates, important updates and task results.
 The Autonomy Core considers their evidence together with the conversation before
@@ -333,6 +347,8 @@ for tool filtering, memory services and transport setup.
 
 ## GLaDOS speech API
 
+> *"I'm speaking in an accent that is beyond her range of hearing."* — Wheatley
+
 The optional API exposes the **GLaDOS voice** through an OpenAI-style
 `POST /v1/audio/speech` endpoint. Other API voices and speed adjustment are not
 implemented. This endpoint does not require the conversation model server.
@@ -368,6 +384,8 @@ installer for the E4B model server.
 
 ## Troubleshooting
 
+> *"No one will blame you for giving up. In fact, quitting at this point is a perfectly reasonable response."* — GLaDOS
+
 | Symptom | Check |
 | --- | --- |
 | No reply / cannot reach model | Start the separate model server; check its URL, model alias and profile. Default E4B expects port 18080. |
@@ -380,6 +398,8 @@ installer for the E4B model server.
 | She stays quiet | Check microphone/voice controls, Quiet state and whether the router chose not to respond. |
 
 ## Development and next steps
+
+> *"Federal regulations require me to warn you that this next test chamber... is looking pretty good."* — GLaDOS
 
 For a separate CPU development environment:
 
