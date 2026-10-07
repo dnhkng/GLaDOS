@@ -91,6 +91,14 @@ class SpeculativeStream:
                 yield self.chunks.get(timeout=0.05)
             except queue.Empty:
                 if self.finished.is_set():
+                    # The producer can queue its last delta after get() times
+                    # out but before we observe finished. It cannot add more
+                    # chunks once finished is set, so draining is sufficient.
+                    while not self.stopped():
+                        try:
+                            yield self.chunks.get_nowait()
+                        except queue.Empty:
+                            break
                     self.raise_for_status()
                     break
 
