@@ -127,7 +127,8 @@ class SpeechPlayer:
                                     kind="play",
                                     level="debug",
                                     message=trim_message(audio_msg.text),
-                                    meta={"audio_samples": 0, "muted": True},
+                                    meta={"audio_samples": 0, "muted": True, "generation": audio_msg.generation,
+                                          "autonomy": audio_msg.autonomy_generation is not None},
                                 )
                                 self._observability_bus.emit(
                                     source="tts",
@@ -161,7 +162,8 @@ class SpeechPlayer:
                                 kind="play",
                                 level="debug",
                                 message=trim_message(audio_msg.text),
-                                meta={"audio_samples": audio_len},
+                                meta={"audio_samples": audio_len, "generation": audio_msg.generation,
+                                      "autonomy": audio_msg.autonomy_generation is not None},
                             )
 
                         self.audio_io.start_speaking(audio_msg.audio, self.tts_sample_rate)

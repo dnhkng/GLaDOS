@@ -933,7 +933,7 @@ class LanguageModelProcessor:
                     turn.llm_input.pop("_native_audio", None)
                     if self._observability_bus:
                         self._observability_bus.emit("asr", "transcript", trim_message(transcript),
-                                                     meta={"backend": "gemma"})
+                                                     meta={"backend": "gemma", "generation": self._reply_generation})
             except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
                 logger.warning("Optional Gemma transcript failed: {}", type(exc).__name__)
             finally:
@@ -1034,6 +1034,10 @@ class LanguageModelProcessor:
                 if turn.draft and (turn.route["action"] != "reply" or turn.route.get("context_source") == "clock"):
                     turn.draft.cancel()
                     turn.draft = None
+                if self._observability_bus:
+                    self._observability_bus.emit("llm", "routed", "Routing completed", level="debug",
+                        meta={"generation": self._reply_generation, "lane": self._lane,
+                              "autonomy": self._autonomy_response, "action": turn.route["action"]})
                 if turn.route["action"] == "quiet" and turn.route.get("accepted") and self._set_quiet_mode:
                     self._set_quiet_mode(True)
                     return False
@@ -1085,6 +1089,7 @@ class LanguageModelProcessor:
         if self._observability_bus:
             self._observability_bus.emit("llm", "admitted", "Inference admitted", level="debug",
                 meta={"generation": self._reply_generation, "lane": self._lane,
+                      "autonomy": self._autonomy_response,
                       "wait_ms": round((time.perf_counter() - admission_started) * 1000, 1)})
         if self._inflight_counter is not None:
             self._inflight_counter.increment()
@@ -1257,6 +1262,7 @@ class LanguageModelProcessor:
                             if self._observability_bus:
                                 self._observability_bus.emit("llm", "first_token", "First response token",
                                     level="debug", meta={"generation": self._reply_generation,
+                                        "autonomy": self._autonomy_response,
                                         "lane": self._lane,
                                         "elapsed_ms": round((time.perf_counter() - stream_started) * 1000, 1)})
                         if isinstance(chunk, list):
