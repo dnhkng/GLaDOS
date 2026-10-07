@@ -9,6 +9,7 @@ import onnxruntime as ort  # type: ignore
 import soundfile as sf  # type: ignore
 import yaml
 
+from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
 from .mel_spectrogram import MelSpectrogramCalculator, MelSpectrogramConfig
 
@@ -96,7 +97,9 @@ class _OnnxTDTModel:
     ) -> ort.InferenceSession:
         """Initializes an ONNX Runtime Inference Session."""
         try:
-            return ort.InferenceSession(str(model_path), sess_options=sess_options, providers=providers)
+            session = ort.InferenceSession(str(model_path), sess_options=sess_options, providers=providers)
+            report_session_providers(session, model_path.name)
+            return session
         except Exception as e:
             raise RuntimeError(f"Failed to load ONNX session for {model_path}: {e}") from e
 
@@ -287,19 +290,7 @@ class AudioTranscriber:
                 raise ValueError(f"Error parsing YAML file {config_path}: {e}") from e
 
         # 2. Configure ONNX Runtime session
-        providers = ort.get_available_providers()
-
-        # Exclude providers known to cause issues or not desired
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
-
-        # Prioritize CUDA if available, otherwise CPU
-        if "CUDAExecutionProvider" in providers:
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            providers = ["CPUExecutionProvider"]
+        providers = audio_providers()
 
         # Initialize the internal ONNX model handler
         self.model = _OnnxTDTModel(providers)

@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import onnxruntime as ort  # type: ignore
 
+from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
@@ -25,11 +26,7 @@ class VAD:
             - Sets up inference session with the specified model
             - Initializes internal state variables for processing audio chunks
         """
-        providers = ort.get_available_providers()
-        if "TensorrtExecutionProvider" in providers:
-            providers.remove("TensorrtExecutionProvider")
-        if "CoreMLExecutionProvider" in providers:
-            providers.remove("CoreMLExecutionProvider")
+        providers = audio_providers()
 
         # Limit to 1 thread to prevent ONNX Runtime from spawning many threads
         # for each small inference call (~31/sec). On high core-count machines this
@@ -44,6 +41,7 @@ class VAD:
             sess_options=sess_options,
             providers=providers,
         )
+        report_session_providers(self.ort_sess, "vad")
 
         self.avaliable_sample_rates = [16000]
 
