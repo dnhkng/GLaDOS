@@ -302,7 +302,9 @@ def run_webapp(
         sys.exit(1)
 
     glados = Glados.from_config(glados_config)
-    server = WebappServer(glados, host=webapp_config.host, port=webapp_config.port)
+    server = WebappServer(
+        glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts
+    )
     server.start()
     if not server.is_running:
         logger.error(
@@ -310,6 +312,8 @@ def run_webapp(
             webapp_config.host,
             webapp_config.port,
         )
+        glados.shutdown_event.set()
+        glados._graceful_shutdown()
         sys.exit(1)
 
     if glados.announcement:

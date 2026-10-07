@@ -35,6 +35,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from loguru import logger
 
 from ..tools.manage_slot import save_task
+from .config import console_hosts
 from .devices import device_snapshot, select_device
 from .serializers import (
     build_audio_state,
@@ -96,8 +97,9 @@ class _EngineHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], engine: Any):
+    def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str]):
         self.engine = engine
+        self.allowed_hosts = console_hosts(address[0], allowed_hosts)
         super().__init__(address, _Handler)
 
 
@@ -113,6 +115,24 @@ class _Handler(BaseHTTPRequestHandler):
     def _query(self) -> dict[str, str]:
         parsed = urlparse(self.path)
         return {k: v[0] for k, v in parse_qs(parsed.query).items()}
+
+    def _host_allowed(self) -> bool:
+        hosts = self.headers.get_all("Host", [])
+        if len(hosts) != 1 or any(char.isspace() for char in hosts[0]):
+            return False
+        try:
+            parsed = urlparse("//" + hosts[0])
+            # Accessing port validates it, even though the allowlist uses hostnames.
+            _ = parsed.port
+            return bool(
+                parsed.hostname
+                and parsed.hostname.lower() in self.server.allowed_hosts
+                and parsed.username is None
+                and parsed.password is None
+                and not (parsed.path or parsed.query or parsed.fragment)
+            )
+        except ValueError:
+            return False
 
     def _json(self, code: int, payload: Any) -> None:
         body = dumps(payload).encode("utf-8")
@@ -149,6 +169,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --------------------------------------------------------------- do_GET
     def do_GET(self) -> None:
+        if not self._host_allowed():
+            self.close_connection = True
+            return self._json(421, {"error": "Unexpected Host header"})
         path = self._path()
         if path in ("/", "/index.html"):
             return self._file("index.html")
@@ -219,6 +242,9 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
     def do_POST(self) -> None:
+        if not self._host_allowed():
+            self.close_connection = True
+            return self._json(421, {"error": "Unexpected Host header"})
         if self._path() == "/api/command":
             return self._command()
         if self._path() in {
@@ -597,10 +623,13 @@ def _sub_path(path: str, prefix: str) -> str | None:
 class WebappServer:
     """Lifecycle wrapper: start/stop the console server on a background thread."""
 
-    def __init__(self, engine: Any, host: str = "127.0.0.1", port: int = 8050) -> None:
+    def __init__(
+        self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None
+    ) -> None:
         self.engine = engine
         self.host = host
         self.port = port
+        self.allowed_hosts = list(allowed_hosts or [])
         self._server: _EngineHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.bound_port: int | None = None
@@ -609,9 +638,9 @@ class WebappServer:
         if self._server is not None:
             return
         try:
-            self._server = _EngineHTTPServer((self.host, self.port), self.engine)
+            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts)
             self.bound_port = self._server.server_address[1]
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             logger.error("webapp: failed to bind {}:{} - {}", self.host, self.port, exc)
             self._server = None
             return

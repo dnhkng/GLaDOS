@@ -187,8 +187,9 @@ class GladosConfig(BaseModel):
             env_port = int(os.environ.get("GLADOS_WEBAPP_PORT", ""))
         except ValueError:
             env_port = None
-        self.webapp = base.model_copy(
-            update={
+        self.webapp = WebappConfig.model_validate(
+            {
+                **base.model_dump(),
                 "enabled": flag.strip().lower() in ("1", "true", "yes"),
                 "host": os.environ.get("GLADOS_WEBAPP_HOST") or base.host,
                 "port": env_port or base.port,

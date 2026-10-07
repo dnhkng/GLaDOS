@@ -54,6 +54,7 @@ Glados:
     enabled: true
     host: "127.0.0.1"   # Listen address
     port: 8050          # Listen port; open http://127.0.0.1:8050/
+    allowed_hosts: []   # Add browser hostnames/IPs here before using a wildcard listen address.
 
   autonomy:
     enabled: true

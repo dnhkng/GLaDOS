@@ -317,18 +317,25 @@ class _LauncherEngine:
     def __init__(self) -> None:
         self.announcement = None
         self.ran = False
+        self.shutdown_event = threading.Event()
+        self.shutdown_called = False
 
     def run(self) -> None:
         self.ran = True
+
+    def _graceful_shutdown(self) -> None:
+        assert self.shutdown_event.is_set()
+        self.shutdown_called = True
 
 
 class _FakeServer:
     """Stub WebappServer that records start/stop without binding a socket."""
 
-    def __init__(self, engine, host: str, port: int) -> None:
+    def __init__(self, engine, host: str, port: int, allowed_hosts=None) -> None:
         self.engine = engine
         self.host = host
         self.port = port
+        self.allowed_hosts = allowed_hosts
         self.is_running = False
         self.shutdown_called = False
 
@@ -390,6 +397,27 @@ def test_run_webapp_starts_server_then_shuts_down(monkeypatch) -> None:
     assert server.port == 0
     assert server.shutdown_called is True
     assert server.is_running is False
+
+
+def test_run_webapp_shuts_down_engine_when_port_is_busy(monkeypatch) -> None:
+    from glados import cli
+
+    engine = _LauncherEngine()
+    occupied = WebappServer(_FakeEngine(), port=0)
+    occupied.start()
+    config = _fake_glados_config(enabled=True)
+    config.webapp.port = occupied.bound_port
+    monkeypatch.setattr(cli.GladosConfig, "from_yaml", lambda *a, **k: config)
+    monkeypatch.setattr(cli.Glados, "from_config", lambda c: engine)
+    try:
+        with pytest.raises(SystemExit) as exc:
+            cli.run_webapp("x.yaml")
+        assert exc.value.code == 1
+        assert not engine.ran
+        assert engine.shutdown_event.is_set()
+        assert engine.shutdown_called
+    finally:
+        occupied.shutdown()
 
 
 def test_browser_renders_server_payload_and_stream_updates() -> None:

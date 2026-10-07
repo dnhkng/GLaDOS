@@ -291,6 +291,22 @@ uv run glados webapp --config ./configs/glados_webapp_config.yaml
 
 Then open `http://127.0.0.1:8050/`.
 
+The console accepts HTTP Host headers for loopback addresses and the configured
+listen host. To use additional browser hostnames, list them under
+`webapp.allowed_hosts` in YAML, without ports. A wildcard listen address such as
+`0.0.0.0` requires an explicit list, for example:
+
+```yaml
+webapp:
+  enabled: true
+  host: 0.0.0.0
+  port: 8050
+  allowed_hosts: [192.168.1.20, glados.local]
+```
+
+These checks also apply to read-only routes and reject unexpected Host headers
+before accessing the engine. Mutation routes retain their separate Origin check.
+
 > **Demo mode.** A directly-opened static file can use simulated data for
 > styling. An HTTP console with an unavailable engine shows a disconnected
 > state and retries; it never substitutes simulated activity.
