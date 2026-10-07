@@ -26,6 +26,7 @@ def _unused_port() -> int:
 def _playback_backend(*, completed: bool, interrupted: bool) -> WebsocketAudioIO:
     """Build a server-free backend fixture with controlled playback state."""
     backend = object.__new__(WebsocketAudioIO)
+    backend._capture_discontinuity = threading.Event()
     backend._speaker_sync_delay_ms = 0
     backend._audio_lock = threading.Lock()
     backend._audio_data = AudioData(
@@ -125,6 +126,7 @@ def test_startup_propagates_non_oserror(monkeypatch: pytest.MonkeyPatch) -> None
 def test_microphone_queue_drops_oldest_chunk() -> None:
     """Overflow must retain recent audio without allowing memory growth."""
     backend = object.__new__(WebsocketAudioIO)
+    backend._capture_discontinuity = threading.Event()
     backend._sample_queue = queue.Queue(maxsize=2)
     backend._dropped_mic_chunks = 0
 
@@ -136,6 +138,8 @@ def test_microphone_queue_drops_oldest_chunk() -> None:
     assert np.all(first == 2.0)
     assert np.all(second == 3.0)
     assert backend._dropped_mic_chunks == 1
+    assert backend.consume_capture_discontinuity()
+    assert not backend.consume_capture_discontinuity()
 
 
 def test_microphone_queue_size_must_be_positive() -> None:
@@ -166,6 +170,7 @@ def test_malformed_microphone_frame_is_ignored(monkeypatch: pytest.MonkeyPatch) 
             raise asyncio.CancelledError
 
     backend = object.__new__(WebsocketAudioIO)
+    backend._capture_discontinuity = threading.Event()
     backend._default_room_tag = "office"
     backend._mic_max_silence_chunks = 10
     backend._rooms = False
@@ -224,6 +229,7 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
             raise websockets.exceptions.ConnectionClosedOK(None, None)
 
     backend = object.__new__(WebsocketAudioIO)
+    backend._capture_discontinuity = threading.Event()
     backend._default_room_tag = "office"
     backend._mic_max_silence_chunks = 10
     backend._rooms = False
@@ -251,15 +257,17 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
         second_task = asyncio.create_task(backend._server_microphone(second))  # type: ignore[arg-type]
         await asyncio.sleep(0.05)
         assert backend.get_sample_queue().qsize() == 1
+        samples, confidence = backend.get_sample_queue().get_nowait()
+        assert np.array_equal(samples, np.ones(512, dtype=np.float32))
+        assert confidence
 
         release.set()
         await asyncio.gather(first_task, second_task)
 
     asyncio.run(run_handlers())
 
-    samples, confidence = backend.get_sample_queue().get_nowait()
-    assert np.array_equal(samples, np.ones(512, dtype=np.float32))
-    assert confidence
+    assert backend.get_sample_queue().empty()
+    assert backend.consume_capture_discontinuity()
     assert backend._mic_state.current_id is None
 
 
@@ -317,3 +325,17 @@ def test_stop_start_releases_idle_microphone_owner(monkeypatch: pytest.MonkeyPat
         asyncio.run(run_session())
     finally:
         backend.close()
+
+
+def test_owner_release_discards_buffered_audio_and_flags_gap() -> None:
+    backend = object.__new__(WebsocketAudioIO)
+    backend._capture_discontinuity = threading.Event()
+    backend._sample_queue = queue.Queue()
+    backend._sample_queue.put((np.ones(512, dtype=np.float32), True))
+    backend._mic_state = MicState(room="office", current_id=uuid.uuid4(), silence_chunks=7)
+    backend._clear_microphone_ownership()
+    assert backend.get_sample_queue().empty()
+    assert backend.consume_capture_discontinuity()
+    assert not backend.consume_capture_discontinuity()
+    assert backend._mic_state.current_id is None
+    assert backend._mic_state.silence_chunks == 0
