@@ -167,18 +167,6 @@ class ConversationStore:
         with self._lock:
             return list(self._messages)
 
-    def deep_snapshot(self) -> list[dict[str, Any]]:
-        """
-        Return a deep copy of all messages for safe mutation.
-
-        Use this when you need to modify messages without affecting
-        the original store.
-
-        Returns:
-            A deep copy of the conversation history.
-        """
-        with self._lock:
-            return deepcopy(self._messages)
 
     def replace_all(self, new_messages: list[dict[str, Any]]) -> None:
         """
@@ -301,15 +289,3 @@ class ConversationStore:
         """
         with self._lock:
             return self._version
-
-    def iter_messages(self) -> list[dict[str, Any]]:
-        """
-        Return a snapshot for iteration.
-
-        This is equivalent to snapshot() but named explicitly for
-        iteration use cases.
-
-        Returns:
-            A shallow copy suitable for iteration.
-        """
-        return self.snapshot()

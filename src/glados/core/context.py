@@ -40,7 +40,7 @@ class ContextBuilder:
         context.register("vision", vision_state.as_message, priority=0, volatile=True)
 
         # Build context for LLM request
-        messages = context.build_system_messages()
+        messages = [entry["message"] for entry in context.build_system_entries()]
         # Returns: [{"role": "system", "content": "..."}, ...]
     """
 
@@ -80,14 +80,6 @@ class ContextBuilder:
             self._sources = [s for s in self._sources if s.name != name]
             return len(self._sources) < before
 
-    def build_system_messages(self) -> list[dict[str, str]]:
-        """
-        Build system messages from all registered sources.
-
-        Returns list of {"role": "system", "content": "..."} dicts.
-        Sources returning None are skipped.
-        """
-        return [entry["message"] for entry in self.build_system_entries()]
 
     def build_system_entries(self) -> list[dict[str, Any]]:
         """Resolve sources once, retaining provenance outside the model messages."""
@@ -106,30 +98,6 @@ class ContextBuilder:
                 pass
         return messages
 
-    def build_combined_prompt(self, separator: str = "\n\n") -> str | None:
-        """
-        Build a single combined prompt from all sources.
-
-        Returns None if no sources have content.
-        """
-        with self._lock:
-            sources = list(self._sources)
-
-        parts = []
-        for entry in sources:
-            try:
-                content = entry.source()
-                if content:
-                    parts.append(content)
-            except Exception:
-                pass
-
-        return separator.join(parts) if parts else None
-
-    def list_sources(self) -> list[str]:
-        """Get names of all registered sources."""
-        with self._lock:
-            return [s.name for s in self._sources]
 
     def __len__(self) -> int:
         with self._lock:

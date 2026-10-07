@@ -65,8 +65,7 @@ class RoutingTree:
         health_metrics = health_metrics or set()
         self.tools = {
             t["function"]["name"]: t["function"] for t in tools
-            if t["function"]["name"] not in {"speak", "do_nothing"}
-            and not (t["function"]["name"].startswith('mcp.system_info.')
+            if not (t["function"]["name"].startswith('mcp.system_info.')
                      and t["function"]["name"].rsplit('.', 1)[-1] in health_metrics)
         }
         # Prefer the connected demo over a second slow-clap entry. Explicit

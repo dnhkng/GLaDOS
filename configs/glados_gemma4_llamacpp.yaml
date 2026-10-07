@@ -70,7 +70,6 @@ Glados:
     cooldown_s: 20
     autonomy_parallel_calls: 2   # parallel autonomy LLM workers -> the console's "Autonomy" lane
     autonomy_queue_max: null
-    coalesce_ticks: true
     emotion:
       tick_interval_s: 5  # Immediate user reactions restart this idle timer.
       decay_settle_s: 360  # Remove 95% of an extreme PAD deviation in six minutes.
@@ -91,7 +90,6 @@ Glados:
       state_path: "~/.glados/conversation.json"
     jobs:
       enabled: true
-      poll_interval_s: 1
       hacker_news:
         enabled: false
         interval_s: 1800

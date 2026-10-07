@@ -4,7 +4,7 @@ import json
 import queue
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 import uuid
 
 from loguru import logger
@@ -14,19 +14,13 @@ from ..observability import ObservabilityBus, trim_message
 from ..vision.vision_state import VisionState
 from .config import AutonomyConfig
 from .context import slot_evidence, slot_version
-from .emotion_state import EmotionEvent
 from .event_bus import EventBus
-from .events import TaskUpdateEvent, TimeTickEvent, VisionUpdateEvent
+from .events import TaskUpdateEvent, TimeTickEvent
 from .interaction_state import InteractionState
 from .slots import TaskSlotStore
 
-if TYPE_CHECKING:
-    from .agents.emotion_agent import EmotionAgent
-
 
 class AutonomyLoop:
-    # Scene change threshold for triggering emotion events
-    VISION_EMOTION_THRESHOLD = 0.3
 
     def __init__(
         self,
@@ -41,7 +35,6 @@ class AutonomyLoop:
         shutdown_event: threading.Event,
         observability_bus: ObservabilityBus | None = None,
         inflight_counter: InFlightCounter | None = None,
-        emotion_agent: "EmotionAgent | None" = None,
         pause_time: float = 0.1,
         quiet_mode: Callable[[], bool] = lambda: False,
         user_busy: Callable[[], bool] = lambda: False,
@@ -60,7 +53,6 @@ class AutonomyLoop:
         self._shutdown_event = shutdown_event
         self._observability_bus = observability_bus
         self._inflight_counter = inflight_counter
-        self._emotion_agent = emotion_agent
         self._pause_time = pause_time
         self._quiet_mode = quiet_mode
         self._user_busy = user_busy
@@ -70,7 +62,7 @@ class AutonomyLoop:
         self._lock = threading.RLock()
         self._pending_updates: dict[str, TaskUpdateEvent] = {}
         self._seen_updates: dict[str, tuple] = {}
-        self._tick: TimeTickEvent | VisionUpdateEvent | None = None
+        self._tick: TimeTickEvent | None = None
         self._active_cycle: str | None = None
         self._active_updates: dict[str, TaskUpdateEvent] = {}
         self._active_slot_versions: dict[str, tuple] = {}
@@ -83,9 +75,6 @@ class AutonomyLoop:
         self._retry_after = 0.0
         self._last_decision: dict | None = None
 
-    def set_emotion_agent(self, agent: "EmotionAgent") -> None:
-        """Set the emotion agent for vision event forwarding."""
-        self._emotion_agent = agent
 
     def run(self) -> None:
         logger.info("AutonomyLoop thread started.")
@@ -171,7 +160,7 @@ class AutonomyLoop:
             for items in (self._pending_updates, self._seen_updates):
                 while len(items) > 128:
                     items.pop(next(iter(items)))
-        elif isinstance(event, TimeTickEvent | VisionUpdateEvent):
+        elif isinstance(event, TimeTickEvent):
             self._tick = event
 
     def _should_skip(self) -> bool:
@@ -378,20 +367,8 @@ class AutonomyLoop:
         prev_scene = self._last_scene or "unknown"
         change_score = "unknown"
 
-        if isinstance(event, VisionUpdateEvent):
-            prev_scene = event.prev_description or "unknown"
-            scene = event.description
-            change_score = f"{event.change_score:.4f}"
-            self._last_scene = event.description
-            # Push vision event to emotion agent if change is significant
-            if self._emotion_agent and event.change_score >= self.VISION_EMOTION_THRESHOLD:
-                self._push_vision_emotion(event)
-        elif isinstance(event, TimeTickEvent):
-            if scene:
-                self._last_scene = scene
-        elif isinstance(event, TaskUpdateEvent):
-            if scene:
-                self._last_scene = scene
+        if isinstance(event, (TimeTickEvent, TaskUpdateEvent)) and scene:
+            self._last_scene = scene
 
         tasks = self._task_summary()
         try:
@@ -436,39 +413,3 @@ class AutonomyLoop:
         except NotImplementedError:
             queued = 0
         return self._active_cycle is not None or (inflight + queued) > 0
-
-    def update_slot(
-        self,
-        slot_id: str,
-        title: str,
-        status: str,
-        summary: str,
-        notify_user: bool = True,
-        updated_at: float | None = None,
-    ) -> None:
-        self._slot_store.update_slot(
-            slot_id=slot_id,
-            title=title,
-            status=status,
-            summary=summary,
-            notify_user=notify_user,
-            updated_at=updated_at,
-        )
-
-    def _push_vision_emotion(self, event: VisionUpdateEvent) -> None:
-        """Push a vision-related emotion event."""
-        # Describe the scene change for emotional processing
-        if event.prev_description and event.description:
-            description = (f"Scene changed from '{event.prev_description}' to '{event.description}' "
-                           f"(change={event.change_score:.2f})")
-        elif event.description:
-            description = f"New scene observed: '{event.description}'"
-        else:
-            description = f"Scene change detected (change={event.change_score:.2f})"
-
-        emotion_event = EmotionEvent(
-            source="vision",
-            description=description,
-        )
-        self._emotion_agent.push_event(emotion_event)
-        logger.debug("Pushed vision emotion event: %s", description)

@@ -278,7 +278,6 @@ class Glados:
     """
 
     PAUSE_TIME: float = 0.05  # Time to wait between processing loops
-    NEUROTOXIN_RELEASE_ALLOWED: bool = False  # preparation for function calling, see issue #13
     DEFAULT_PERSONALITY_PREPROMPT: tuple[dict[str, str], ...] = (
         {
             "role": "system",
@@ -718,9 +717,6 @@ class Glados:
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
             )
-            # Wire emotion agent to autonomy loop for vision events
-            if self._emotion_agent is not None:
-                self.autonomy_loop.set_emotion_agent(self._emotion_agent)
             self.autonomy_ticker_thread = threading.Thread(
                 target=self._run_autonomy_ticker,
                 name="AutonomyTicker",
@@ -923,9 +919,6 @@ class Glados:
             )
             self.subagent_manager.register(emotion_agent)
             self._emotion_agent = emotion_agent  # Keep reference for event pushing
-            # Wire emotion agent to autonomy loop for vision events
-            if self.autonomy_config.enabled and self.autonomy_loop:
-                self.autonomy_loop.set_emotion_agent(emotion_agent)
 
         # Context maintenance is a background Mind even with autonomous speech OFF.
         if self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled:
@@ -1815,7 +1808,6 @@ class Glados:
             f"input_mode={self.input_mode}, "
             f"autonomy.enabled={self.autonomy_config.enabled}, "
             f"autonomy.jobs.enabled={jobs_enabled}, "
-            f"autonomy.coalesce_ticks={self.autonomy_config.coalesce_ticks}, "
             f"vision.enabled={self.vision_state is not None}"
         )
 

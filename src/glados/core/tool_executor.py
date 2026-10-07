@@ -120,13 +120,10 @@ class ToolExecutor:
                     self.shutdown_event.is_set() or self._quiet_mode() or g != self._quiet_generation()
                     or (mode and (not self._autonomy_enabled() or a != self._autonomy_generation()))
                 )
-                terminal = autonomy_mode and tool in {"speak", "do_nothing"}
                 autonomy_flag = {"autonomy": True} if autonomy_mode else {}
                 base_queue = self.llm_queue_autonomy if autonomy_mode else self.llm_queue_priority
                 lane = "autonomy" if autonomy_mode else "priority"
-                terminal_result = queue.Queue() if terminal else None
-                llm_queue = (terminal_result if terminal else
-                             self._wrap_llm_queue(base_queue) if autonomy_mode else base_queue)
+                llm_queue = self._wrap_llm_queue(base_queue) if autonomy_mode else base_queue
                 permit = tool_call.get("_decision_permit")
                 if permit:
                     if self.decision_store is None or not self.decision_store.authorize(permit):
@@ -336,8 +333,7 @@ class ToolExecutor:
                                     meta={"tool_call_id": tool_call_id, "elapsed_s": round(elapsed, 3)},
                                 )
                             logger.success("ToolExecutor: finished {}", tool)
-                            if not terminal:
-                                self._emit_tool_event("tool_success", tool)
+                            self._emit_tool_event("tool_success", tool)
                         except FuturesTimeoutError:
                             timeout_error = f"error: tool '{tool}' timed out after {self.tool_timeout}s"
                             self._emit_tool_event("tool_timeout", tool)
@@ -366,17 +362,6 @@ class ToolExecutor:
                             self._enqueue(llm_queue, {"role": "tool", "tool_call_id": tool_call_id,
                                                       "content": f"error: tool '{tool}' failed - {exc}",
                                                       **autonomy_flag}, lane=lane)
-                    if terminal and self._on_autonomy_done and not cancelled():
-                        try:
-                            content = terminal_result.get_nowait().get("content", "")
-                        except queue.Empty:
-                            content = "error: tool returned no result"
-                        outcome = ("error" if str(content).startswith("error:") else
-                                   "speak" if tool == "speak" else "silent")
-                        reason = str(tool_call.get("_autonomy_reason") or args.get("reason")
-                                     or args.get("text") or "No useful action needed")
-                        self._on_autonomy_done(tool_call.get("_autonomy_cycle", ""), outcome,
-                                               str(content) if outcome == "error" else reason)
                 else:
                     tool_error = f"error: no tool named {tool} is available"
                     logger.error(f"ToolExecutor: {tool_error}")

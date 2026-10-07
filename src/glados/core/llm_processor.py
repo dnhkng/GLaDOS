@@ -834,12 +834,6 @@ class LanguageModelProcessor:
         tools = list(tool_definitions)
         if self.vision_state is None:
             tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
-        if not autonomy_mode:
-            tools = [
-                tool
-                for tool in tools
-                if tool.get("function", {}).get("name") not in {"speak", "do_nothing"}
-            ]
         if self.mcp_manager:
             try:
                 tools.extend(self.mcp_manager.get_tool_definitions())

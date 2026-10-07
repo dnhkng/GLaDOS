@@ -1,3 +1,4 @@
+from copy import deepcopy
 """Real-model checks with synthetic slots and muted speech; no live conversation changes."""
 
 import argparse
@@ -159,7 +160,7 @@ def check(name, url, model, thinking=False):
             *turns,
         ]
     )
-    original = history.deep_snapshot()
+    original = deepcopy(history.snapshot())
     shutdown, active, speaking, finished, muted = (threading.Event() for _ in range(5))
     muted.set()
     pending, main, tools, speech, audio = (queue.Queue() for _ in range(5))

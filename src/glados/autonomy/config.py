@@ -1,6 +1,4 @@
-from typing import Literal
-
-from pydantic import BaseModel, Field, conint, field_validator
+from pydantic import BaseModel, Field, conint
 
 from ..core.memory_recall import RecallConfig
 
@@ -29,12 +27,6 @@ class TokenConfig(BaseModel):
 
     target_utilization: float = 0.6
     """Target context utilization (0.0-1.0) when model_context_window is set."""
-
-    estimator: Literal["simple", "tiktoken"] = "simple"
-    """Token estimation method: 'simple' (chars/4) or 'tiktoken' (accurate)."""
-
-    chars_per_token: float = 4.0
-    """Characters per token ratio for simple estimator."""
 
 
 class HEXACOConfig(BaseModel):
@@ -112,7 +104,6 @@ class WeatherJobConfig(BaseModel):
 
 class AutonomyJobsConfig(BaseModel):
     enabled: bool = False
-    poll_interval_s: float = 1.0
     hacker_news: HackerNewsJobConfig = HackerNewsJobConfig()
     weather: WeatherJobConfig = WeatherJobConfig()
 
@@ -123,18 +114,12 @@ class AutonomyConfig(BaseModel):
     cooldown_s: float = Field(default=20.0, ge=0)
     autonomy_parallel_calls: conint(ge=1, le=16) = 2
     autonomy_queue_max: int | None = Field(default=None, ge=0)
-    coalesce_ticks: bool = True
-    """Legacy config key; autonomous checks are always coalesced."""
     decision_thinking: bool = False
     """Optional reviewer reasoning; Central Core speech settings remain independent."""
     jobs: AutonomyJobsConfig = AutonomyJobsConfig()
     tokens: TokenConfig = TokenConfig()
     emotion: EmotionConfig = EmotionConfig()
 
-    @field_validator("coalesce_ticks")
-    @classmethod
-    def automatic_coalescing(cls, value: bool) -> bool:
-        return True
 
     system_prompt: str = (
         "You are the Autonomy Core, an independent attention reviewer for GLaDOS. "

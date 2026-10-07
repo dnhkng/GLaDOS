@@ -1,3 +1,4 @@
+from copy import deepcopy
 """Autonomy yields to users, preserves notifications and terminates private checks."""
 
 from collections.abc import Callable, Iterator
@@ -118,7 +119,7 @@ def test_reviewer_sees_all_cores_but_very_recent_user_input_blocks_dispatch() ->
 def run_check(monkeypatch: pytest.MonkeyPatch, choose: Callable[[dict, int], tuple[str, dict] | str],
               interrupt_stream: bool = False) -> tuple:
     history = ConversationStore([{"role": "user", "content": "Check on my task later."}])
-    original = history.deep_snapshot()
+    original = deepcopy(history.snapshot())
     shutdown, active = threading.Event(), threading.Event()
     active.set()
     decisions, requests = [], []
@@ -274,10 +275,6 @@ def test_failed_decision_retains_notification_and_backs_off(monkeypatch: pytest.
     now[0] += 11
     assert not loop._should_skip()
     assert loop.snapshot()["last_decision"]["outcome"] == "error"
-
-
-def test_legacy_coalescing_setting_becomes_automatic() -> None:
-    assert AutonomyConfig(coalesce_ticks=False).coalesce_ticks
 
 
 def test_malformed_stream_is_an_error_rather_than_a_silent_success(monkeypatch: pytest.MonkeyPatch) -> None:

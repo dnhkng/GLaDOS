@@ -1,3 +1,4 @@
+from copy import deepcopy
 """Independent slot producers wake a reviewer; Central Core owns the delivered reply."""
 
 from collections.abc import Iterator
@@ -154,7 +155,7 @@ def test_reviewer_to_central_to_delivery_keeps_personality_and_private_instructi
             {"role": "user", "content": "Tell me if the GPU is overheating."},
         ]
     )
-    original = history.deep_snapshot()
+    original = deepcopy(history.snapshot())
     slots, main_queue, tools, speech, audio = (
         loop._slot_store,
         queue.Queue(),

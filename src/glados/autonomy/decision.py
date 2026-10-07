@@ -29,7 +29,7 @@ def decision_prompt() -> str:
         'Return {"action":"null"} when no useful new intervention is needed. Otherwise return one JSON object:\n'
         '{"action":"prompt","instruction":"Summarize the newly completed requested result",'
         '"slot_ids":["EXACT_SLOT_ID_FROM_CONTEXT"],"reason":"A new useful result is ready"}\n'
-        "No Markdown, prose, spoken reply or tool calls. This format overrides older speak/do_nothing instructions. "
+        "No Markdown, prose, spoken reply or tool calls. "
         "You are the reviewer, not GLaDOS speaking. The Central Core writes the actual response. "
         "Base your instruction on existing slot evidence and reference its exact slot IDs. "
         "Use conversation summaries and recent turns to avoid repeating an announcement or greeting. "

@@ -43,10 +43,8 @@ Glados:
     cooldown_s: 20
     autonomy_parallel_calls: 2   # parallel autonomy LLM workers -> the console's "Autonomy" lane
     autonomy_queue_max: null
-    coalesce_ticks: true
     jobs:
       enabled: true
-      poll_interval_s: 1
       hacker_news:
         enabled: false
         interval_s: 1800
