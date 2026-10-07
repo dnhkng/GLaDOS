@@ -1,6 +1,6 @@
 # Architecture simplification: validated review and implementation plan
 
-Reviewed 2026-10-07 against the current working tree. Claude's original
+Reviewed 2026-10-07 against the current working tree. The original
 `architecture-simplification-review.md` is preserved unchanged. Its proposals are
 recommendations to assess, not instructions to execute wholesale.
 
