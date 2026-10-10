@@ -73,7 +73,7 @@ def test_automatic_draft_survives_background_mood_changes(
     processor._inference_scheduler = InferenceScheduler()
     store = DecisionListStore(tmp_path / "choices.json", lambda: [tool_definition])
     if search_tools:
-        processor._reply_tools = lambda: [{"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}]
+        processor._reply_tools = lambda available=None: [{"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}]
     affect = ["Neutral; [emotion:neutral]"]
     builder = ContextBuilder()
     builder.register("emotion", lambda: affect[0], volatile=True)

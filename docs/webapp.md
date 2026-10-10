@@ -10,9 +10,17 @@ No separate UI service to run. Tool argument validation uses jsonschema.
 The existing menu names and order are shared across the themed operator console.
 The Enrichment Center shows live routing choices, inference channels and queues,
 core reports, PAD state, autonomy decisions, and the observation log.
+The compact overview places the latest routing path and timing beside the eye
+and current reply. Expand a routing step's **All choices** disclosure to inspect
+its full instructions and option preferences; telemetry refreshes preserve the
+open disclosure. Core reports show their age, and important reports remain
+highlighted until Autonomy has handled them. Errors have a separate indicator.
 The top bar's **Presence screen** link opens `/?surface=presence`: a tablet view
 with the eye, current reply, camera description, recent core reports and input
 controls. It uses the same controller and backend camera as the console.
+The eye is centered without a ground shadow. A persistent footer shows local
+time, date, and touch-sized microphone, voice, camera and quiet controls. Content
+scrolls above the footer on smaller screens, keeping the controls accessible.
 
 Dark is the default. Clinical, Terminal and PotatOS are available from the top
 bar and Facility Settings. The choice is saved in browser storage, independently

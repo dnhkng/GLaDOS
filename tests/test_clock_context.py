@@ -152,7 +152,7 @@ def test_clock_reply_reads_after_admission_and_never_offers_tools(
     store = DecisionListStore(tmp_path / "choices.json", lambda: tool_definitions)
     reading = ["10:01:00"]
     monkeypatch.setattr("glados.core.llm_processor.current_time", lambda: {"time": reading[0]})
-    processor._reply_tools = lambda: [tool_definition]
+    processor._reply_tools = lambda available=None: [tool_definition]
     generated = threading.Event()
     payloads = []
 

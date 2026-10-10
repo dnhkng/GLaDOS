@@ -339,9 +339,8 @@ class ToolExecutor:
         except FuturesTimeoutError:
             timeout_error = f"error: tool '{call.tool}' timed out after {self.tool_timeout}s"
             # Publish or close atomically against a concurrently finishing tool.
-            result_queue.finish({"role": "tool", "tool_call_id": call.tool_call_id,
-                "content": timeout_error, "type": "function_call_output",
-                "_allow_tools": False, "_enqueued_at": time.time(), "_lane": call.lane})
+            self._finish(result_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": timeout_error}, call.lane)
             timed_out.set()
             future.cancel()
             self._emit_tool_event("tool_timeout", call.tool)
@@ -349,8 +348,8 @@ class ToolExecutor:
                 self._observability_bus.emit("tool", "timeout", timeout_error, level="warning",
                     meta={"tool": call.tool, "tool_call_id": call.tool_call_id})
         except Exception as exc:
-            result_queue.finish({"role": "tool", "tool_call_id": call.tool_call_id,
-                "content": f"error: tool '{call.tool}' failed - {exc}", "_allow_tools": False})
+            self._finish(result_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": f"error: tool '{call.tool}' failed - {exc}"}, call.lane)
             self._emit_tool_event("tool_failure", call.tool)
 
     def _unknown_tool(self, call: ToolInvocation) -> None:
@@ -428,6 +427,14 @@ class ToolExecutor:
                 self.put(item)
 
         return AutonomyQueue(llm_queue)
+
+    @staticmethod
+    def _finish(result_queue: "_ToolResultQueue", item: dict[str, Any], lane: str) -> None:
+        """Terminal timeout/failure results get the same lane metadata and tool policy as _enqueue."""
+        item = {"type": "function_call_output", **item, "_enqueued_at": time.time(), "_lane": lane}
+        if lane != "autonomy":
+            item.setdefault("_allow_tools", False)
+        result_queue.finish(item)
 
     @staticmethod
     def _enqueue(

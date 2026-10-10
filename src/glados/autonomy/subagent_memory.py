@@ -108,13 +108,15 @@ class SubagentMemory:
             self._save()
         return entry
 
-    def mark_shown(self, key: str) -> bool:
-        """Mark an entry as shown to the user. Returns True if found."""
+    def mark_shown(self, *keys: str) -> bool:
+        """Mark entries as shown to the user with one save. Returns True if any was found."""
         with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
+            entries = [self._entries[key] for key in keys if key in self._entries]
+            if not entries:
                 return False
-            entry.shown_at = time.time()
+            now = time.time()
+            for entry in entries:
+                entry.shown_at = now
             self._save()
         return True
 

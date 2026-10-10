@@ -8,11 +8,7 @@ from simple character-based estimation to accurate tiktoken counting.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
 class TokenEstimator(ABC):
