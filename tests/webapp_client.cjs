@@ -51,6 +51,24 @@ class Element {
 }
 
 (async () => {
+  const themeScript=fs.readFileSync(path.join(__dirname,'../src/glados/webapp/static/glados-themes.js'),'utf8');
+  for (const [search,stored,theme,surface] of [
+    ['', 'potato', 'potato', 'console'],
+    ['?surface=presence&theme=white', 'terminal', 'white', 'presence'],
+    ['?surface=invalid&theme=invalid', null, 'dark', 'console'],
+  ]) {
+    const bootDoc={documentElement:new Element()},bootNodes=new Map();
+    bootDoc.getElementById=id=>{if(!bootNodes.has(id))bootNodes.set(id,new Element());return bootNodes.get(id);};
+    const boot=vm.createContext({URLSearchParams,document:bootDoc,location:{search},
+      localStorage:{getItem(){if(stored===null)throw Error('Storage unavailable');return stored;},setItem(){throw Error('Storage unavailable');}}});
+    vm.runInContext('window=globalThis',boot);vm.runInContext(themeScript,boot);
+    boot.GladosThemes.mount(bootDoc,()=>{});
+    assert.equal(bootDoc.documentElement.dataset.theme,theme);
+    assert.equal(bootDoc.documentElement.dataset.surface,surface);
+    assert.match(bootDoc.getElementById('surface-switch').href,new RegExp('surface='+(surface==='presence'?'console':'presence')));
+    bootDoc.getElementById('theme-choice').value='terminal';bootDoc.getElementById('theme-choice').onchange();
+    assert.equal(bootDoc.documentElement.dataset.theme,'terminal','Disabled storage never blocks theme switching');
+  }
   const snapshot = JSON.parse(fs.readFileSync(0, "utf8"));
   const nodes = new Map();
   const node = id => {
@@ -82,10 +100,12 @@ class Element {
   const media = { matches: false, addEventListener(type, callback) { mediaEvents[type] = callback; },
     removeEventListener(type) { delete mediaEvents[type]; } };
   const document = { getElementById: node, querySelectorAll: () => [], createElement: () => new Element(),
+    documentElement: new Element(),
     hidden: false, addEventListener(type, callback) { listen(docEvents,type,callback); },
     removeEventListener(type) { delete docEvents[type]; } };
   const context = vm.createContext({
     document,
+    URLSearchParams,
     matchMedia: () => media,
     performance: {now: () => clockNow},
     requestAnimationFrame(callback) { frames.set(++nextFrame, callback); return nextFrame; },
@@ -132,11 +152,11 @@ class Element {
     EventSource, setInterval() {}, clearInterval() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-rig.js", "glados-vision.js", "glados-avatar.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
-  const optics=[],Vision=context.GladosVision.Vision;
-  context.GladosVision.Vision=function(canvas){const instance=new Vision(canvas);optics.push(instance);return instance;};
+  const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
+  context.GladosVision.ThemedVision=function(canvas){const instance=new ThemedVision(canvas);optics.push(instance);return instance;};
   const animators = [], Animator = context.GladosRig.Animator;
   context.GladosRig.Animator = function () { const instance = new Animator(); animators.push(instance); return instance; };
   const activity=()=>node('glados-eye').attributes['aria-label'].match(/aperture: ([^,]+)/)[1].replace(/^./,c=>c.toUpperCase());
@@ -146,6 +166,8 @@ class Element {
   vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
   await new Promise(resolve => setImmediate(resolve));
   assert.match(html,/data-view="cores"/);
+  assert.deepEqual([...html.matchAll(/class="nav-item(?: active)?" data-view="([^"]+)"/g)].map(m=>m[1]),
+    ['home','cores','memory','context','tools','tasks','settings','wire','vitals'],'Menu order and destinations stay unchanged');
   assert.doesNotMatch(html,/data-view="(?:minds|slots)"|id="view-slots"/);
   const coresSection=html.match(/<section class="view" id="view-cores">([\s\S]*?)<\/section>/)[1];
   assert.match(coresSection,/<h1>Cores<\/h1>/);
@@ -925,6 +947,70 @@ class Element {
   stream.onerror();
   assert.equal(node('control-microphone').disabled,true);
   assert.equal(node('message-send').disabled,true);
+
+  // The overview uses actual configured capacity and queued requests, including safe HTML rendering.
+  stream.onopen();
+  stream.send('state',{inference:{capacity:3,reserved_interactive:1,
+    active:[{slot:2,owner:'Vision',lane:'autonomy',started_at:Date.now()/1000}],
+    waiting:[{owner:'<script>bad</script>',lane:'autonomy',wait_reason:'user_response'}],
+    interaction_hold:{generation:42}},vision_mind:{...vision,scene:'A person holding a mug.',inference_ms:421,captured_at:Date.now()/1000}});
+  assert.equal((node('overview-slots').innerHTML.match(/capacity-number/g)||[]).length,3);
+  assert.match(node('overview-slots').innerHTML,/Vision Core/);
+  assert.match(node('overview-queue').textContent,/user response/);
+  assert.match(node('vision-caption').textContent,/person holding a mug/);
+  assert.match(node('vision-caption-meta').textContent,/421 ms/);
+
+  // Timings correlate the first response milestones; old turns and autonomy cannot finish this turn.
+  const obs=(offset,source,kind,meta={},message='event')=>stream.send('obs',{timestamp:100+offset/1000,source,kind,meta,message});
+  for (const meta of [{generation:null},{}]) {
+    obs(0,'text','user_input',meta,'Uncorrelated input');
+    assert.equal(node('turn-latency').textContent,'timing unavailable');
+    obs(10,'tts','play',{generation:41});
+    assert.equal(node('turn-latency').textContent,'timing unavailable');
+    assert.doesNotMatch(node('turn-waterfall').innerHTML,/Playback requested/);
+  }
+  obs(0,'audio','user_input',{generation:42},'Voice input received');
+  assert.equal(node('turn-latency').textContent,'Turn in progress');
+  assert.match(node('latest-input').textContent,/Voice input/);
+  obs(20,'llm','admitted',{generation:41,lane:'priority'});
+  obs(30,'tts','play',{generation:42,autonomy:true});
+  assert.doesNotMatch(node('turn-waterfall').innerHTML,/Playback requested/);
+  obs(70,'llm','routed',{generation:42,lane:'priority',action:'reply'});
+  obs(110,'llm','admitted',{generation:42,lane:'priority'});
+  obs(510,'llm','first_token',{generation:42,lane:'priority'});
+  obs(610,'tts','synthesize',{generation:42});
+  obs(750,'tts','ready',{generation:42});
+  obs(780,'tts','play',{generation:42});
+  assert.match(node('turn-latency').textContent,/0.78 s.*playback requested/);
+  assert.match(node('turn-waterfall').innerHTML,/Routing completed.*70 ms/s);
+  obs(1200,'tts','play',{generation:42});
+  assert.match(node('turn-latency').textContent,/0.78 s/,'Subsequent clauses do not change first-playback latency');
+  obs(1400,'audio','user_input',{generation:43});
+  obs(1500,'asr','transcript',{generation:42},'Stale transcript');
+  assert.doesNotMatch(node('latest-input').textContent,/Stale transcript/);
+  obs(1510,'asr','transcript',{generation:43},'What is the time?');
+  assert.equal(node('latest-input').textContent,'What is the time?');
+  obs(1800,'tts','play',{generation:43,muted:true});
+  assert.match(node('turn-latency').textContent,/text delivered \(voice muted\)/);
+  obs(2000,'audio','user_input',{generation:44});
+  stream.send('state',{inference:{capacity:3,reserved_interactive:1,active:[],waiting:[],
+    last_interaction_release:{generation:44,reason:'no_response'}}});
+  assert.equal(node('turn-latency').textContent,'no response recorded');
+
+  // Theme changes reuse the existing avatar and camera; no separate webcam or simulated analyser.
+  vm.runInContext("go('home')",context);
+  stream.send('state',{vision_mind:{...vision,running:true,paused:false,camera:{enabled:true,connected:true}},
+    controls:{available:true,quiet_mode:false,microphone_muted:false}});
+  node('avatar-optic-source').naturalWidth=320; node('avatar-optic-source').naturalHeight=180;
+  for (const [theme,palette] of [['white','whitehot'],['terminal','ascii'],['potato','dither'],['dark','thermal']]) {
+    node('theme-choice').value=theme; node('theme-choice').onchange();
+    frame(clockNow+100);
+    assert.equal(optics[0].palette,palette);
+    assert.equal(document.documentElement.dataset.theme,theme);
+    assert.equal(node('theme-settings').value,theme);
+    assert.match(node('surface-switch').href,new RegExp('surface=presence&theme='+theme));
+    assert.match(node('avatar-optic-source').src,/\/api\/vision\/live\?overlay=0/);
+  }
   rootEvents.pagehide();
   assert.equal(frames.size, 0);
   assert.equal(rootEvents.pointermove, undefined);

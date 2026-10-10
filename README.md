@@ -1,5 +1,7 @@
 # GLaDOS Personality Core
 
+> *"Science isn't about asking why. It's about asking, 'Why not?'"* — Cave Johnson
+
 A voice assistant with GLaDOS’s custom voice, dry humour, camera observations,
 persistent memory and tools. Talk through a local microphone or the browser,
 watch the animated core respond, and inspect what each mind is doing.
@@ -19,6 +21,8 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
 
 ## What it does
 
+> *"We've both said a lot of things that you're going to regret"* — GLaDOS
+
 - **Voice conversation:** Gemma 4 E4B can receive audio directly. An extended
   profile uses Parakeet transcription with a different conversation model.
 - **GLaDOS speech and animation:** spoken emotion directions move the browser
@@ -35,6 +39,8 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
   Core to review. User interactions take priority over new background inference.
 
 ## Quick start
+
+> *"The Enrichment Center is required to remind you that the Weighted Companion Cube cannot talk. In the event that it does talk The Enrichment Centre asks you to ignore its advice."* — GLaDOS
 
 You need Git and Python 3.12 or newer to run the installer. It creates a Python
 3.12.8 environment, installs GLaDOS and downloads the local ONNX speech models.
@@ -185,14 +191,20 @@ device permissions and configuration.
 
 ## Using the console
 
+The top bar switches between the operator console and a Presence screen for
+tablets. Both use the same live engine state, controls and eye animation.
+Choose Dark, Clinical, Terminal or PotatOS in the top bar or Facility Settings;
+the theme is remembered by this browser.
+
 - **Central Core / Brainstem:** control input, spoken output, camera observations
   and Quiet mode. Quiet pauses replies and background cores until a wake request
   or the Wake control; disabling autonomy only disables proactive responses.
-- **Minds:** inspect and control the workers that produce observations and results.
-- **Slots:** inspect the current context contributed by those workers. A slot is
-  stored information, not another model process.
-- **Test Chamber:** inspect the actual request context and its sources, plus saved
-  facts and summaries. The live system clock is included in reply context.
+- **Cores:** inspect and control the workers that produce observations and results,
+  including their shared inference capacity and waiting requests. Context slots
+  hold stored information; they are separate from inference capacity.
+- **Test Chamber:** browse saved facts and historical summaries.
+- **Neural Buffer:** inspect the actual request context and its sources.
+  The live system clock is included in reply context.
 - **Facility Settings:** edit response instructions, routing choices and thresholds,
   preferred search sources, vision timing and optional transcripts.
 
@@ -225,6 +237,8 @@ all loaded: direct-audio mode skips Parakeet at runtime.
 
 ## Configuration
 
+> *"As part of a required test protocol, we will not monitor the next test chamber. You will be entirely on your own. Good luck."* — GLaDOS
+
 Configuration files contain a top-level `Glados:` mapping. Repeat `--config` to
 layer files; values in later files override earlier values. Start with a complete
 shipped profile and add small overlays for your changes.
@@ -254,6 +268,8 @@ check your provider’s current model names and request options before using it.
 
 ## How the cores work
 
+> *"Let's be honest. Neither one of us knows what that thing does. Just put it in the corner and I'll deal with it later."* — GLaDOS
+
 ```mermaid
 flowchart LR
     mic[Microphone] --> vad[VAD and utterance buffer]
@@ -270,6 +286,10 @@ flowchart LR
     central --> tts[GLaDOS or Kokoro TTS]
     tts --> output[Speaker and animated avatar]
 ```
+
+### Core components
+
+> *"All these science spheres are made out of asbestos, by the way. Keeps out the rats. Let us know if you feel a shortness of breath, a persistent dry cough, or your heart stopping. Because that's not part of the test. That's asbestos."* — Cave Johnson
 
 Independent cores publish regular updates, important updates and task results.
 The Autonomy Core considers their evidence together with the conversation before
@@ -290,6 +310,48 @@ With llama.cpp, capability routing scores a small fixed set of token options.
 It can choose a reply, an intentional silence or an available action. Text
 replies may be drafted in parallel when capacity is free; direct-audio drafts
 remain disabled. Model-server capabilities determine which optimizations apply.
+
+### Jev-style routing during speech input
+
+Jev-style routing uses the conversation model as a constrained classifier, rather
+than loading a separate routing model. Each decision stage assigns single-token
+letters such as `A`, `B` and `C` to the available choices. A compatible llama.cpp
+server returns their probabilities after softmax; GLaDOS normalizes the option
+scores and checks both confidence and the margin over the next choice. A tool
+route can require several stages: capability, service, then a saved action.
+
+```mermaid
+flowchart TD
+    mic["Microphone audio"] --> vad["VAD buffers speech<br/>416 ms silence completes a turn"]
+    vad --> mode{"Voice input mode"}
+    mode -->|Default| audio["E4B direct audio<br/>No transcript required"]
+    mode -->|Extended| asr["Parakeet transcript"]
+    audio --> router["Jev-style routing on the conversation model<br/>Stable instructions and option list first<br/>Recent context and current input last"]
+    asr --> router
+    asr -. "When a spare slot is available" .-> draft["Speculative Central Core draft<br/>Runs alongside routing"]
+    router --> scores["One generated option token per stage<br/>Option probabilities from llama.cpp"]
+    scores --> gate{"Confidence and margin sufficient?"}
+    gate -->|No| assist["Cancel draft; Central interprets the request<br/>No action authorized by classifier"]
+    gate -->|Yes| choice{"Selected route"}
+    choice -->|Ignore or quiet| silence["No spoken reply<br/>Cancel any speculative draft"]
+    choice -->|Reply| reply["Central Core answers<br/>Reuse a compatible draft, otherwise generate"]
+    choice -->|Capability or action| tool["Cancel draft; refine route if needed<br/>Execute validated saved tool arguments<br/>or ask Central to plan within tool scope"]
+    tool --> result["Tool result enters context"]
+    result --> reply
+    assist --> reply
+    draft -. "Used only for a compatible reply route" .-> reply
+    reply --> tts["Stream speech chunks to TTS<br/>Emotion markers drive the avatar"]
+    tts --> output["Speaker playback"]
+    resume["User resumes before reply delivery"] -.-> cancel["Invalidate pending reply<br/>Extend the captured utterance"]
+    cancel -.-> vad
+    cancel -. "Cancel stale routing, draft and response" .-> router
+```
+
+The one-token limit applies to each routing decision's output. Audio encoding and
+prompt processing still take time. Direct-audio turns currently route before
+Central generates a reply; only transcript-based turns can overlap a speculative
+draft. Background cores yield new inference work during the interaction, while
+the Routing Core keeps its reserved access to the shared scheduler.
 
 Speech capture uses 32 ms VAD chunks and a 416 ms silence gap. If the user resumes
 before the pending response begins delivery, the new speech can extend that turn
@@ -331,6 +393,8 @@ for tool filtering, memory services and transport setup.
 
 ## GLaDOS speech API
 
+> *"I'm speaking in an accent that is beyond her range of hearing."* — Wheatley
+
 The optional API exposes the **GLaDOS voice** through an OpenAI-style
 `POST /v1/audio/speech` endpoint. Other API voices and speed adjustment are not
 implemented. This endpoint does not require the conversation model server.
@@ -366,6 +430,8 @@ installer for the E4B model server.
 
 ## Troubleshooting
 
+> *"No one will blame you for giving up. In fact, quitting at this point is a perfectly reasonable response."* — GLaDOS
+
 | Symptom | Check |
 | --- | --- |
 | No reply / cannot reach model | Start the separate model server; check its URL, model alias and profile. Default E4B expects port 18080. |
@@ -378,6 +444,8 @@ installer for the E4B model server.
 | She stays quiet | Check microphone/voice controls, Quiet state and whether the router chose not to respond. |
 
 ## Development and next steps
+
+> *"Federal regulations require me to warn you that this next test chamber... is looking pretty good."* — GLaDOS
 
 For a separate CPU development environment:
 

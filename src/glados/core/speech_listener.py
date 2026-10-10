@@ -399,11 +399,12 @@ class SpeechListener:
                     if self._turn_generation is not None:
                         message["_quiet_generation"] = self._turn_generation
                     self.processing_active_event.set()
-                    self.llm_queue.put(message)
                     if self._interaction_state:
                         self._interaction_state.mark_user()
                     if self._observability_bus:
-                        self._observability_bus.emit("audio", "user_input", "Voice input received")
+                        self._observability_bus.emit("audio", "user_input", "Voice input received",
+                                                     meta={"generation": self._turn_generation})
+                    self.llm_queue.put(message)
             finally:
                 self.reset(preserve_pending=True)
             return
@@ -421,6 +422,7 @@ class SpeechListener:
                         source="asr",
                         kind="user_input",
                         message=trim_message(detected_text),
+                        meta={"generation": self._turn_generation},
                     )
                 self.processing_active_event.set()
                 self.llm_queue.put(

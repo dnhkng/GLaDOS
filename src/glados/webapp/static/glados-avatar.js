@@ -104,7 +104,8 @@
     const canvas = doc.getElementById("avatar-optic-view");
     const source = doc.getElementById("avatar-optic-source");
     const motionLabel = doc.getElementById("optic-motion"), subjectLabel = doc.getElementById("optic-subject");
-    const optic = new root.GladosVision.Vision(canvas);
+    const Optic = root.GladosVision.ThemedVision || root.GladosVision.Vision;
+    const optic = new Optic(canvas);
     optic.setMode("thermal");
     const media = root.matchMedia("(prefers-reduced-motion: reduce)");
     const animator = new R.Animator();
@@ -152,7 +153,13 @@
     }
     source.onerror=()=>{stopFeed();retryFeedAt=Date.now()+1000;};
     function draw(params, dt = 1 / 30) {
-      svg.innerHTML = R.renderEye(params, { id: "glados-avatar" });
+      const theme = root.GladosThemes?.current();
+      let eye = R.renderEye(params, { id: "glados-avatar" });
+      if (theme) {
+        eye = eye.replaceAll('#E8ECEF', theme.ink).replaceAll('#0E1116', theme.bg).replaceAll('#1A2029', theme.grad);
+        if (optic.setTheme && optic.palette !== theme.optic) optic.setTheme(theme);
+      }
+      svg.innerHTML = eye;
       if (feedRunning) {
         optic.reducedMotion=media.matches;
         optic.setEye(params);

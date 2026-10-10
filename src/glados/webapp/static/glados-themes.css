@@ -1,0 +1,148 @@
+/* Theme tokens adapted from GLaDOS-webui. All assets remain local. */
+:root,
+:root[data-theme="dark"] {
+  --bg: #0b0e12;
+  --bg-glow: radial-gradient(1200px 700px at 70% -10%, rgba(255,127,42,.06), transparent 60%),
+             radial-gradient(900px 600px at 0% 110%, rgba(46,230,200,.05), transparent 60%);
+  --surface: #121820;
+  --surface-2: #19212b;
+  --line: #232e3a;
+  --line-strong: #33424f;
+  --text: #dbe5ee;
+  --muted: #8ea3b5;
+  --dim: #5b6f80;
+  --accent: #ffa020;            /* Valve portal orange: output, speaking */
+  --accent-soft: rgba(255,160,32,.14);
+  --accent-2: #40a0ff;          /* Valve portal blue: input, listening */
+  --accent-2-soft: rgba(64,160,255,.12);
+  --ok: #3ddc84;
+  --warn: #ffc857;
+  --err: #ff5c6c;
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+  --display-weight: 700;
+  --display-case: none;
+  --display-tracking: -0.01em;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 10px 30px rgba(0,0,0,.25);
+  --eye-housing: #1a2027;
+  --eye-housing-line: #3a4652;
+  --eye-blade: #2a333d;
+  --eye-blade-line: #4a5866;
+  --eye-iris: #ffc02a;
+  --eye-glow: rgba(255,160,60,.55);
+  --scan: none;
+  --text-glow: none;
+}
+
+:root[data-theme="white"] {
+  --bg: #e4e6e8;
+  --bg-glow: linear-gradient(180deg, #eceef0, #e0e2e4);
+  --surface: #f2f2f0;
+  --surface-2: #e8e9ea;
+  --line: #d3d0c7;
+  --line-strong: #a9a59a;
+  --text: #15171a;
+  --muted: #555a61;
+  --dim: #8a8e94;
+  --accent: #ff8a00;
+  --accent-soft: rgba(255,138,0,.12);
+  --accent-2: #1ca8da;
+  --accent-2-soft: rgba(28,168,218,.10);
+  --ok: #1f9d55;
+  --warn: #c98a00;
+  --err: #d6303f;
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Barlow Condensed", "Inter", sans-serif;
+  --display-weight: 600;
+  --display-case: uppercase;
+  --display-tracking: 0.04em;
+  --radius: 2px;
+  --radius-sm: 2px;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(40,35,20,.06);
+  --eye-housing: #f4f3ef;
+  --eye-housing-line: #b9b6ad;
+  --eye-blade: #3b3f45;
+  --eye-blade-line: #2a2d31;
+  --eye-iris: #ffb21e;
+  --eye-glow: rgba(255,170,20,.55);
+  --scan: none;
+  --text-glow: none;
+}
+
+:root[data-theme="terminal"] {
+  --bg: #0b0800;
+  --bg-glow: radial-gradient(1400px 900px at 50% 40%, rgba(255,176,0,.07), transparent 70%);
+  --surface: transparent;
+  --surface-2: rgba(255,176,0,.05);
+  --line: #5c4000;
+  --line-strong: #a87400;
+  --text: #ffb000;
+  --muted: #c98c00;
+  --dim: #7a5600;
+  --accent: #ffcf5a;
+  --accent-soft: rgba(255,176,0,.14);
+  --accent-2: #ffe29a;
+  --accent-2-soft: rgba(255,226,154,.10);
+  --ok: #ffb000;
+  --warn: #ffe29a;
+  --err: #ff6a3d;
+  --font-ui: "IBM Plex Mono", ui-monospace, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "VT323", "IBM Plex Mono", monospace;
+  --display-weight: 400;
+  --display-case: uppercase;
+  --display-tracking: 0.06em;
+  --radius: 0;
+  --radius-sm: 0;
+  --shadow: none;
+  --eye-housing: transparent;
+  --eye-housing-line: #a87400;
+  --eye-blade: transparent;
+  --eye-blade-line: #ffb000;
+  --eye-iris: #ffcf5a;
+  --eye-glow: rgba(255,176,0,.6);
+  --scan: repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  --text-glow: 0 0 6px rgba(255,176,0,.45);
+}
+
+:root[data-theme="potato"] {
+  --bg: #6b4a2b;
+  --bg-glow: radial-gradient(circle at 18% 22%, rgba(60,38,18,.55) 0 3px, transparent 4px) 0 0/140px 120px,
+             radial-gradient(circle at 70% 64%, rgba(60,38,18,.45) 0 2px, transparent 3px) 0 0/90px 110px,
+             radial-gradient(1200px 800px at 40% 30%, #a27a4c, #6b4a2b 70%);
+  --surface: #a9b98a;
+  --surface-2: #9aab7b;
+  --line: #4d5a33;
+  --line-strong: #2c3a1c;
+  --text: #1f2a12;
+  --muted: #3a4a25;
+  --dim: #5d6e45;
+  --accent: #c8642b;             /* copper electrode */
+  --accent-soft: rgba(200,100,43,.18);
+  --accent-2: #2c3a1c;
+  --accent-2-soft: rgba(44,58,28,.14);
+  --ok: #2c3a1c;
+  --warn: #8a4a12;
+  --err: #a3271c;
+  --font-ui: "Pixelify Sans", "IBM Plex Mono", monospace;
+  --font-mono: "Pixelify Sans", "IBM Plex Mono", monospace;
+  --font-display: "Silkscreen", "Pixelify Sans", monospace;
+  --display-weight: 400;
+  --display-case: uppercase;
+  --display-tracking: 0.02em;
+  --radius: 10px;
+  --radius-sm: 4px;
+  --shadow: 0 0 0 4px #3b2716, 0 6px 0 4px #2a1b0e, inset 0 0 30px rgba(31,42,18,.25);
+  --eye-housing: #d8c08f;
+  --eye-housing-line: #5a3d22;
+  --eye-blade: #4a3a28;
+  --eye-blade-line: #2a1b0e;
+  --eye-iris: #ffd21f;
+  --eye-glow: rgba(255,210,31,.35);
+  --scan: none;
+  --text-glow: none;
+}

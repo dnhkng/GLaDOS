@@ -1277,6 +1277,7 @@ class Glados:
                 source=source,
                 kind="user_input",
                 message=trim_message(text),
+                meta={"generation": generation},
             )
         self.processing_active_event.set()
         self.llm_queue_priority.put(

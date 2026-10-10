@@ -75,13 +75,14 @@ class TextListener:
                     response = self._command_handler(text)
                     logger.success("Command: {} -> {}", text, response)
                     continue
+                generation = self._begin_user_turn() if self._begin_user_turn else None
                 if self._observability_bus:
                     self._observability_bus.emit(
                         source="text",
                         kind="user_input",
                         message=trim_message(text),
+                        meta={"generation": generation},
                     )
-                generation = self._begin_user_turn() if self._begin_user_turn else None
                 self.processing_active_event.set()
                 self.llm_queue.put(
                     {

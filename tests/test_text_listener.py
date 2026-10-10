@@ -4,6 +4,7 @@ import threading
 
 from glados.autonomy.interaction_state import InteractionState
 from glados.core.text_listener import TextListener
+from glados.observability import ObservabilityBus
 
 
 def test_text_listener_enqueues_lines() -> None:
@@ -59,6 +60,26 @@ def test_text_listener_handles_commands() -> None:
     assert llm_queue.qsize() == 1
     message = llm_queue.get_nowait()
     assert message["content"] == "hello"
+
+
+def test_input_events_identify_the_queued_turn() -> None:
+    bus = ObservabilityBus()
+    pending: queue.Queue = queue.Queue()
+    generations = iter((41, 42))
+    listener = TextListener(
+        llm_queue=pending,
+        processing_active_event=threading.Event(),
+        shutdown_event=threading.Event(),
+        pause_time=0.01,
+        input_stream=io.StringIO("hello\nworld\n"),
+        observability_bus=bus,
+        begin_user_turn=lambda: next(generations),
+    )
+    listener.run()
+    events = bus.drain()
+    assert [event.meta["generation"] for event in events] == [
+        pending.get_nowait()["_quiet_generation"], pending.get_nowait()["_quiet_generation"],
+    ] == [41, 42]
 
 
 def test_engine_constructs_text_and_both_input_modes(tmp_path, monkeypatch) -> None:

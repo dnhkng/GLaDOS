@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -202,118 +202,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   .memory-fact{margin-bottom:12px}
   .memory-content{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
 </style>
-<style id="scifi">
-  :root{
-    --orange:#ff7f26; --orange-hot:#ffa14f;
-    --teal:#53e6cf; --green:#4ade80; --red:#ff5c6c;
-    --offwhite:#dfe6ee; --mach:#c9d2dc;
-  }
-  /* global Aperture backdrop: test grid + vignette + CRT scanlines */
-  body{
-    background:
-      linear-gradient(rgba(120,140,160,.045) 1px, transparent 1px) 0 0 / 100% 22px,
-      linear-gradient(90deg, rgba(120,140,160,.035) 1px, transparent 1px) 0 0 / 22px 100%,
-      radial-gradient(1100px 620px at 68% -8%, rgba(255,127,38,.10), transparent 60%),
-      radial-gradient(900px 500px at 8% 112%, rgba(83,230,207,.06), transparent 60%),
-      #07090d;
-  }
-  body::before{ /* vignette */
-    content:""; position:fixed; inset:0; z-index:58; pointer-events:none;
-    background:radial-gradient(120% 95% at 50% 0%, transparent 46%, rgba(0,0,0,.55) 100%);
-  }
-  body::after{ /* CRT scanlines */
-    content:""; position:fixed; inset:0; z-index:59; pointer-events:none; opacity:.22;
-    background:repeating-linear-gradient(0deg, rgba(0,0,0,.5) 0 1px, transparent 1px 3px);
-  }
-  .hazard-bar{
-    position:fixed; top:0; left:0; right:0; height:5px; z-index:70; overflow:hidden;
-    background:repeating-linear-gradient(45deg, #f2a13c 0 14px, #0b0e12 14px 26px);
-    opacity:.92; box-shadow:0 0 12px rgba(255,127,38,.35);
-  }
-  /* topbar: machined console strip */
-  .topbar{ background:linear-gradient(180deg,#0d1118,#080b10); border-bottom:1px solid var(--line); position:relative; }
-  .topbar::after{
-    content:""; position:absolute; left:0; right:0; bottom:-1px; height:1px;
-    background:linear-gradient(90deg, transparent, rgba(255,127,38,.6), transparent);
-  }
-  .brand .logo{
-    position:relative; width:30px; height:30px; margin-left:6px;
-    background:radial-gradient(circle at 38% 32%, #fff, var(--orange-hot) 48%, #8a3c06 82%, #3a1a04);
-    box-shadow:0 0 16px rgba(255,127,38,.22), inset 0 -3px 6px rgba(0,0,0,.5);
-  }
-  .brand .logo::after{
-    content:""; position:absolute; inset:-7px; border-radius:50%;
-    border:2px dashed rgba(255,161,79,.6); animation:spinR 11s linear infinite;
-  }
-  .brand .logo::before{
-    content:""; position:absolute; inset:-14px; border-radius:50%;
-    border:1px solid rgba(255,161,79,.18);
-  }
-  @keyframes spinR{ to{ transform:rotate(360deg); } }
-  .brand .t1{ font-weight:800; font-size:16px; letter-spacing:2px; color:var(--offwhite); line-height:1; text-shadow:0 0 12px rgba(255,161,79,.5); }
-  .brand .sub{ font-family:var(--mono); font-size:9.5px; letter-spacing:2.5px; color:var(--orange); margin-top:4px; }
-  .live{
-    color:var(--orange-hot); border-color:rgba(255,161,79,.45); background:rgba(255,127,38,.08);
-    box-shadow:0 0 16px rgba(255,127,38,.25); letter-spacing:2px; text-shadow:0 0 8px rgba(255,127,38,.6);
-  }
-  .live .dot{ background:var(--orange-hot); box-shadow:0 0 10px var(--orange-hot); }
-  .clock,.uptime{ color:var(--mach); letter-spacing:1px; }
-  .uptime::before{ content:"NODE 08 · "; color:var(--dim); }
-  /* sidebar: command deck */
-  .sidebar{ background:linear-gradient(180deg,#0f131a,#0a0d12); border-right:1px solid var(--line); }
-  .sec-label{ color:var(--orange); font-family:var(--mono); }
-  .nav-item{ font-weight:600; letter-spacing:.4px; }
-  .nav-item .ico{ color:var(--dim); }
-  .nav-item:hover{ color:var(--offwhite); }
-  .nav-item.active{
-    color:var(--offwhite); background:linear-gradient(90deg,rgba(255,127,38,.14),transparent 80%);
-    border-color:var(--line); box-shadow:inset 3px 0 0 var(--orange);
-  }
-  .nav-item.active .ico{ color:var(--orange-hot); }
-  .nav-item .badge{ color:var(--orange-hot); border-color:rgba(255,127,38,.3); background:rgba(255,127,38,.08); }
-  .nav-hint{ color:var(--mach); border-color:rgba(255,127,38,.28); }
-  /* view headers: junctive labels */
-  .view-head{ position:relative; }
-  .view-head h1{ letter-spacing:1px; color:var(--offwhite); position:relative; display:inline-block; }
-  .view-head h1::before{ content:"//"; color:var(--orange); font-weight:800; margin-right:10px; }
-  .view-head h1::after{ content:""; display:block; height:2px; margin-top:6px; background:linear-gradient(90deg, var(--orange), transparent); }
-  .view-head .sub{ color:var(--mach); font-family:var(--mono); font-size:11px; letter-spacing:.5px; }
-  /* panels: chamfered machine housing */
-  .card{
-    background:radial-gradient(30% 40% at 18% 12%, rgba(255,255,255,.05), transparent 60%), linear-gradient(180deg,#151a22,#0d1015);
-    border:1px solid #26303c; position:relative;
-    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 10px 24px rgba(0,0,0,.35);
-  }
-  .card::before,.card::after{
-    content:""; position:absolute; width:11px; height:11px; border:2px solid var(--orange); opacity:.55;
-  }
-  .card::before{ top:-1px; right:-1px; border-left:none; border-bottom:none; }
-  .card::after{ bottom:-1px; left:-1px; border-right:none; border-top:none; }
-  .card h3{ color:var(--mach); }
-  .card h3::before{ content:"\25B8 "; color:var(--orange); }
-  .lane{ border:1px solid #2a3542; background:radial-gradient(30% 45% at 20% 0%, rgba(255,255,255,.04), transparent 60%), #11151b; }
-  .lane.priority{ border-color:rgba(255,127,38,.55); }
-  .lane.autonomy{ border-color:rgba(83,230,207,.45); }
-  .lane-head .lname{ color:var(--offwhite); letter-spacing:.6px; text-transform:uppercase; }
-  .lane-head .lsub{ color:var(--mach); }
-  .mind,.slot{ background:linear-gradient(180deg,#151b24,#0e1218); border-color:#26303c; }
-  .mind:hover{ border-color:var(--orange-hot); box-shadow:0 0 0 1px rgba(255,161,79,.35), 0 10px 22px rgba(0,0,0,.4); }
-  .slot{ border-top-color:var(--orange); }
-  .btn-secondary{ background:#10151c; border:1px solid #2a3542; letter-spacing:.5px; text-transform:uppercase; font-size:11px; color:var(--mach); }
-  .btn-secondary:hover{ border-color:var(--orange); color:var(--orange-hot); box-shadow:0 0 10px rgba(255,127,38,.2); }
-  .status-pill{ letter-spacing:.5px; }
-  .wire-row .src{ color:var(--orange); }
-  .fbtn{ font-size:11px; letter-spacing:.5px; }
-  .fbtn:hover{ border-color:var(--orange); color:var(--mach); }
-  .stat .v{ color:var(--offwhite); text-shadow:0 0 14px rgba(255,161,79,.45); }
-  .stat .l{ color:var(--mach); letter-spacing:1.5px; }
-  .slice{ color:var(--orange); }
-  .kv .k{ color:var(--mach); }
-  .drawer{ background:linear-gradient(180deg,#0f131a,#0a0d12); border-left:1px solid var(--orange); box-shadow:-22px 0 40px rgba(0,0,0,.5); }
-  .drawer .slice{ border-left:2px solid var(--orange); padding-left:8px; }
-</style>
+
 
 <link rel="stylesheet" href="glados-avatar.css">
+<link rel="stylesheet" href="glados-themes.css">
+<link rel="stylesheet" href="glados-console.css">
+<script src="glados-themes.js"></script>
 </head>
 <body>
 <div id="app">
@@ -321,7 +215,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <header class="topbar">
     <div class="brand"><svg class="aperture-mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(0 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(45 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(90 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(135 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(180 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(225 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(270 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(315 50 50)"/></svg><div class="brand-t"><div class="t1">GLaDOS</div><div class="sub">APERTURE SCIENCE &middot; CORE CONSOLE</div></div></div>
     <div class="spacer"></div>
-    <span class="uptime" id="uptime">UP 03:12:48</span>
+    <label class="theme-label">Theme <select id="theme-choice" aria-label="Interface theme"></select></label>
+    <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
+    <span class="uptime" id="uptime">UP —</span>
     <span class="clock" id="clock">--:--:--</span>
     <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
   </header>
@@ -344,37 +240,51 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
     <!-- MISSION CONTROL -->
     <section class="view active" id="view-home">
-      <div class="view-head">
+      <div class="view-head operator-only">
         <h1>Enrichment Center</h1>
         <span class="sub">Facility observation and control.</span>
         <div class="right"><span class="chip teal" id="pool-status">shared processing —</span><span class="chip amber" id="mcInflight">in-flight 0</span></div>
       </div>
-      <section class="card avatar-card" id="avatar-card" aria-label="GLaDOS eye and optic feed">
+      <section class="card avatar-card presence-stage" id="avatar-card" aria-label="GLaDOS eye and optic feed">
         <div class="avatar-stage">
           <svg id="glados-eye" viewBox="-200 -200 400 400" role="img" aria-label="GLaDOS aperture, connecting"></svg>
+          <div class="presence-state"><div id="presence-activity">Connecting</div><p class="console-note" id="presence-detail"></p></div>
         </div>
-        <div class="avatar-optic" id="avatar-optic" hidden>
-          <canvas id="avatar-optic-view" role="img" aria-label="Live optic feed, original thermal treatment"></canvas>
-          <img id="avatar-optic-source" alt="" hidden>
-          <div class="avatar-optic-hud" aria-hidden="true"><span id="optic-subject" hidden>TEST SUBJECT</span><span id="optic-motion">MOTION 0.00</span></div>
+        <div class="presence-info">
+          <div class="presence-speech" aria-live="polite">
+            <p class="presence-user"><span class="slice">You</span> <span id="latest-input">No input received yet.</span></p>
+            <p id="latest-reply">Replies appear here, including when voice output is muted.</p>
+          </div>
+          <div class="avatar-optic" id="avatar-optic" hidden>
+            <canvas id="avatar-optic-view" role="img" aria-label="Live optic feed with theme treatment"></canvas>
+            <img id="avatar-optic-source" alt="" hidden>
+            <div class="avatar-optic-hud" aria-hidden="true"><span id="optic-subject" hidden>TEST SUBJECT</span><span id="optic-motion">MOTION 0.00</span></div>
+          </div>
+          <div class="vision-description"><div class="slice" id="vision-caption-meta">Vision Core</div><p class="console-note" id="vision-caption">No observation yet.</p></div>
+          <div class="presence-thoughts"><h3>On her mind</h3><div id="presence-thoughts"></div></div>
         </div>
       </section>
-      <div class="card" style="margin-bottom:16px">
+      <div class="card conversation-input">
         <h3>Talk to GLaDOS <span class="now" id="runtime-model">Connecting</span></h3>
         <form id="message-form"><label for="message-text">Send a message or ask her to work on a task</label>
           <input class="console-field" id="message-text" maxlength="8000" required placeholder="What would you like to do?">
           <button class="btn-secondary" id="message-send" type="submit">Send message</button>
         </form>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
-        <div class="slice">Latest reply</div><p class="console-note" id="latest-reply" aria-live="polite">Replies appear here, including when voice output is muted.</p>
       </div>
-      <div class="grid cols-3" style="margin-bottom:16px">
+      <div class="overview-grid operator-only">
+        <section class="card overview-turn"><h3>Latest turn <span class="now" id="turn-latency">Waiting for input</span></h3><div id="overview-route" class="decision-path"></div><div id="turn-waterfall" class="turn-waterfall"></div><p class="console-note">Recorded server events: input accepted → playback requested. Excludes endpoint silence and browser audio buffering.</p></section>
+        <section class="card"><h3>Inference slots <button class="btn-secondary" data-go="cores">Inspect</button></h3><div id="overview-slots" class="capacity-tiles"></div><p class="console-note" id="overview-hold"></p><div id="overview-queue" class="console-note"></div></section>
+        <section class="card"><h3>Core activity <button class="btn-secondary" data-go="cores">Inspect</button></h3><div class="table-scroll"><table class="core-table"><thead><tr><th>Core</th><th>State</th><th>Latest update</th></tr></thead><tbody id="overview-cores"></tbody></table></div></section>
+        <section class="card"><h3>Autonomy Core <button class="btn-secondary" data-go="settings">Settings</button></h3><p class="console-note" id="overview-autonomy"></p><p class="console-note" id="overview-handoff"></p></section>
+      </div>
+      <div class="grid cols-3 operator-only" style="margin-bottom:16px">
         <button type="button" class="card" data-go="tasks"><div class="stat"><div class="v" id="mc-slots">0</div><div class="l">Assignments tracked →</div></div></button>
         <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-minds">0</div><div class="l">Online cores →</div></div></button>
         <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-inflight">0</div><div class="l">User-facing inferences →</div></div></button>
       </div>
-      <div class="grid cols-2">
-        <div class="card">
+      <div class="grid cols-2 home-controls">
+        <div class="card operator-only">
           <h3>Dual Lane Orchestration <span class="now" id="laneNow"></span></h3>
           <div class="lanes">
             <div class="lane priority">
@@ -395,7 +305,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
             </div>
           </div>
         </div>
-        <div class="card">
+        <div class="card central-controls">
           <h3>Central Core <span class="now" id="brainstem-source">Engine state</span></h3>
           <p class="console-note" id="brainstem-detail"></p>
           <div class="console-actions">
@@ -406,29 +316,29 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           </div>
           <p class="console-note" id="brainstem-expression"></p>
           <p class="console-note" id="brainstem-affect"></p>
-          <div class="gauge-row">
+          <div class="gauge-row operator-only">
             <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-p" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--teal)"/></svg><div class="g-label">Pleasure</div><div class="g-val" id="g-pv">0.0</div></div>
             <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-a" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--orange)"/></svg><div class="g-label">Arousal</div><div class="g-val" id="g-av">0.0</div></div>
             <div class="gauge"><svg viewBox="0 0 92 92"><circle class="ring-bg" cx="46" cy="46" r="38"/><circle class="ring-fg" id="g-d" cx="46" cy="46" r="38" transform="rotate(-90 46 46)" stroke="var(--purple)"/></svg><div class="g-label">Dominance</div><div class="g-val" id="g-dv">0.0</div></div>
           </div>
-          <div class="console-actions">
+          <div class="console-actions operator-only">
             <button class="btn-secondary" id="edit-instructions" type="button">Edit response instructions</button>
             <button class="btn-secondary" data-inspect-command="/context" type="button">Inspect context</button>
             <button class="btn-secondary" data-inspect-command="/emotion" type="button">Inspect emotion</button>
           </div>
           <p class="console-note" id="instructions-preview"></p>
-          <div class="mini-queues" style="margin-top:16px">
+          <div class="mini-queues operator-only" style="margin-top:16px">
             <div class="mline"><span style="color:var(--orange)">&#9679;</span>Last user <span class="muted" id="mc-lastuser">--</span><span class="ellipsis"></span><span class="mono" id="mc-sinceuser">--</span></div>
             <div class="mline"><span style="color:var(--teal)">&#9679;</span>Last spoke <span class="muted" id="mc-lastasst">--</span><span class="ellipsis"></span><span class="mono" id="mc-sinceasst">--</span></div>
           </div>
         </div>
       </div>
-      <div class="card" style="margin-top:16px">
+      <div class="card operator-only" style="margin-top:16px">
         <h3>Test assignments <button class="btn-secondary" style="margin-left:auto" id="home-new-task">Create assignment</button></h3>
         <p class="console-note">Assignments are shared with the Central Core. Ask GLaDOS to work on an open assignment.</p>
         <div id="home-tasks"></div>
       </div>
-      <div class="card" style="margin-top:16px">
+      <div class="card operator-only" style="margin-top:16px">
         <h3>Observation log &middot; live stream <button class="btn-secondary" style="margin-left:auto;padding:3px 10px" data-go="wire">open inspector &rarr;</button></h3>
         <div class="wire" id="home-wire" style="height:300px"></div>
       </div>
@@ -492,6 +402,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <div class="console-actions"><button type="button" class="btn-secondary" id="memory-prev" disabled>Previous</button><button type="button" class="btn-secondary" id="memory-next" disabled>Next</button></div>
     </section>
     <section class="view" id="view-settings">
+      <div class="card" style="margin-bottom:16px"><h3>Interface appearance</h3><label>Theme<select class="console-field" id="theme-settings"></select></label><p class="console-note">Dark, Clinical, Terminal and PotatOS share the same live controls. This browser remembers your theme. Open the Presence screen from the top bar for the tablet view.</p></div>
       <div class="card" style="margin-bottom:16px"><h3>Internet search sources</h3><p class="console-note">News requests read these sites’ pages directly, then search if needed. Other categories guide web searches. Enter one domain or site path per line, up to eight per category. Console changes apply to the next request and save to data/search_settings.yaml. File edits apply after restart.</p><form id="search-settings-form"><div class="grid cols-2"><label>Weather<textarea class="console-field" id="search-sources-weather" rows="4" placeholder="dwd.de&#10;meteoblue.com" disabled></textarea></label><label>News<textarea class="console-field" id="search-sources-news" rows="4" placeholder="reuters.com&#10;bbc.com/news" disabled></textarea></label><label>Reddit communities<textarea class="console-field" id="search-sources-reddit" rows="4" placeholder="reddit.com/r/LocalLLaMA&#10;reddit.com/r/Munich" disabled></textarea></label><label>General sources<textarea class="console-field" id="search-sources-general" rows="4" placeholder="A favorite domain or site path" disabled></textarea></label></div><button type="submit" class="btn-secondary" id="search-settings-save" style="margin-top:12px" disabled>Save favorite sources</button></form><p id="search-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="view-head"><h1>Facility Settings</h1><span class="sub">autonomy, voice input and routing.</span><button class="btn-secondary" id="decision-new">Create decision list</button></div>
       <div class="card" style="margin-bottom:16px"><h3>Facility Sensors &amp; Audio</h3><p class="console-note">Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.</p><div class="grid cols-3">
@@ -550,7 +461,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 <script src="glados-rig.js"></script>
 <script src="glados-vision.js"></script>
+<script src="glados-vision-themes.js"></script>
 <script src="glados-avatar.js"></script>
+<script src="glados-overview.js"></script>
 <script src="glados-routing.js"></script>
 <script src="glados-context.js"></script>
 <script src="glados-memory.js"></script>
@@ -558,7 +471,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script>
 "use strict";
 /* GLaDOS Core Console — dual mode.
-   LIVE : /api/snapshot + /api/stream (SSE). DUMMY fallback if API is unreachable. */
+   LIVE : /api/snapshot + /api/stream (SSE). Local-file demos are explicitly simulated. */
 const $ = id => document.getElementById(id);
 const $$ = s => document.querySelectorAll(s);
 const el = (cls, html) => { const d=document.createElement("div"); d.className=cls; if(html) d.innerHTML=html; return d; };
@@ -586,6 +499,8 @@ const S = {
   seq:100,
 };
 const avatar = window.GladosAvatar.mount(document);
+const overview = window.GladosOverview.mount(document, {escape:esc, coreOwner, cores:allMinds, identity:coreIdentity, activity:coreActivity, describe:routingDescription});
+window.GladosThemes.mount(document, () => { avatar.update(S); overview.update(S); });
 const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
 const memoryBrowser = window.GladosMemory.mount(document, () => S.live && S.connection === 'live');
 const deviceSelector = window.GladosDevices.mount(document, () => S.live && S.connection === 'live');
@@ -627,6 +542,7 @@ function entry(ev){
     replyParts.push(ev.msg); if(replyParts.length>40) replyParts.shift();
     $('latest-reply').textContent=replyParts.join(' ');
   }
+  overview.event(ev);
   track(ev);
   if(ev.level!=="debg") addWireRow($("home-wire"), ev, 60);
   if(wirePass(ev.level)) addWireRow($("full-wire"), ev, false);
@@ -857,6 +773,7 @@ function renderLaneMeta(){
 function paint(){
   deviceSelector.updateConnection();
   avatar.update(S);
+  overview.update(S);
   renderLaneMeta();
   syncLane("priotrack", S.prioInflight, "priority");
   syncLane("autotrack", S.lanes.autoInflight, "autonomy");
@@ -1141,10 +1058,11 @@ function startLive(){
     const es = new EventSource("/api/stream");
     es.addEventListener("obs", e=>entryEvent(JSON.parse(e.data)));
     es.addEventListener("state", e=>{ applyState(JSON.parse(e.data)); paint(); });
-    es.addEventListener("performance", e=>{ applyPerformance(JSON.parse(e.data)); avatar.update(S); });
+    es.addEventListener("performance", e=>{ applyPerformance(JSON.parse(e.data)); avatar.update(S); overview.activity(S); });
     es.addEventListener("audio", e=>{
       applyAudio(JSON.parse(e.data));
       avatar.update(S);
+      overview.activity(S);
     });
     es.addEventListener("camera", e=>{
       const tracking=JSON.parse(e.data);
