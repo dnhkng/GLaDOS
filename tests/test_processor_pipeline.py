@@ -30,7 +30,7 @@ def configured_processor(monkeypatch):
     builder.register("operator", stable)
     builder.register("slots", live, volatile=True)
     processor.context_builder = builder
-    processor._reply_tools = lambda: [SEARCH_TOOL]
+    processor._reply_tools = lambda available=None: [SEARCH_TOOL]
     return processor, stable, live
 
 
