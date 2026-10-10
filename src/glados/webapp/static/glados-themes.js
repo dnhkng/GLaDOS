@@ -12,21 +12,43 @@
   const params = new URLSearchParams(root.location?.search || '');
   const requested = params.get('theme') || preference('glados-theme');
   const initial = Object.hasOwn(choices, requested) ? requested : 'dark';
-  const surface = params.get('surface') === 'presence' ? 'presence' : 'console';
+  let surface = ['console','presence'].includes(params.get('surface')) ? params.get('surface') : 'basic';
   root.document.documentElement.dataset.theme = initial;
   root.document.documentElement.dataset.surface = surface;
   function mount(doc, changed) {
     const host = doc.getElementById('theme-choice');
     const link = doc.getElementById('surface-switch');
-    link.textContent = surface === 'presence' ? 'Operator console ↗' : 'Presence screen ↗';
-    const destination = surface === 'presence' ? 'console' : 'presence';
+    const presenceLink = doc.getElementById('presence-switch');
+    function arrangeInput() {
+      const input = doc.getElementById('conversation-input');
+      if (surface === 'presence') doc.getElementById('presence-controls').prepend(input);
+      else doc.getElementById('overview-layout').insertBefore(input, doc.getElementById('overview-turn-card'));
+    }
     function apply(name) {
       doc.documentElement.dataset.theme = name;
       host.value = name;
-      link.href = (root.location?.protocol === 'file:' ? 'index.html' : '/') + '?surface=' + destination + '&theme=' + name;
+      const base = root.location?.protocol === 'file:' ? 'index.html' : '/';
+      const destination = surface === 'basic' ? 'console' : 'basic';
+      link.textContent = surface === 'basic' ? 'Detailed view ↗' : 'Basic view ↗';
+      link.href = base + '?surface=' + destination + '&theme=' + name;
+      if (presenceLink) presenceLink.href = base + '?surface=presence&theme=' + name;
     }
     host.innerHTML = Object.entries(choices).map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
     apply(initial);
+    arrangeInput();
+    link.onclick = event => {
+      if (event.button > 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      surface = surface === 'basic' ? 'console' : 'basic';
+      doc.documentElement.dataset.surface = surface;
+      const url = new URLSearchParams(root.location?.search || '');
+      url.set('surface', surface); url.set('theme', host.value);
+      root.history?.replaceState(null, '', '?' + url.toString());
+      apply(host.value);
+      arrangeInput();
+      root.go?.('home');
+      changed();
+    };
     host.onchange = () => {
       if (!Object.hasOwn(choices, host.value)) return;
       apply(host.value);

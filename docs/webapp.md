@@ -5,7 +5,20 @@ live parallel state — the two autonomy lanes, subagent contexts, tool state,
 PAD emotion, audio/MCP health — to a browser over HTTP + Server-Sent Events.
 No separate UI service to run. Tool argument validation uses jsonschema.
 
-## Console and Presence surfaces
+## Basic, detailed and Presence surfaces
+
+The default page is a minimal conversation screen: a Portal-style facility sign
+with live microphone, voice, camera and quiet controls, followed by the eye and
+camera side by side, then text input. Conversation text stays hidden until input
+or a reply arrives. **Detailed view** switches to the full operator console
+without reconnecting, clearing an unsent message or restarting the camera.
+**Basic view** returns to the conversation screen. `/?surface=console` opens
+the detailed view directly.
+
+A brief Aperture loading screen follows actual interface, eye, snapshot and live
+stream readiness. It can be skipped, honours reduced motion, and releases the
+interface after 6.5 seconds if the engine is unavailable while retrying continues.
+It does not delay engine inference. `?boot=0` skips it for direct access.
 
 The existing menu names and order are shared across the themed operator console.
 The Enrichment Center shows live routing choices, inference channels and queues,
@@ -16,9 +29,10 @@ its full instructions and option preferences; telemetry refreshes preserve the
 open disclosure. Core reports show their age, and important reports remain
 highlighted until Autonomy has handled them. Errors have a separate indicator.
 The top bar's **Presence screen** link opens `/?surface=presence`: a tablet view
-with the eye, current reply, camera description, recent core reports and input
+with the eye, dialogue beneath it, a separate camera column, camera description, recent core reports and input
 controls. It uses the same controller and backend camera as the console.
-The eye is centered without a ground shadow. A persistent footer shows local
+The eye is centered without a ground shadow, with a tighter frame and no duplicate
+activity label underneath. The top bar shows current activity. A persistent footer shows local
 time, date, and touch-sized microphone, voice, camera and quiet controls. Content
 scrolls above the footer on smaller screens, keeping the controls accessible.
 

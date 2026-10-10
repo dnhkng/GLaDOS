@@ -34,11 +34,15 @@ class Element {
     this.attributes = {};
     this.checked = true;
   }
+  getAttribute(name){return this.attributes[name] ?? null;}
+  contains(other){return this===other || this.children.some(child=>child.contains(other));}
+  focus(){this.focused=true;}
   getContext(){return this.context ||= new CanvasContext();}
   set innerHTML(html) { this.htmlWrites=(this.htmlWrites || 0)+1; this.html = html; this.children = []; }
   get innerHTML() { return this.html || ""; }
   get lastChild() { return this.children.at(-1); }
   appendChild(child) { child.parent = this; this.children.push(child); }
+  insertBefore(child,before) {child.parent=this;const index=this.children.indexOf(before);this.children.splice(index<0?this.children.length:index,0,child);}
   prepend(child) { child.parent = this; this.children.unshift(child); }
   removeChild(child) { this.children.splice(this.children.indexOf(child), 1); }
   remove() { this.parent.removeChild(this); }
@@ -53,9 +57,10 @@ class Element {
 (async () => {
   const themeScript=fs.readFileSync(path.join(__dirname,'../src/glados/webapp/static/glados-themes.js'),'utf8');
   for (const [search,stored,theme,surface] of [
-    ['', 'potato', 'potato', 'console'],
+    ['', 'potato', 'potato', 'basic'],
     ['?surface=presence&theme=white', 'terminal', 'white', 'presence'],
-    ['?surface=invalid&theme=invalid', null, 'dark', 'console'],
+    ['?surface=invalid&theme=invalid', null, 'dark', 'basic'],
+    ['?surface=console', null, 'dark', 'console'],
   ]) {
     const bootDoc={documentElement:new Element()},bootNodes=new Map();
     bootDoc.getElementById=id=>{if(!bootNodes.has(id))bootNodes.set(id,new Element());return bootNodes.get(id);};
@@ -65,9 +70,55 @@ class Element {
     boot.GladosThemes.mount(bootDoc,()=>{});
     assert.equal(bootDoc.documentElement.dataset.theme,theme);
     assert.equal(bootDoc.documentElement.dataset.surface,surface);
-    assert.match(bootDoc.getElementById('surface-switch').href,new RegExp('surface='+(surface==='presence'?'console':'presence')));
+    assert.match(bootDoc.getElementById('surface-switch').href,new RegExp('surface='+(surface==='basic'?'console':'basic')));
+    bootDoc.getElementById('message-text').value='Unsent draft';
+    bootDoc.getElementById('surface-switch').onclick({preventDefault(){},button:0});
+    assert.equal(bootDoc.documentElement.dataset.surface,surface==='basic'?'console':'basic');
+    assert.equal(bootDoc.getElementById('message-text').value,'Unsent draft','Surface switching preserves the draft');
     bootDoc.getElementById('theme-choice').value='terminal';bootDoc.getElementById('theme-choice').onchange();
     assert.equal(bootDoc.documentElement.dataset.theme,'terminal','Disabled storage never blocks theme switching');
+  }
+  // Real loading milestones, disconnects, skip and timeout must never strand the interface.
+  for (const reduced of [false,true]) {
+    const bootNodes=new Map(), timers=new Map(); let timerID=0;
+    const bootNode=id=>{if(!bootNodes.has(id))bootNodes.set(id,new Element());return bootNodes.get(id);};
+    const mic=bootNode('control-microphone');mic.setAttribute('aria-pressed','true');
+    const tile=new Element();tile.dataset.control='microphone';let clicks=0;mic.click=()=>clicks++;
+    const bootDoc={getElementById:bootNode,querySelectorAll:()=>[tile],documentElement:new Element()};
+    const boot=vm.createContext({document:bootDoc,URLSearchParams,location:{search:''},
+      matchMedia:()=>({matches:reduced}),GladosAvatar:{presentation:()=>({activity:'Idle'})},
+      setTimeout(fn,ms){timers.set(++timerID,{fn,ms});return timerID;},clearTimeout(id){timers.delete(id);}});
+    vm.runInContext('window=globalThis',boot);
+    vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/glados/webapp/static/glados-portal.js'),'utf8'),boot);
+    const controller=boot.GladosPortal.mount(bootDoc);
+    assert.equal(bootNode('app').inert,true);
+    controller.update({connection:'live'});
+    assert.equal(bootNode('boot-snapshot').textContent,'WAIT','An open stream alone does not imply a snapshot');
+    assert.equal(timers.size,1);
+    controller.snapshot();controller.update({connection:'live'});
+    assert.equal(bootNode('boot-snapshot').textContent,'OK');
+    assert.equal(timers.size,2);
+    if(reduced)assert.equal([...timers.values()].find(t=>t.ms!==6500).ms,0);
+    controller.update({connection:'disconnected'});
+    assert.equal(timers.size,1,'Disconnect cancels the ready-screen dismissal');
+    assert.equal(bootNode('boot-telemetry').textContent,'WAIT');
+    controller.update({connection:'live'});
+    tile.onclick();assert.equal(clicks,1,'Sign controls reuse the engine controls');
+    mic.disabled=true;controller.update({connection:'live'});
+    tile.onclick();assert.equal(clicks,1,'Unavailable controls cannot issue commands');
+    assert.equal(tile.disabled,true);
+    [...timers.values()].find(t=>t.ms!==6500).fn();
+    assert.equal(bootNode('portal-loading').hidden,true);
+    assert.equal(bootNode('app').inert,false);
+    assert.equal(timers.size,0);
+    const waiting=boot.GladosPortal.mount(bootDoc);
+    waiting.update({connection:'disconnected'});
+    [...timers.values()][0].fn();
+    assert.equal(bootNode('app').inert,false,'Offline timeout leaves the interface accessible');
+    const skipped=boot.GladosPortal.mount(bootDoc);
+    bootNode('boot-skip').onclick();
+    skipped.update({connection:'live'});
+    assert.equal(timers.size,0,'Skipping never opens a new loading overlay');
   }
   const snapshot = JSON.parse(fs.readFileSync(0, "utf8"));
   const nodes = new Map();
@@ -150,9 +201,10 @@ class Element {
       return {ok:true,json:async()=>snapshot};
     },
     EventSource, setInterval() {}, clearInterval() {},
+    setTimeout() {return 1;}, clearTimeout() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-overview.js", "glados-portal.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
@@ -943,7 +995,8 @@ class Element {
     meta:{backend:'gemma',record_id:'voice-turn',deferred:true}});
   assert.equal(node('latest-reply').textContent,'Oh. It is you.','Late transcripts preserve the completed reply');
   stream.send('obs',{source:'audio',kind:'user_input',message:'Voice input received'});
-  assert.equal(node('latest-reply').textContent,'Waiting for GLaDOS…');
+  assert.equal(node('latest-reply').textContent,'');
+  assert.equal(node('presence-dialogue').hidden,false);
   stream.onerror();
   assert.equal(node('control-microphone').disabled,true);
   assert.equal(node('message-send').disabled,true);
@@ -1008,7 +1061,8 @@ class Element {
     assert.equal(optics[0].palette,palette);
     assert.equal(document.documentElement.dataset.theme,theme);
     assert.equal(node('theme-settings').value,theme);
-    assert.match(node('surface-switch').href,new RegExp('surface=presence&theme='+theme));
+    assert.match(node('surface-switch').href,new RegExp('surface=console&theme='+theme));
+    assert.match(node('presence-switch').href,new RegExp('surface=presence&theme='+theme));
     assert.match(node('avatar-optic-source').src,/\/api\/vision\/live\?overlay=0/);
   }
   // Routing disclosures survive identical telemetry, and handled reports lose their alert.
