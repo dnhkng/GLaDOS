@@ -958,7 +958,15 @@ class Element {
 
   // Timings correlate the first response milestones; old turns and autonomy cannot finish this turn.
   const obs=(offset,source,kind,meta={},message='event')=>stream.send('obs',{timestamp:100+offset/1000,source,kind,meta,message});
+  for (const meta of [{generation:null},{}]) {
+    obs(0,'text','user_input',meta,'Uncorrelated input');
+    assert.equal(node('turn-latency').textContent,'timing unavailable');
+    obs(10,'tts','play',{generation:41});
+    assert.equal(node('turn-latency').textContent,'timing unavailable');
+    assert.doesNotMatch(node('turn-waterfall').innerHTML,/Playback requested/);
+  }
   obs(0,'audio','user_input',{generation:42},'Voice input received');
+  assert.equal(node('turn-latency').textContent,'Turn in progress');
   assert.match(node('latest-input').textContent,/Voice input/);
   obs(20,'llm','admitted',{generation:41,lane:'priority'});
   obs(30,'tts','play',{generation:42,autonomy:true});

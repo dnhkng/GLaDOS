@@ -22,7 +22,7 @@
       const meta = ev.meta || {};
       if (ev.kind === 'user_input') {
         input = ev.src === 'audio' ? 'Voice input · '+(state.controls?.user_transcripts?'transcript pending':'no transcript kept') : ev.msg;
-        latest = {t:ev.t,generation:meta.generation,points:[],finished:null};
+        latest = {t:ev.t,generation:meta.generation,points:[],finished:meta.generation == null?'timing unavailable':null};
         node('latest-input').textContent=input;
       } else if (ev.src === 'asr' && ev.kind === 'transcript' && latest && meta.generation === latest.generation) {
         input=ev.msg; node('latest-input').textContent=input;
