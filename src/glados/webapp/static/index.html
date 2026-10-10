@@ -245,6 +245,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <span class="sub">Facility observation and control.</span>
         <div class="right"><span class="chip teal" id="pool-status">shared processing —</span><span class="chip amber" id="mcInflight">in-flight 0</span></div>
       </div>
+      <div class="overview-grid">
       <section class="card avatar-card presence-stage" id="avatar-card" aria-label="GLaDOS eye and optic feed">
         <div class="avatar-stage">
           <svg id="glados-eye" viewBox="-200 -200 400 400" role="img" aria-label="GLaDOS aperture, connecting"></svg>
@@ -272,11 +273,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         </form>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
       </div>
-      <div class="overview-grid operator-only">
-        <section class="card overview-turn"><h3>Latest turn <span class="now" id="turn-latency">Waiting for input</span></h3><div id="overview-route" class="decision-path"></div><div id="turn-waterfall" class="turn-waterfall"></div><p class="console-note">Recorded server events: input accepted → playback requested. Excludes endpoint silence and browser audio buffering.</p></section>
-        <section class="card"><h3>Inference slots <button class="btn-secondary" data-go="cores">Inspect</button></h3><div id="overview-slots" class="capacity-tiles"></div><p class="console-note" id="overview-hold"></p><div id="overview-queue" class="console-note"></div></section>
-        <section class="card"><h3>Core activity <button class="btn-secondary" data-go="cores">Inspect</button></h3><div class="table-scroll"><table class="core-table"><thead><tr><th>Core</th><th>State</th><th>Latest update</th></tr></thead><tbody id="overview-cores"></tbody></table></div></section>
-        <section class="card"><h3>Autonomy Core <button class="btn-secondary" data-go="settings">Settings</button></h3><p class="console-note" id="overview-autonomy"></p><p class="console-note" id="overview-handoff"></p></section>
+        <section class="card overview-turn operator-only"><h3>Latest turn <span class="now" id="turn-latency">Waiting for input</span></h3><div id="overview-route" class="decision-path"></div><div id="turn-waterfall" class="turn-waterfall"></div><p class="console-note">Recorded server events: input accepted → playback requested. Excludes endpoint silence and browser audio buffering.</p></section>
+        <section class="card overview-capacity operator-only"><h3>Inference slots <button class="btn-secondary" data-go="cores">Inspect</button></h3><div id="overview-slots" class="capacity-tiles"></div><p class="console-note" id="overview-hold"></p><div id="overview-queue" class="console-note"></div></section>
+        <section class="card overview-core-activity operator-only"><h3>Core activity <button class="btn-secondary" data-go="cores">Inspect</button></h3><div class="table-scroll"><table class="core-table"><thead><tr><th>Core</th><th>State</th><th>Latest update</th></tr></thead><tbody id="overview-cores"></tbody></table></div></section>
+        <section class="card overview-autonomy operator-only"><h3>Autonomy Core <button class="btn-secondary" data-go="settings">Settings</button></h3><p class="console-note" id="overview-autonomy"></p><p class="console-note" id="overview-handoff"></p></section>
       </div>
       <div class="grid cols-3 operator-only" style="margin-bottom:16px">
         <button type="button" class="card" data-go="tasks"><div class="stat"><div class="v" id="mc-slots">0</div><div class="l">Assignments tracked →</div></div></button>
@@ -306,6 +306,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           </div>
         </div>
         <div class="card central-controls">
+          <div class="presence-clock"><time id="presence-clock"></time><span id="presence-date"></span></div>
           <h3>Central Core <span class="now" id="brainstem-source">Engine state</span></h3>
           <p class="console-note" id="brainstem-detail"></p>
           <div class="console-actions">
@@ -645,6 +646,7 @@ function coreActivity(core){
   if(core.execution_status==='queued')return {label:'Queued',className:'s-paused',detail:'Waiting for a mind worker',active,waiting};
   if(core.execution_status==='running')return {label:'Working',className:'s-running',detail:'Processing update',active,waiting};
   if(core.research?.status==='researching')return {label:'Working',className:'s-running',detail:'Research round '+core.research.rounds+' of '+core.research.max_rounds,active,waiting};
+  if(core.execution_status==='error' || core.status==='error')return {label:'Error',className:'s-error',detail:core.error || core.summary || 'Last run failed',active,waiting};
   if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
   return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':core.interval_s==null?'On demand':'Delay '+core.interval_s+' s after completion':'Ready for requests',active,waiting};
 }
@@ -1291,6 +1293,10 @@ function testDecision(list){
 let bootT=Date.now();
 function renderClock(){ const up=Math.floor((Date.now()-(S.controls.started_at?S.controls.started_at*1000:bootT))/1000);
   $("clock").textContent=timeStr(Date.now());
+  const now=new Date();
+  $("presence-clock").textContent=timeStr(now.getTime());
+  $("presence-clock").setAttribute('datetime',now.toISOString());
+  $("presence-date").textContent=now.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
   $("uptime").textContent="UP "+pad(Math.floor(up/3600))+":"+pad(Math.floor(up%3600/60))+":"+pad(up%60); }
 renderFilters();
 startLive();

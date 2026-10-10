@@ -5,7 +5,7 @@
   function mount(doc, helpers) {
     const {escape:esc, coreOwner, cores, identity, activity} = helpers;
     const node = id => doc.getElementById(id);
-    let latest = null, state = {}, input = 'No input received yet.';
+    let latest = null, state = {}, input = 'No input received yet.', routingKey = '';
     function timing() {
       const host = node('turn-waterfall'), summary = node('turn-latency');
       if (!latest) {host.textContent='Timing begins with the next user input.'; return;}
@@ -48,34 +48,50 @@
     function renderRouting() {
       const decision = state.routing?.latest;
       const host=node('overview-route');
+      const key=JSON.stringify(decision ?? null);
+      if (key===routingKey) return; // Keep disclosures open across telemetry refreshes.
+      routingKey=key;
       if (!decision) {host.textContent='No routing decision yet.'; return;}
+      const title=o=>{
+        if (!o) return 'Selected';
+        try {const value=JSON.parse(o.description); if (value.tool || value.server) return value.tool || value.server;} catch (_) {}
+        const name=String(o.id && !/^[a-f0-9]{32}$/i.test(o.id)?o.id:helpers.describe(o) || 'Selected').replace(/^(area_|command_)/,'').replace(/[_-]/g,' ');
+        return name.length>40?name.slice(0,37)+'…':name.charAt(0).toUpperCase()+name.slice(1);
+      };
       const stages=decision.stages || [{name:'Decision',scores:decision.scores,accepted:decision.accepted}];
       host.innerHTML=stages.map(s => {
         const scores=[...(s.scores || [])].sort((a,b)=>b.probability-a.probability);
         const winner=scores[0];
         const chosen=scores.find(o=>o.id===s.option_id) || winner;
-        const description=o=>o?helpers.describe(o):'';
-        return '<div class="decision-step"><div class="slice">'+esc(s.name || 'Decision')+'</div><strong>'+esc(s.fallback_selected || !s.accepted?'Fallback':description(chosen) || 'Selected')+'</strong><p class="console-note">'+(winner?(winner.probability*100).toFixed(1)+'% preference · lead '+((s.margin || 0)*100).toFixed(1)+'%':'')+'</p><p class="console-note">'+scores.slice(1,4).map(o=>esc(description(o))+' '+(o.probability*100).toFixed(1)+'%').join(' · ')+'</p></div>';
-      }).join('')+'<div class="decision-step"><div class="slice">'+(decision.dry_run?'Preview only':'Action')+'</div><strong>'+esc(decision.tool || decision.action)+'</strong><p class="console-note">'+esc(decision.reason || '')+'</p></div>';
+        const choices=scores.map(o=>'<p><b>'+esc(o.label || title(o))+' · '+(o.probability*100).toFixed(1)+'%</b> '+esc(helpers.describe(o) || '')+'</p>').join('');
+        return '<div class="decision-step"><div class="slice">'+esc(s.name || 'Decision')+'</div><strong>'+esc(s.fallback_selected || !s.accepted?'Fallback':title(chosen))+'</strong><p class="console-note">'+(winner?(winner.probability*100).toFixed(1)+'% preference · lead '+((s.margin || 0)*100).toFixed(1)+'%':'')+'</p>'+(choices?'<details class="route-details"><summary>All choices</summary>'+choices+'</details>':'')+'</div>';
+      }).join('')+'<div class="decision-step decision-action"><div class="slice">'+(decision.dry_run?'Preview only':'Action')+'</div><strong>'+esc(decision.tool || decision.action)+'</strong>'+(decision.reason?'<details class="route-details"><summary>Reason</summary><p>'+esc(decision.reason)+'</p></details>':'')+'</div>';
     }
     function renderCapacity() {
       const inference=state.inference;
       if (!inference) {node('overview-slots').textContent='Capacity unavailable.'; node('overview-hold').textContent=''; node('overview-queue').textContent=''; return;}
       node('overview-slots').innerHTML=Array.from({length:inference.capacity},(_,i)=>{
         const request=inference.active.find(r=>r.slot===i);
-        return '<div class="capacity-tile '+(request?'busy':'')+'"><div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p></div>';
+        return '<div class="capacity-tile '+(request?'busy '+(request.lane==='priority'?'interactive':'background'):'')+'"><div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p></div>';
       }).join('');
       const status=inference.interaction_hold?'User interaction active · new background inference paused. Running requests may finish.':inference.reserved_interactive+' reserved for interaction · '+inference.active.length+' / '+inference.capacity+' active';
       node('overview-hold').textContent=(state.connection==='disconnected'?'Disconnected · last known state: ':'')+status;
       node('overview-queue').textContent=inference.waiting.length?'Waiting: '+inference.waiting.map(r=>coreOwner(r.owner)+' ('+(r.wait_reason==='user_response'?'user response':'capacity')+')').join(', '):'No requests waiting.';
     }
     function renderCores() {
+      const reports=[...(state.slots || [])].sort((a,b)=>b.updated_at-a.updated_at);
+      const attention=state.controls?.autonomy_enabled===false?' · important update':' · awaiting Autonomy';
       node('overview-cores').innerHTML=cores().map(core=>{
         const status=activity(core);
-        return '<tr><td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td></tr>';
+        const slot=reports.find(s=>s.owner_id===(core.id || core.agent_id));
+        const important=slot?.update_priority==='important' && !slot.handled;
+        const error=status.label==='Error' || slot?.status==='error';
+        const updated=slot?.updated_at?'<small>'+age(Math.max(0,Date.now()/1000-slot.updated_at))+' ago'+(error?' · report failed':'')+(important?attention:'')+'</small>':'';
+        return '<tr class="'+(error?'core-error':important?'core-important':'')+'"><td>'+esc(identity(core).title)+'</td><td><span class="status-pill '+esc(status.className || '')+'">'+esc(status.label)+'</span></td><td><p>'+esc(slot?.summary || core.summary || status.detail || 'No update yet.')+'</p>'+updated+'</td></tr>';
       }).join('') || '<tr><td colspan="3">No core state available.</td></tr>';
-      const slots=[...(state.slots || [])].filter(s=>s.summary).sort((a,b)=>Number(b.update_priority==='important')-Number(a.update_priority==='important') || b.updated_at-a.updated_at).slice(0,3);
-      node('presence-thoughts').innerHTML=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
+      const pending=s=>s.update_priority==='important' && !s.handled;
+      const slots=[...(state.slots || [])].filter(s=>s.summary).sort((a,b)=>Number(pending(b))-Number(pending(a)) || b.updated_at-a.updated_at).slice(0,3);
+      node('presence-thoughts').innerHTML=slots.map(s=>'<div class="thought '+(pending(s)?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+' ago'+(pending(s)?attention:'')+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
     }
     function update(next) {
       state=next;
@@ -93,6 +109,7 @@
     }
     function refreshActivity(next) {
       const view=root.GladosAvatar.presentation(next);
+      node('avatar-card').dataset.activity=view.activity.toLowerCase();
       if (node('presence-activity').textContent!==view.activity) node('presence-activity').textContent=view.activity;
       if (node('presence-detail').textContent!==view.detail) node('presence-detail').textContent=view.detail;
     }

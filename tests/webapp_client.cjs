@@ -35,7 +35,7 @@ class Element {
     this.checked = true;
   }
   getContext(){return this.context ||= new CanvasContext();}
-  set innerHTML(html) { this.html = html; this.children = []; }
+  set innerHTML(html) { this.htmlWrites=(this.htmlWrites || 0)+1; this.html = html; this.children = []; }
   get innerHTML() { return this.html || ""; }
   get lastChild() { return this.children.at(-1); }
   appendChild(child) { child.parent = this; this.children.push(child); }
@@ -1011,6 +1011,36 @@ class Element {
     assert.match(node('surface-switch').href,new RegExp('surface=presence&theme='+theme));
     assert.match(node('avatar-optic-source').src,/\/api\/vision\/live\?overlay=0/);
   }
+  // Routing disclosures survive identical telemetry, and handled reports lose their alert.
+  const overviewProbe=context.GladosOverview.mount(document,{
+    escape:vm.runInContext('esc',context),coreOwner:id=>id,
+    cores:()=>[{id:'health',title:'Health Core'}],identity:c=>c,
+    activity:()=>({label:'Standby',className:'s-idle'}),describe:o=>o.description,
+  });
+  const routeProbe={latest:{action:'reply',accepted:true,stages:[{name:'Capability',accepted:true,
+    option_id:'conversation',margin:.8,scores:[{id:'conversation',label:'A',probability:.9,
+      description:'A detailed conversation instruction with <untrusted> content.'}]}]}};
+  const slotProbe={owner_id:'health',title:'Health Core',status:'active',updated_at:Date.now()/1000,
+    update_priority:'important',handled:false,summary:'GPU temperature elevated.'};
+  overviewProbe.update({connection:'live',routing:routeProbe,slots:[slotProbe]});
+  assert.match(node('overview-route').innerHTML,/<strong>Conversation<\/strong>/);
+  assert.match(node('overview-route').innerHTML,/<details class="route-details">/);
+  assert.match(node('overview-route').innerHTML,/&lt;untrusted&gt;/);
+  assert.match(node('overview-cores').innerHTML,/core-important.*awaiting Autonomy/s);
+  const routeWrites=node('overview-route').htmlWrites;
+  overviewProbe.update({connection:'live',routing:JSON.parse(JSON.stringify(routeProbe)),
+    slots:[{...slotProbe,handled:true}]});
+  assert.equal(node('overview-route').htmlWrites,routeWrites,'Telemetry preserves an open choices disclosure');
+  assert.doesNotMatch(node('overview-cores').innerHTML,/core-important|awaiting Autonomy/);
+  assert.doesNotMatch(node('presence-thoughts').innerHTML,/class="thought important"/);
+  const customRoute={latest:{...routeProbe.latest,stages:[{...routeProbe.latest.stages[0],
+    option_id:'0123456789abcdef0123456789abcdef',scores:[{id:'0123456789abcdef0123456789abcdef',
+      label:'A',probability:.9,description:'My custom conversational option'}]}]}};
+  overviewProbe.update({connection:'live',routing:customRoute,controls:{autonomy_enabled:false},slots:[slotProbe]});
+  assert.match(node('overview-route').innerHTML,/<strong>My custom conversational option<\/strong>/);
+  assert.match(node('overview-cores').innerHTML,/important update/);
+  assert.doesNotMatch(node('overview-cores').innerHTML,/awaiting Autonomy/);
+  assert.equal(vm.runInContext("coreActivity({id:'probe',execution_status:'error',running:false}).label",context),'Error');
   rootEvents.pagehide();
   assert.equal(frames.size, 0);
   assert.equal(rootEvents.pointermove, undefined);
