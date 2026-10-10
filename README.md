@@ -276,6 +276,10 @@ The Autonomy Core considers their evidence together with the conversation before
 asking Central to speak. A completed search or recalled fact can be useful
 without needing another spoken response if the conversation already covers it.
 
+Background minds share a timer and worker pool, with fixed, adaptive, random
+adaptive or on-demand timing assigned separately from their work. They can use
+ordinary code or services without an LLM. See [mind scheduling](docs/autonomy.md#mind-execution-and-timing).
+
 Inference is admitted through a shared, bounded scheduler. The reference profile
 uses four server slots, with two reserved for interaction and routing. New
 background work waits during user interactions; already-running inference may
