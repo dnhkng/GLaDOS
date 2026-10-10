@@ -103,8 +103,12 @@ _UNITS = {
     "gib": ("gibibyte", "gibibytes"),
     "tib": ("tebibyte", "tebibytes"),
 }
-_UNIT_PATTERN = "|".join(sorted(_UNITS, key=len, reverse=True))
-_UNIT_SUFFIX = rf"(?:°[ \t]*[CF]|℃|℉|°|{_UNIT_PATTERN})"
+# Accepted spellings are case-sensitive, so "5G", "4G LTE" and "MS" keep their meaning.
+_UNIT_SPELLINGS = (
+    "kg g km cm mm ms Hz hz kHz khz KHz MHz mhz GHz ghz kB KB kb MB mb GB gb TB tb KiB kib MiB mib GiB gib TiB tib"
+).split()
+_UNIT_PATTERN = "|".join(sorted(_UNIT_SPELLINGS, key=len, reverse=True))
+_UNIT_SUFFIX = rf"(?:°[ \t]*[CF]|℃|℉|°|(?-i:{_UNIT_PATTERN}))"
 _TOKENS = re.compile(
     rf"(?<![\w.])(?=[0-9+−.$£€√∛-]|[a-zA-Z]\^)(?:"
     rf"(?P<iso>[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}})(?![\w-])|"
@@ -120,9 +124,11 @@ _TOKENS = re.compile(
     rf"(?:[ \t]*(?:hundred|thousand|million|billion|trillion|[kmb]))?)(?!\w)|"
     rf"(?P<ordinal>[0-9]+(?:st|nd|rd|th))(?!\w)|"
     rf"(?P<scientific>{_SIGNED}[eE][+-]?[0-9]+)(?!\w)|"
+    rf"(?P<digits>[0-9]{{3}}-[0-9]{{4}}|[0-9]{{1,4}}(?:-[0-9]{{2,4}}){{2,}})(?![\w-])|"
     rf"(?P<range>{_SIGNED}[ \t]*[-–—][ \t]*{_SIGNED}(?:[ \t]*{_UNIT_SUFFIX})?)(?!\w)|"
     rf"(?P<percent>{_SIGNED}[ \t]*%)(?!\w)|"
     rf"(?P<unit>{_SIGNED}[ \t]*{_UNIT_SUFFIX})(?!\w)|"
+    rf"(?P<tagged>(?-i:[0-9]+[A-Z]{{1,3}}))(?![\w])|"
     rf"(?P<number>{_SIGNED})(?!\w))",
     re.IGNORECASE,
 )
@@ -142,7 +148,7 @@ _ESCAPED_TEMPERATURE = re.compile(r"\\u(?:00b0|2103|2109)", re.IGNORECASE)
 _TEMPERATURE_SYMBOL = re.compile(r"°[ \t]*[CF]\b|[℃℉]", re.IGNORECASE)
 _SPACES = re.compile(r"[ \t]+")
 _ELLIPSES = re.compile(r"\.{3,}|\. \. \.")
-_TITLES = re.compile(r"\b(?:Dr|Mr|Mrs|Ms)\.(?=\s|$)", re.IGNORECASE)
+_TITLES = re.compile(r"(?<![0-9])(?<![0-9] )\b(?:Dr|Mr|Mrs|Ms|DR|MR|MRS|MS)\.(?=\s|$)")
 _PUNCTUATION = str.maketrans(
     {
         "‘": "'",
@@ -173,7 +179,9 @@ _PERCENT = re.compile(rf"(?<![\w.])({_SIGNED})[ \t]*%")
 _VALID_NUMBER = re.compile(r"([+-]?)([0-9]*)(?:\.([0-9]+))?\Z")
 _PAST_PARTICIPLE = re.compile(
     r"(?:already |just |never )?(?:been|done|gone|got|had|seen|known|taken|given|made|said|heard|"
-    r"written|read|left|lost|found|bought|brought|forgotten|eaten|spoken|[a-z]+ed)\b",
+    r"written|read|left|lost|found|bought|brought|forgotten|eaten|spoken|"
+    r"(?!(?:need|feed|succeed|exceed|proceed|bleed|breed|speed|heed|seed|weed|embed|shed|shred|wed|bed)\b)"
+    r"[a-z]+ed)\b",
     re.IGNORECASE,
 )
 
@@ -413,7 +421,7 @@ class SpokenTextConverter:
             try:
                 value = date.fromisoformat(text)
             except ValueError:
-                return text
+                return self._number_groups(text)
             return f"{_MONTHS[value.month]} {_ordinal_words(str(value.day))}, {self._year_words(str(value.year))}"
         if kind == "date":
             month, day, year = text.split("/")
@@ -423,7 +431,7 @@ class SpokenTextConverter:
             try:
                 value = date(year_value, int(month), int(day))
             except ValueError:
-                return text
+                return self._number_groups(text)
             return f"{_MONTHS[value.month]} {_ordinal_words(str(value.day))}, {self._year_words(str(value.year))}"
         if kind in {"power", "root", "fraction"}:
             return self._convert_mathematical_notation(text)
@@ -431,6 +439,8 @@ class SpokenTextConverter:
             return " point ".join(_integer_words(part) for part in text.split("."))
         if kind in {"time", "spaced_time", "hour"}:
             result = self._time_words(text)
+            if result == text:
+                result = self._number_groups(text)
             following = match.string[match.end() :].lstrip()
             if text.endswith(".") and (not following or following[0].isupper()):
                 result += "."
@@ -442,9 +452,22 @@ class SpokenTextConverter:
         if kind == "scientific":
             coefficient, exponent = re.split("[eE]", text)
             return self._number_to_words(coefficient) + " times ten to the power of " + self._number_to_words(exponent)
+        if kind == "tagged":
+            # "5G", "4K", "2FA": the number, then the letters as letters.
+            digits = text.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            return _integer_words(digits) + " " + " ".join(text[len(digits) :])
+        if kind == "digits":
+            return ", ".join(" ".join(_ONES[int(d)] for d in group) for group in text.split("-"))
         if kind == "range":
             parts = _RANGE.fullmatch(text)
             assert parts is not None
+            first, second = parts[1], parts[3]
+            # "2024-2025" and "1984-85" are year spans: read them the way years are said.
+            first_year = first.isdigit() and len(first) == 4 and 1000 < int(first) < 3000
+            second_year = second.isdigit() and (len(second) == 2 or (len(second) == 4 and 1000 < int(second) < 3000))
+            if not parts[4] and parts[2] == "-" and first_year and second_year:
+                end = self._year_words(second) if len(second) == 4 else _integer_words(second)
+                return self._year_words(first) + " to " + end
             separator = (
                 " minus "
                 if parts[2].strip() == "-" and (" " in parts[2] or match.string[match.end() :].lstrip().startswith("="))
@@ -472,6 +495,21 @@ class SpokenTextConverter:
         ):
             return self._year_words(text)
         return _integer_words(text) if text.isdigit() else self._number_to_words(text)
+
+    def _number_groups(self, text: str) -> str:
+        """Speak a malformed date or time as its numbers rather than passing digits to TTS."""
+        parts = re.findall(r"[0-9]+|[A-Za-z.]+", text)
+        words = []
+        for part in parts:
+            if not part[0].isdigit():
+                words.append(part)
+            elif part == "00" and words and ":" in text:
+                words.append("hundred")  # "25:00" -> "twenty-five hundred"
+            elif len(part) == 4 and part != "0000":
+                words.append(self._year_words(part))
+            else:
+                words.append(_integer_words(part))
+        return " ".join(words)
 
     def _unit_name(self, number: str, unit: str) -> str:
         singular = self._number_to_words(number) in {"one", "negative one", "plus one"}
