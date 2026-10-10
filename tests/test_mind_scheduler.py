@@ -293,3 +293,31 @@ def test_failed_live_signal_does_not_kill_other_minds(scheduler: SchedulerFixtur
     wait_until(lambda: status(scheduler, "bad").status == "error")
     scheduler.trigger("good")
     assert ran.wait(2)
+
+
+@pytest.mark.parametrize("failure", ["reset", "delay"])
+def test_resume_policy_failure_preserves_error_and_restores_other_minds(
+    scheduler: SchedulerFixture, failure: str,
+) -> None:
+    scheduler, store, registry = scheduler
+    policy = Mock()
+    policy.delay.return_value = 10.0
+    bad = Worker("bad", store)
+    ran = threading.Event()
+    scheduler.register(bad, policy, run_on_start=False)
+    scheduler.register(Worker("good", store, lambda runtime: ran.set()), OnDemand(), run_on_start=False)
+    scheduler.start_all()
+    scheduler.pause("bad")
+    scheduler.pause("good")
+    getattr(policy, failure).side_effect = ValueError("Signal unavailable")
+
+    for name in ("bad", "good"):
+        scheduler.resume(name)
+
+    assert status(scheduler, "bad").status == "error"
+    assert not bad.is_running
+    assert not scheduler._entries["bad"].controlling
+    assert next(mind for mind in registry.snapshot() if mind.mind_id == "bad").status == "error"
+    wait_until(lambda: bad.stopped.call_count == 1)
+    scheduler.trigger("good")
+    assert ran.wait(2)

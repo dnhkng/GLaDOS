@@ -23,6 +23,8 @@ from glados.autonomy.events import TimeTickEvent
 from glados.autonomy.interaction_state import InteractionState
 from glados.autonomy.llm_client import LLMConfig
 from glados.autonomy.loop import AutonomyLoop
+from glados.autonomy.mind_schedule import AdaptiveInterval
+from glados.autonomy.mind_scheduler import MindScheduler
 from glados.autonomy.slots import TaskSlotStore
 from glados.core.engine import Glados
 from glados.core.inference import InferenceConfig, InferenceScheduler
@@ -162,6 +164,26 @@ def test_interval_changes_schedule_and_survives_restart(
         with pytest.raises(ValueError):
             mind.set_interval_range(*bounds)
         assert json.loads(path.read_text())["interval_min_s"] == 6
+
+
+def test_vision_snapshots_remain_serializable_after_schedule_failure(mind: VisionMind) -> None:
+    scheduler = MindScheduler(mind._slot_store)
+    signal = [5.0]
+    scheduler.register(mind, AdaptiveInterval(lambda: signal[0]), run_on_start=False)
+    signal[0] = float("nan")
+    try:
+        snapshot = mind.snapshot()
+        assert scheduler.list_agents()[0].status == "error"
+        assert snapshot["next_delay_s"] == mind.settings.interval_s
+        assert snapshot["target_hz"] == round(1 / mind.settings.interval_s, 2)
+        assert mind.tracking_snapshot()["next_delay_s"] == mind.settings.interval_s
+        json.dumps(snapshot)
+        json.dumps(mind.tracking_snapshot())
+        engine = _FakeEngine()
+        engine.vision_agent = mind
+        json.dumps(build_state(engine))
+    finally:
+        scheduler.shutdown()
 
 
 

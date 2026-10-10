@@ -189,7 +189,8 @@ class VisionMind(Subagent):
 
     def _scheduled_delay(self) -> float:
         scheduler = self.runtime.scheduler
-        return scheduler.delay(self.agent_id) if scheduler else self.settings.interval_s
+        delay = scheduler.delay(self.agent_id) if scheduler else None
+        return delay if delay is not None else self.settings.interval_s
 
     def on_stop(self) -> None:
         self.camera.stop()

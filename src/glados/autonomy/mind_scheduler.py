@@ -163,9 +163,12 @@ class MindScheduler:
             entry.pending = entry.manual = False
             if not paused:
                 entry.anchor = self._clock()
-                entry.policy.reset()
-                entry.pending = entry.policy.delay() is not None
-            if not entry.busy:
+                try:
+                    entry.policy.reset()
+                except Exception as exc:
+                    self._policy_error(entry, exc)
+                entry.pending = self._delay(entry) is not None
+            if not entry.busy and entry.status != "error":
                 self._state(entry, "paused" if paused else "waiting", "Paused" if paused else "Ready")
             self._condition.notify_all()
         try:
