@@ -63,7 +63,8 @@ def test_emotion_registration_is_independent(
         assert engine._emotion_agent is factory.return_value
         settings = factory.call_args.kwargs
         assert settings["llm_config"].model == engine.llm_model
-        assert settings["config"].loop_interval_s == 5.0
+        assert next(call.args[1].delay() for call in manager.register.call_args_list
+                    if call.args[0] is engine._emotion_agent) == 5.0
         assert settings["llm_config"].request_options == engine.llm_request_options
     else:
         factory.assert_not_called()

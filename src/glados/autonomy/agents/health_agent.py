@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 import requests
 
 from ..llm_client import LLMConfig, llm_call
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 
@@ -159,7 +160,6 @@ class HealthAgent(Subagent):
                 agent_id="health",
                 title="Health Core",
                 role="System status and alerts",
-                loop_interval_s=health_config.interval_s,
             ),
             **kwargs,
         )
@@ -280,7 +280,7 @@ class HealthAgent(Subagent):
             + json.dumps(compact, separators=(",", ":"))
         )
 
-    def tick(self) -> SubagentOutput:
+    def run(self, runtime: MindRuntime) -> SubagentOutput:
         host = self._host_status()
         runtime = self._runtime_status()
         now = self._clock()

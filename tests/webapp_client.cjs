@@ -156,6 +156,10 @@ class Element {
   assert.match(html,/<h1>Test Chamber<\/h1>/);
   assert.equal(contextGets.length,0,'Context is only fetched while its tab is visible');
   stream.onopen();
+  assert.equal(vm.runInContext("coreActivity({id:'probe',kind:'background',running:true,execution_status:'queued'}).label",context),'Queued');
+  assert.equal(vm.runInContext("coreActivity({id:'probe',kind:'background',running:true,execution_status:'running'}).label",context),'Working');
+  assert.equal(vm.runInContext("coreActivity({id:'probe',kind:'background',running:true,interval_s:null}).detail",context),'On demand');
+  assert.match(vm.runInContext("coreActivity({id:'probe',kind:'background',running:true,interval_s:5}).detail",context),/after completion/);
   vm.runInContext("go('context')",context);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(contextGets.at(-1),'/api/context?mode=user&view=live');

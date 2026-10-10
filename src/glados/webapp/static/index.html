@@ -726,9 +726,11 @@ function coreActivity(core){
   if(core.paused || (S.controls.quiet_mode && core.kind!=='router'))return {label:'Suspended',className:'s-paused',detail:active.length?'Finishing current run · '+active.map(r=>'Channel '+(r.slot+1)).join(', '):'Waiting for resume',active,waiting};
   if(active.length)return {label:'Working',className:'s-running',detail:active.map(r=>'Channel '+(r.slot+1)).join(' · '),active,waiting};
   if(waiting.length)return {label:'Queued',className:'s-paused',detail:waiting.some(r=>r.wait_reason==='user_response')?'Waiting for user response':waiting.length+' request'+(waiting.length===1?'':'s')+' waiting',active,waiting};
+  if(core.execution_status==='queued')return {label:'Queued',className:'s-paused',detail:'Waiting for a mind worker',active,waiting};
+  if(core.execution_status==='running')return {label:'Working',className:'s-running',detail:'Processing update',active,waiting};
   if(core.research?.status==='researching')return {label:'Working',className:'s-running',detail:'Research round '+core.research.rounds+' of '+core.research.max_rounds,active,waiting};
   if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
-  return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':'Scheduled every '+(core.interval_s||'?')+' s':'Ready for requests',active,waiting};
+  return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':core.interval_s==null?'On demand':'Delay '+core.interval_s+' s after completion':'Ready for requests',active,waiting};
 }
 function renderMinds(){
   if(!$("minds")) return;
@@ -897,7 +899,7 @@ async function openMind(id){
     $('mind-instructions').onclick=editInstructions;
     return;
   }
-  details+=kv("Schedule",mind.research?'On requested research':mind.interval_min_s!=null?'Motion-aware delay '+esc(mind.interval_min_s)+'–'+esc(mind.interval_max_s)+' seconds':'Every '+esc(mind.interval_s||'?')+' seconds')+(mind.research?'':kv("Completed/attempted runs",mind.tick_count||0));
+  details+=kv("Schedule",mind.research?'On requested research':mind.interval_min_s!=null?'Motion-aware delay '+esc(mind.interval_min_s)+'–'+esc(mind.interval_max_s)+' seconds':mind.interval_s==null?'On demand':'Delay '+esc(mind.interval_s)+' seconds after completion')+(mind.research?'':kv("Completed/attempted runs",mind.tick_count||0));
   if(mind.research){const r=mind.research;details+='<p class="console-note">Searches, reviews source evidence and follows up to resolve gaps. Citations use returned URLs; quoted findings are checked against the source excerpts.</p>'+kv('Research topic',esc(r.objective||r.query||'Waiting for a request'))+kv('Search rounds',(r.rounds||0)+' / '+r.max_rounds)+kv('Sources',r.sources||0)+kv('Cited passages',r.findings||0)+kv('Time limit',r.deadline_s+' seconds');}
   if(mind.compaction){
     const c=mind.compaction;

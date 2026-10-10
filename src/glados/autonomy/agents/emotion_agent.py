@@ -23,6 +23,7 @@ from ..config import EmotionConfig
 from ..emotion_state import EmotionEvent, EmotionState
 from ..llm_client import LLMConfig
 from ...core.option_scores import token_ids, option_request, request_scores
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 
@@ -55,7 +56,6 @@ class EmotionAgent(Subagent):
         self._events: deque[EmotionEvent] = deque(maxlen=self._emotion_config.max_events)
         self._events_lock = threading.Lock()
         self._update_lock = threading.RLock()
-        self._last_event_update = 0.0
         self._generation = 0
         self._pending_audio = None
         self._tokens = {}
@@ -70,16 +70,15 @@ class EmotionAgent(Subagent):
             self._generation += 1
             self._pending_audio = audio
             self.push_event(EmotionEvent("user", "User input (quoted): " + text))
-            self._tick_requested.set()
+        self.runtime.request_run()
 
-    def set_paused(self, paused: bool) -> None:
+    def on_pause(self, paused: bool) -> None:
         with self._update_lock:
             self._generation += 1
             if paused:
                 self._pending_audio = None
                 with self._events_lock:
                     self._events.clear()
-            super().set_paused(paused)
 
     def on_stop(self) -> None:
         self._scores.shutdown(wait=False, cancel_futures=True)
@@ -111,21 +110,19 @@ class EmotionAgent(Subagent):
         with self._events_lock:
             self._events.append(event)
 
-    def tick(self) -> SubagentOutput | None:
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
         with self._update_lock:
-            if self.paused or (not self._tick_requested.is_set() and not self._tick_is_requested
-                               and self._seconds_until_next_tick() > 0):
+            if runtime.cancelled() or (self.paused and not runtime.manual):
                 return None
-            self._tick_requested.clear()
             self._apply_baseline_drift()
             state, generation, audio = replace(self._state), self._generation, self._pending_audio
             with self._events_lock:
                 events = list(self._events)
         new_state = self._ask_llm(events, audio, state=state, generation=generation) if events and self._llm_config else None
         with self._update_lock:
-            if generation != self._generation or self.paused or self._shutdown_event.is_set():
+            if (generation != self._generation or (self.paused and not self.runtime.manual)
+                    or self.runtime.cancelled()):
                 return None
-            self._last_event_update = time.monotonic()
             if new_state:
                 self._state = new_state
                 with self._events_lock:
@@ -135,9 +132,6 @@ class EmotionAgent(Subagent):
             return SubagentOutput(status="active" if events else "idle", summary=self._state.to_prompt(),
                                   report=self._state.response_instructions(), update_priority="regular",
                                   raw=self._state.to_dict())
-
-    def _seconds_until_next_tick(self) -> float:
-        return self._last_event_update + self._emotion_config.tick_interval_s - time.monotonic()
 
     def _apply_baseline_drift(self, now: float | None = None) -> None:
         """Recover by elapsed time: 95% of a deviation disappears in six minutes."""
@@ -158,8 +152,8 @@ class EmotionAgent(Subagent):
         generation = self._generation if generation is None else generation
         config = self._llm_config
         def stopped():
-            return (generation != self._generation or self.paused or self._shutdown_event.is_set()
-                    or config.cancelled())
+            return (generation != self._generation or (self.paused and not self.runtime.manual)
+                    or self.runtime.cancelled() or config.cancelled())
         axes = {
             "pleasure": ["extremely unpleasant; angry or distressed", "somewhat unpleasant; irritated", "neutral",
                          "somewhat pleasant; pleased", "extremely pleasant; delighted"],

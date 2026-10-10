@@ -1,5 +1,6 @@
 """One slot publication path for ongoing observations, task results and late recall."""
 
+from collections.abc import Iterator
 import json
 from pathlib import Path
 import threading
@@ -7,7 +8,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from glados.autonomy.agents.compaction_agent import CompactionAgent
 from glados.autonomy.event_bus import EventBus
+from glados.autonomy.mind_schedule import OnDemand
+from glados.autonomy.mind_scheduler import MindScheduler
 from glados.autonomy.slots import TaskSlotStore
 from glados.autonomy.task_manager import TaskManager, TaskResult
 from glados.core.conversation_store import ConversationStore
@@ -110,7 +114,7 @@ def test_recall_runs_alongside_reply_and_publishes_once_for_its_turn(
         assert entered.wait(1)  # request_recall returned while retrieval is still blocked.
         assert loop._slot_store.get_slot("compaction").context is None
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
         slot = loop._slot_store.get_slot("compaction")
         assert slot.update_priority == "important" and slot.turn_id == "turn-7"
         assert "steak" in slot.context and "Original query" in slot.context and '"source": "user"' in slot.context
@@ -123,7 +127,7 @@ def test_recall_runs_alongside_reply_and_publishes_once_for_its_turn(
         assert loop.snapshot()["pending_updates"] == 0
     finally:
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
 
 
 def test_new_turn_discards_inflight_recall_and_keeps_only_latest_waiting_query(
@@ -149,17 +153,17 @@ def test_new_turn_discards_inflight_recall_and_keeps_only_latest_waiting_query(
         agent.request_recall("tea", turn_id="2")
         agent.request_recall("workshop", turn_id="3")
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
         slot = agent._slot_store.get_slot("compaction")
         assert calls == ["dinner", "workshop"]
         assert slot.turn_id == "3" and "orange" in slot.context and "steak" not in slot.context
         agent.request_recall("unrelated weather", turn_id="4")
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
         slot = agent._slot_store.get_slot("compaction")
         assert slot.update_priority == "regular" and slot.attention_key is None and slot.context is None
     finally:
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
 
 
 def test_async_recall_searches_historical_summaries(tmp_path: Path) -> None:
@@ -168,7 +172,7 @@ def test_async_recall_searches_historical_summaries(tmp_path: Path) -> None:
     history.append({"role": "user", "content": "My favourite food is spaghetti."})
     assert history.compact(history.records(), "[summary] The user's favourite food is spaghetti.", 0)
     agent.request_recall("What should I have for dinner?", turn_id="8")
-    wait_until(lambda: agent._recall_thread is None)
+    wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
     slot = agent._slot_store.get_slot("compaction")
     assert slot.update_priority == "important" and "spaghetti" in slot.report
     assert "Compacted conversation" in slot.report
@@ -205,12 +209,12 @@ def test_pausing_memory_discards_a_late_result(tmp_path: Path, monkeypatch: pyte
         assert entered.wait(1)
         agent.set_paused(True)
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
         slot = agent._slot_store.get_slot("compaction")
         assert slot.context is None and slot.update_priority == "regular"
     finally:
         release.set()
-        wait_until(lambda: agent._recall_thread is None)
+        wait_until(lambda: not agent.runtime.executing and agent._pending_recall is None)
 
 
 def test_task_progress_is_regular_and_result_publishes_one_important_update() -> None:
@@ -243,3 +247,23 @@ def test_task_progress_is_regular_and_result_publishes_one_important_update() ->
 @pytest.mark.parametrize("status", ["done", "partial", "cancelled", "error"])
 def test_search_outcomes_are_preserved(status: str) -> None:
     assert ToolExecutor._search_status(json.dumps({"status": status})) == status
+
+
+@pytest.fixture(autouse=True)
+def schedule_memory_cores(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    import tests.test_memory_recall as helpers
+    original = helpers.core
+    schedulers = []
+    def create(tmp_path: Path, store: ConversationStore | None = None, **kwargs: object) -> CompactionAgent:
+        agent = original(tmp_path, store, **kwargs)
+        scheduler = MindScheduler(agent._slot_store)
+        scheduler.register(agent, OnDemand(), run_on_start=False)
+        scheduler.start_all()
+        schedulers.append(scheduler)
+        return agent
+    monkeypatch.setattr(helpers, "core", create)
+    # This module imported the helper directly.
+    monkeypatch.setattr(__import__(__name__, fromlist=["core"]), "core", create)
+    yield
+    for scheduler in schedulers:
+        scheduler.shutdown()

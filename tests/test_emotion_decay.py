@@ -56,7 +56,7 @@ def test_decay_is_applied_before_new_input_after_pause(monkeypatch):
     agent.set_paused(False)
     agent.react("Hello again")
     model.assert_not_called()
-    agent.tick()
+    agent.run(agent.runtime)
     assert model.call_args.kwargs["state"].pleasure == pytest.approx(-.05)
 
 
@@ -70,30 +70,24 @@ def test_idle_ticks_decay_without_inference(monkeypatch):
     monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.monotonic", lambda: clock[0])
     for now in range(1000, 1361):
         clock[0] = now
-        agent.tick()
+        agent.run(agent.runtime)
     model.assert_not_called()
     assert agent.state.pleasure == pytest.approx(-.05)
 
 
-def test_interaction_resets_timer_after_background_inference(monkeypatch):
+def test_interaction_work_is_separate_from_timer(monkeypatch: pytest.MonkeyPatch) -> None:
     agent = emotion_agent(monkeypatch)
-    clock = [1000.]
-    monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.monotonic", lambda: clock[0])
-    def inference(*args, **kwargs):
-        clock[0] += 2
-        return kwargs["state"]
-    model = Mock(side_effect=inference)
+    model = Mock(side_effect=lambda *args, **kwargs: kwargs["state"])
     monkeypatch.setattr(agent, "_ask_llm", model)
+    trigger = Mock()
+    agent.runtime.request_run = trigger
     agent.react("Hello")
-    assert clock[0] == 1000.
-    agent.tick()
-    assert clock[0] == 1002. and agent._seconds_until_next_tick() == 5
-    clock[0] = 1006.9
-    assert agent.tick() is None
-    clock[0] = 1007.
-    agent.tick()
-    model.assert_called_once()  # No new events: decay only.
+    model.assert_not_called()
+    trigger.assert_called_once()
+    agent.run(agent.runtime)
     assert not agent._events
+    agent.run(agent.runtime)  # An idle run only applies decay.
+    model.assert_called_once()
 
 
 def test_failed_scores_retain_events_for_retry(monkeypatch):
@@ -101,10 +95,10 @@ def test_failed_scores_retain_events_for_retry(monkeypatch):
     model = Mock(return_value=None)
     monkeypatch.setattr(agent, "_ask_llm", model)
     agent.react("Hello")
-    agent.tick()
+    agent.run(agent.runtime)
     assert len(agent._events) == 1
-    assert agent._seconds_until_next_tick() <= 5
-    assert agent.tick() is None
+    agent.run(agent.runtime)
+    assert model.call_count == 2  # Scheduler decides when this retry happens.
 
 
 def test_parallel_axis_scores_and_superseded_results(monkeypatch):
@@ -131,7 +125,7 @@ def test_parallel_axis_scores_and_superseded_results(monkeypatch):
     monkeypatch.setattr(module + "request_scores", scores)
     agent.react("First input")
     with ThreadPoolExecutor(1) as worker:
-        tick = worker.submit(agent.tick)
+        tick = worker.submit(agent.run, agent.runtime)
         barrier.wait(timeout=2)
         # This would deadlock if inference held the update lock.
         agent.react("Newer input")
@@ -141,7 +135,7 @@ def test_parallel_axis_scores_and_superseded_results(monkeypatch):
     assert all(r["max_tokens"] == 1 for r in requests)
     assert all("First input" not in r["messages"][0]["content"] for r in requests)
     assert agent.state.pleasure == 0
-    assert agent._tick_requested.is_set()
+    assert len(agent._events) == 2  # Latest input remains available for the pending run.
     agent.on_stop()
 
 
@@ -151,7 +145,7 @@ def test_probability_weighted_axes_and_pause_rejects_inflight(monkeypatch):
     monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5))))
     monkeypatch.setattr(module + "request_scores", lambda *a: [.5, .2, .1, .1, .1])
     agent.react("An event")
-    agent.tick()
+    agent.run(agent.runtime)
     assert agent.state.pleasure == pytest.approx(-.45)
     assert agent.state.arousal == pytest.approx(-.45)
     assert not agent._events
@@ -160,6 +154,6 @@ def test_probability_weighted_axes_and_pause_rejects_inflight(monkeypatch):
         return [.0, .0, .0, .0, 1.]
     monkeypatch.setattr(module + "request_scores", pause)
     agent.react("Second event")
-    agent.tick()
+    agent.run(agent.runtime)
     assert agent.state.pleasure < 0
     agent.on_stop()

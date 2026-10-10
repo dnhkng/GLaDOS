@@ -8,6 +8,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from glados.autonomy.mind_runtime import MindRuntime
+from glados.autonomy.mind_schedule import FixedInterval
+from glados.autonomy.mind_scheduler import MindScheduler
 from glados.autonomy.slots import TaskSlotStore
 from glados.autonomy.subagent import Subagent, SubagentConfig, SubagentOutput
 from glados.tools.get_time import GetTime, current_time
@@ -59,14 +62,16 @@ def test_paused_mind_can_run_once_without_stopping_the_engine(monkeypatch: pytes
     shutdown = threading.Event()
 
     class Mind(Subagent):
-        def tick(self) -> SubagentOutput:
+        def run(self, runtime: MindRuntime) -> SubagentOutput:
             completed.set()
             return SubagentOutput(status="done", summary="Real result")
 
     store = TaskSlotStore()
-    mind = Mind(SubagentConfig("test", "Test", loop_interval_s=0.1), store, shutdown_event=shutdown)
+    mind = Mind(SubagentConfig("test", "Test"), store, shutdown_event=shutdown)
     mind.set_paused(True)
-    thread = mind.start()
+    scheduler = MindScheduler(store)
+    scheduler.register(mind, FixedInterval(0.1))
+    scheduler.start_all()
     try:
         assert not completed.wait(0.2), "Starting a paused mind must not execute work"
         mind.request_tick()
@@ -79,5 +84,5 @@ def test_paused_mind_can_run_once_without_stopping_the_engine(monkeypatch: pytes
         assert completed.wait(2)
     finally:
         shutdown.set()
-        thread.join(2)
-    assert not thread.is_alive()
+        scheduler.shutdown()
+    assert not scheduler._thread.is_alive()

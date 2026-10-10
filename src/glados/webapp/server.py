@@ -349,9 +349,9 @@ class _Handler(BaseHTTPRequestHandler):
                 if agent is None:
                     return self._json(404, {"error": "Background core not found"})
                 if action in {"pause", "resume"}:
-                    agent.set_paused(action == "pause")
+                    manager.pause(agent_id, action == "pause")
                 elif action == "run":
-                    agent.request_tick()
+                    manager.trigger(agent_id)
                 else:
                     raise ValueError("Unknown core action")
                 engine.observability_bus.emit("subagent", "control", f"{agent_id}: {action}")

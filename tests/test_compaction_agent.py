@@ -55,19 +55,19 @@ def test_non_overlapping_bands(age: int, band: int) -> None:
 
 def test_idle_and_small_history_do_not_infer(make_agent: AgentFactory) -> None:
     agent, model = make_agent(history(old=0))
-    assert agent.tick().status == "monitoring"
+    assert agent.run(agent.runtime).status == "monitoring"
     assert model.call_count == 0
     agent, _ = make_agent(None)
-    assert "No conversation store" in agent.tick().summary
+    assert "No conversation store" in agent.run(agent.runtime).summary
     agent, _ = make_agent(llm_config=None)
-    assert "No LLM" in agent.tick().summary
+    assert "No LLM" in agent.run(agent.runtime).summary
 
 
 def test_compaction_preserves_last_eight_and_system_prompt(make_agent: AgentFactory) -> None:
     store = history()
     recent = store.snapshot()[-8:]
     agent, model = make_agent(store)
-    result = agent.tick()
+    result = agent.run(agent.runtime)
     assert result.status == "compacted"
     assert not result.notify_user
     assert store.snapshot()[-8:] == recent
@@ -89,7 +89,7 @@ def test_tool_exchange_is_not_split_at_recent_boundary(make_agent: AgentFactory)
         store.append({"role": "user" if i % 2 == 0 else "assistant", "content": f"Extra {i}"}, NOW)
     recent = store.snapshot()[-9:]
     agent, _ = make_agent(store)
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     assert store.snapshot()[-9:] == recent
 
 
@@ -101,7 +101,7 @@ def test_tool_exchange_is_not_split_across_age_bands(make_agent: AgentFactory) -
     for record in history(old=0).records()[1:]:
         store.append(record.message, record.end_at)
     agent, _ = make_agent(store, token_threshold=100)
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     assert len(store.snapshot()) == 9
     assert store.records()[0].summary_level == 0
     assert store.records()[0].start_at == NOW - 3601
@@ -111,12 +111,12 @@ def test_tool_exchange_is_not_split_across_age_bands(make_agent: AgentFactory) -
 def test_distinct_age_bands_merge_without_duplication(make_agent: AgentFactory) -> None:
     store = history(old=8, age=20000)
     agent, model = make_agent(store)
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     assert store.records()[1].summary_level == 2
-    assert agent.tick().status == "monitoring"
+    assert agent.run(agent.runtime).status == "monitoring"
     model.reset_mock()
     agent._clock = lambda: NOW + 86400
-    assert agent.tick().status == "compacted"  # Aging one summary only changes its metadata.
+    assert agent.run(agent.runtime).status == "compacted"  # Aging one summary only changes its metadata.
     assert store.records()[1].summary_level == 4
     model.assert_not_called()
     assert len([r for r in store.records() if r.summary_level is not None]) == 1
@@ -131,7 +131,7 @@ def test_concurrent_append_survives_compaction(make_agent: AgentFactory) -> None
         return "The user prefers English and chose E4B."
 
     model.side_effect = summarize
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     assert store.snapshot()[-1]["content"] == "New input arrived during inference"
 
 
@@ -144,7 +144,7 @@ def test_concurrent_edit_revokes_replacement(make_agent: AgentFactory) -> None:
         return "Old note."
 
     model.side_effect = summarize
-    assert "History changed" in agent.tick().summary
+    assert "History changed" in agent.run(agent.runtime).summary
     assert store.snapshot()[1]["content"] == "Corrected while summarizing"
     assert not any(r.summary_level is not None for r in store.records())
 
@@ -154,13 +154,13 @@ def test_failure_preserves_every_record(make_agent: AgentFactory) -> None:
     before = store.records()
     agent, model = make_agent(store)
     model.return_value = None
-    assert agent.tick().status == "error"
+    assert agent.run(agent.runtime).status == "error"
     assert store.records() == before
 
 
 def test_busy_interactive_turn_defers_work(make_agent: AgentFactory) -> None:
     agent, model = make_agent(history(), interactive_busy=lambda: True)
-    assert "Waiting" in agent.tick().summary
+    assert "Waiting" in agent.run(agent.runtime).summary
     model.assert_not_called()
 
 
@@ -168,7 +168,7 @@ def test_large_inputs_are_read_in_full_with_bounded_calls(make_agent: AgentFacto
     store = history()
     store.modify_message(1, {"content": "HEAD " + "long information " * 2000 + " TAIL"})
     agent, model = make_agent(store)
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     prompts = [call.args[2] for call in model.call_args_list]
     assert any("HEAD" in p for p in prompts) and any("TAIL" in p for p in prompts)
     assert all(len(p) < 3700 for p in prompts)
@@ -178,10 +178,9 @@ def test_large_inputs_are_read_in_full_with_bounded_calls(make_agent: AgentFacto
 def test_manual_run_can_compact_small_old_batch(make_agent: AgentFactory) -> None:
     store = history(old=1)
     agent, model = make_agent(store)
-    assert agent.tick().status == "monitoring"
-    agent._running = True
-    agent.request_tick()
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "monitoring"
+    agent.runtime.manual = True
+    assert agent.run(agent.runtime).status == "compacted"
     assert model.called
 
 
@@ -191,7 +190,7 @@ def test_persistence_restores_summary_ranges_and_recent_history(tmp_path: Path, 
     for record in history().records()[1:]:
         store.append(record.message, record.end_at)
     agent, _ = make_agent(store)
-    assert agent.tick().status == "compacted"
+    assert agent.run(agent.runtime).status == "compacted"
     restored = ConversationStore([{"role": "system", "content": "New prompt"}], path=path)
     assert restored.snapshot()[0]["content"] == "New prompt"
     assert restored.records()[1:] == store.records()[1:]

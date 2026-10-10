@@ -190,7 +190,7 @@ def test_maintenance_tick_preserves_semantic_result(recall_core, monkeypatch):
     recall_core._recall_query = "dinner"
     recall_core._recall_result = {"facts": [{"id": "64"}], "context": "Semantic steak finding"}
     monkeypatch.setattr(recall_core, "recall_for", lambda *a: pytest.fail("Maintenance used lexical recall"))
-    recall_core.tick()
+    recall_core.run(recall_core.runtime)
     assert recall_core._recall_result["context"] == "Semantic steak finding"
 
 

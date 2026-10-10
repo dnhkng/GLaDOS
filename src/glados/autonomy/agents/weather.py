@@ -10,6 +10,7 @@ import httpx
 from loguru import logger
 
 from ...core.llm_decision import LLMConfig, LLMDecisionError, UrgencyDecision, llm_decide_sync
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 WEATHER_CODES: dict[int, str] = {
@@ -68,7 +69,7 @@ class WeatherSubagent(Subagent):
         self._last_temp: float | None = None
         self._last_code: int | None = None
 
-    def tick(self) -> SubagentOutput | None:
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
         """Fetch and analyze current weather."""
         if self._latitude is None or self._longitude is None:
             return SubagentOutput(
@@ -145,7 +146,6 @@ class WeatherSubagent(Subagent):
             notify_user=notify_user,
             importance=importance,
             confidence=0.7,
-            next_run=self._config.loop_interval_s,
         )
 
     def _generate_report(

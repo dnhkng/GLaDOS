@@ -83,7 +83,11 @@ def test_http_operations_change_state_and_reject_invalid_inputs() -> None:
         mind = SimpleNamespace(paused=False, requested=False)
         mind.set_paused = lambda paused: setattr(mind, "paused", paused)
         mind.request_tick = lambda: setattr(mind, "requested", True)
-        engine.subagent_manager = SimpleNamespace(get=lambda name: mind if name == "emotion" else None)
+        engine.subagent_manager = SimpleNamespace(
+            pause=lambda agent_id, paused: mind.set_paused(paused),
+            trigger=lambda agent_id: mind.request_tick(),
+            get=lambda name: mind if name == "emotion" else None,
+        )
         assert post("/api/minds/control", {"agent_id": "emotion", "action": "pause"})[0] == 200
         assert mind.paused and not engine.shutdown_event.is_set()
         assert post("/api/minds/control", {"agent_id": "emotion", "action": "run"})[0] == 200

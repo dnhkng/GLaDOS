@@ -19,6 +19,7 @@ from ...core.news_pages import read_news_page
 from ...core.search_preferences import SearchPreferences, SearchSources
 from ...mcp.search_results import compact_search_results
 from ..llm_client import LLMConfig, llm_call
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 
@@ -154,7 +155,7 @@ class SearchAgent(Subagent):
     ) -> None:
         super().__init__(
             SubagentConfig(
-                "search", "Search Core", role="Requested research and source verification", loop_interval_s=3600
+                "search", "Search Core", role="Requested research and source verification"
             ),
             **kwargs,
         )
@@ -180,7 +181,7 @@ class SearchAgent(Subagent):
                 "deadline_s": self.settings.deadline_s,
             }
 
-    def tick(self) -> SubagentOutput | None:
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
         # No periodic browsing or inference: research runs only for an authorized request.
         if self._slot_store.get_slot(self.agent_id) is None:
             return SubagentOutput(status="idle", summary="Ready for requested research", notify_user=False)
@@ -194,12 +195,11 @@ class SearchAgent(Subagent):
                     status=slot.status, summary=slot.summary, report=slot.report, notify_user=False, context=None
                 )
 
-    def set_paused(self, paused: bool) -> None:
+    def on_pause(self, paused: bool) -> None:
         with self._state_lock:
             if paused:
                 self._cancel_epoch += 1
                 self.clear_context()
-            super().set_paused(paused)
 
     def research(
         self,
