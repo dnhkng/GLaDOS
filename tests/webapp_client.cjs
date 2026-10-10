@@ -209,6 +209,9 @@ class Element {
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
   context.GladosVision.ThemedVision=function(canvas){const instance=new ThemedVision(canvas);optics.push(instance);return instance;};
+  const smallLCD=new Element();smallLCD.getBoundingClientRect=()=>({width:120,height:55});
+  const lcdVision=new Vision(smallLCD);lcdVision.resize();
+  assert.ok(Math.abs(smallLCD.width/smallLCD.height-120/55)<.01,'Small LCD keeps its camera aspect ratio');
   const animators = [], Animator = context.GladosRig.Animator;
   context.GladosRig.Animator = function () { const instance = new Animator(); animators.push(instance); return instance; };
   const activity=()=>node('glados-eye').attributes['aria-label'].match(/aperture: ([^,]+)/)[1].replace(/^./,c=>c.toUpperCase());

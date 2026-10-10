@@ -226,6 +226,7 @@ def test_webapp_server_serves_snapshot_and_stream() -> None:
             ("glados-overview.js", "application/javascript"),
             ("glados-portal.js", "application/javascript"),
             ("glados-portal.css", "text/css"),
+            ("LCD-PCB-Module-Frame.png", "image/png"),
             ("glados-vision-themes.js", "application/javascript"),
             ("glados-themes.css", "text/css"),
             ("glados-console.css", "text/css"),

@@ -59,7 +59,9 @@
     resize() {
       const r = this.cv.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const w = Math.max(160, Math.round(r.width * dpr)), h = Math.max(90, Math.round(r.height * dpr));
+      // Scale both axes together so a small, wide LCD does not stretch the camera.
+      const scale = Math.max(dpr, 160 / Math.max(1, r.width), 90 / Math.max(1, r.height));
+      const w = Math.round(Math.max(1, r.width) * scale), h = Math.round(Math.max(1, r.height) * scale);
       if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; }
       this.dpr = dpr;
     }

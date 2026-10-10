@@ -198,3 +198,17 @@ button.pict-tile:disabled { cursor: default; }
 :root[data-surface="presence"] .overview-grid,
 :root[data-surface="presence"] .presence-info,
 :root[data-surface="presence"] .presence-speech {scrollbar-gutter:stable}
+
+/* The supplied PNG is a transparent overlay; the live LCD stays inside its opening. */
+:root[data-theme="potato"] .avatar-optic {aspect-ratio:4/3;border:0;border-radius:0;background:transparent;overflow:hidden}
+:root[data-theme="potato"] .avatar-optic::before,
+:root[data-theme="potato"] .avatar-optic canvas,
+:root[data-theme="potato"] .avatar-optic-hud {inset:auto;left:16.15%;top:30.75%;width:68.1%;height:41.8%;border-radius:2px}
+:root[data-theme="potato"] .avatar-optic::before {content:"";position:absolute;background:#0f380f}
+:root[data-theme="potato"] .avatar-optic::after {content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:url("LCD-PCB-Module-Frame.png") center/100% 100% no-repeat}
+:root[data-theme="potato"] .avatar-optic-hud {overflow:hidden;color:#9bbc0f;font-size:clamp(7px,.8vw,10px);letter-spacing:.06em}
+:root[data-theme="potato"] .avatar-optic-hud span {background:rgba(15,56,15,.6)}
+:root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(110px,100dvh - 300px) * 4 / 3))}
+@media(max-width:520px) {
+  :root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(120px,100dvh - 650px) * 4 / 3))}
+}
