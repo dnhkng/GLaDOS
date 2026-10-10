@@ -16,7 +16,7 @@ def make_config() -> SubagentConfig:
         agent_id="test_observer",
         title="Test Observer",
         role="meta_supervision",
-        loop_interval_s=60.0,
+
     )
 
 
@@ -90,7 +90,7 @@ class TestObserverAgentTick:
         config = make_config()
         agent = ObserverAgent(config, slot_store=TaskSlotStore())
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "idle"
@@ -113,7 +113,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "monitoring"
@@ -137,7 +137,7 @@ class TestObserverAgentTick:
         # First tick analyzes
         agent._last_analysis_count = 5
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "monitoring"
@@ -160,7 +160,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "stable"
@@ -192,7 +192,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "adjusted"
@@ -229,7 +229,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "rejected"
@@ -255,7 +255,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "error"
@@ -278,7 +278,7 @@ class TestObserverAgentTick:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "error"
@@ -311,7 +311,7 @@ class TestObserverAgentAnalyze:
         )
 
         # User and system messages do not count toward the six required samples.
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "monitoring"
@@ -338,7 +338,7 @@ class TestObserverAgentAnalyze:
         )
 
         # Only 3 valid messages
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "monitoring"
@@ -363,7 +363,7 @@ class TestObserverAgentAnalyze:
             min_samples_for_analysis=5,
         )
 
-        result = agent.tick()
+        result = agent.run(agent.runtime)
 
         assert result is not None
         assert result.status == "monitoring"

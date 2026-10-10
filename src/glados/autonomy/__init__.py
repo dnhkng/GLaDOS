@@ -3,9 +3,10 @@ from .constitution import Constitution, ConstitutionalState, PromptModifier
 from .event_bus import EventBus
 from .interaction_state import InteractionState
 from .loop import AutonomyLoop
+from .mind_scheduler import MindScheduler, SubagentStatus
 from .slots import TaskSlotStore
 from .subagent import Subagent, SubagentConfig, SubagentOutput
-from .subagent_manager import SubagentManager, SubagentStatus
+from .subagent_manager import SubagentManager
 from .subagent_memory import MemoryEntry, SubagentMemory
 from .task_manager import TaskManager, TaskResult
 
@@ -19,6 +20,7 @@ __all__ = [
     "HackerNewsJobConfig",
     "InteractionState",
     "MemoryEntry",
+    "MindScheduler",
     "PromptModifier",
     "Subagent",
     "SubagentConfig",

@@ -27,8 +27,8 @@ from ..autonomy import (
     ConstitutionalState,
     EventBus,
     InteractionState,
+    MindScheduler,
     SubagentConfig,
-    SubagentManager,
     TaskManager,
     TaskSlotStore,
 )
@@ -38,6 +38,7 @@ from ..autonomy.agents.search_agent import SearchAgent, SearchConfig
 from ..autonomy.emotion_state import EmotionEvent
 from ..autonomy.events import TimeTickEvent
 from ..autonomy.llm_client import LLMConfig
+from ..autonomy.mind_schedule import FixedInterval, OnDemand, RandomAdaptive
 from ..autonomy.summarization import estimate_tokens
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
@@ -390,7 +391,7 @@ class Glados:
         self.autonomy_loop: AutonomyLoop | None = None
         self.autonomy_slots: TaskSlotStore | None = None
         self.autonomy_tasks: TaskManager | None = None
-        self.subagent_manager: SubagentManager | None = None
+        self.subagent_manager: MindScheduler | None = None
         self._emotion_agent: EmotionAgent | None = None
         self.compaction_agent: CompactionAgent | None = None
         self.constitutional_state = ConstitutionalState()
@@ -447,7 +448,7 @@ class Glados:
         if self.search_config.enabled or self.health_config.enabled or self.vision_state is not None or self.autonomy_config.emotion.enabled or self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled or (
             self.autonomy_config.enabled and self.autonomy_config.jobs.enabled
         ):
-            self.subagent_manager = SubagentManager(
+            self.subagent_manager = MindScheduler(
                 slot_store=self.autonomy_slots,
                 mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus,
@@ -875,7 +876,7 @@ class Glados:
                 slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
             )
-            self.subagent_manager.register(self.health_agent)
+            self.subagent_manager.register(self.health_agent, FixedInterval(health.interval_s))
 
         search = getattr(self, 'search_config', None)
         if search and search.enabled:
@@ -887,7 +888,7 @@ class Glados:
                 slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
             )
-            self.subagent_manager.register(self.search_agent)
+            self.subagent_manager.register(self.search_agent, OnDemand())
 
         # Vision stays on E4B even when conversation uses a remote API model.
         if self.vision_state is not None and self.vision_config is not None:
@@ -907,7 +908,10 @@ class Glados:
                 settings_path=resource_path("data/vision_settings.yaml"),
                 greetings_path=resource_path("data/vision_greetings.json"),
             )
-            self.subagent_manager.register(self.vision_agent)
+            self.subagent_manager.register(self.vision_agent, RandomAdaptive(
+                bounds=lambda: (self.vision_agent.settings.interval_min_s, self.vision_agent.settings.interval_max_s),
+                activity=lambda: self.vision_agent.camera.motion.snapshot()["activity"],
+            ))
 
         # Emotional regulation is independent of background job scheduling.
         if self.autonomy_config.emotion.enabled:
@@ -916,8 +920,6 @@ class Glados:
                 agent_id="emotion",
                 title="Emotion Core",
                 role="emotional_regulation",
-                loop_interval_s=emotion_cfg.tick_interval_s,
-                run_on_start=True,
             )
             emotion_agent = EmotionAgent(
                 config=emotion_subagent_config,
@@ -928,7 +930,7 @@ class Glados:
                 observability_bus=self.observability_bus,
                 shutdown_event=self.shutdown_event,
             )
-            self.subagent_manager.register(emotion_agent)
+            self.subagent_manager.register(emotion_agent, FixedInterval(emotion_cfg.tick_interval_s))
             self._emotion_agent = emotion_agent  # Keep reference for event pushing
 
         # Context maintenance is a background Mind even with autonomous speech OFF.
@@ -947,8 +949,7 @@ class Glados:
                 if vision else replace(llm_config, owner="Compaction")
             )
             self.compaction_agent = CompactionAgent(
-                config=SubagentConfig(agent_id="compaction", title="Memory Core", role="Recall and context management",
-                                      loop_interval_s=tokens.tick_interval_s, run_on_start=True),
+                config=SubagentConfig(agent_id="compaction", title="Memory Core", role="Recall and context management"),
                 llm_config=memory_llm,
                 conversation_store=self._conversation_store, token_threshold=threshold,
                 preserve_recent=tokens.preserve_recent_messages, summary_max_tokens=tokens.summary_max_tokens,
@@ -959,7 +960,7 @@ class Glados:
                 slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
                 observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
             )
-            self.subagent_manager.register(self.compaction_agent)
+            self.subagent_manager.register(self.compaction_agent, FixedInterval(tokens.tick_interval_s))
 
         if not (self.autonomy_config.enabled and jobs_config.enabled):
             return
@@ -969,8 +970,6 @@ class Glados:
                 agent_id="hn_top",
                 title="Hacker News",
                 role="news_monitor",
-                loop_interval_s=jobs_config.hacker_news.interval_s,
-                run_on_start=True,
             )
             hn_subagent = HackerNewsSubagent(
                 config=hn_config,
@@ -982,7 +981,7 @@ class Glados:
                 observability_bus=self.observability_bus,
                 shutdown_event=self.shutdown_event,
             )
-            self.subagent_manager.register(hn_subagent)
+            self.subagent_manager.register(hn_subagent, FixedInterval(jobs_config.hacker_news.interval_s))
 
         if jobs_config.weather.enabled:
             if jobs_config.weather.latitude is None or jobs_config.weather.longitude is None:
@@ -992,8 +991,6 @@ class Glados:
                     agent_id="weather",
                     title="Weather",
                     role="weather_monitor",
-                    loop_interval_s=jobs_config.weather.interval_s,
-                    run_on_start=True,
                 )
                 weather_subagent = WeatherSubagent(
                     config=weather_config,
@@ -1008,15 +1005,13 @@ class Glados:
                     observability_bus=self.observability_bus,
                     shutdown_event=self.shutdown_event,
                 )
-                self.subagent_manager.register(weather_subagent)
+                self.subagent_manager.register(weather_subagent, FixedInterval(jobs_config.weather.interval_s))
 
         # Observer agent - monitors behavior and proposes adjustments
         observer_config = SubagentConfig(
             agent_id="observer",
             title="Behavior Observer",
             role="meta_supervision",
-            loop_interval_s=120.0,  # Analyze every 2 minutes
-            run_on_start=False,  # Wait for conversation to build up
         )
         observer_agent = ObserverAgent(
             config=observer_config,
@@ -1030,7 +1025,7 @@ class Glados:
             observability_bus=self.observability_bus,
             shutdown_event=self.shutdown_event,
         )
-        self.subagent_manager.register(observer_agent)
+        self.subagent_manager.register(observer_agent, FixedInterval(120), run_on_start=False)
 
     def play_announcement(self, interruptible: bool | None = None) -> None:
         """
@@ -1658,14 +1653,14 @@ class Glados:
                     for status in self.subagent_manager.list_agents():
                         agent = self.subagent_manager.get(status.agent_id)
                         self._quiet_saved_pauses[status.agent_id] = agent.paused
-                        agent.set_paused(True)
+                        self.subagent_manager.pause(status.agent_id)
             else:
                 self.quiet_event.clear()
                 if self.subagent_manager:
                     for agent_id, paused in self._quiet_saved_pauses.items():
                         agent = self.subagent_manager.get(agent_id)
                         if agent:
-                            agent.set_paused(paused)
+                            self.subagent_manager.pause(agent_id, paused)
                 self._quiet_saved_pauses.clear()
             self.observability_bus.emit("quiet", "control", "Sleeping; listening only for wake requests" if enabled else "Awake")
 

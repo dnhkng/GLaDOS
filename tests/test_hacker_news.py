@@ -20,9 +20,9 @@ def test_verdicts_survive_restart_and_only_unpublished_relevant_stories_remain(t
         result = HackerNewsSubagent(SubagentConfig("hn", "HN"), slot_store=Mock(), top_n=1, llm_config=LLMConfig("http://test"))
         monkeypatch.setattr(result, "_fetch_top_stories", lambda: stories)
         return result
-    first = agent().tick()
+    first = (lambda a: a.run(a.runtime))(agent())
     assert first.raw["stories"][0]["id"] == 0
-    second = agent().tick()
+    second = (lambda a: a.run(a.runtime))(agent())
     assert second.raw["stories"][0]["id"] == 2
-    assert agent().tick().status == "idle"
+    assert (lambda a: a.run(a.runtime))(agent()).status == "idle"
     assert judge.call_count == 3

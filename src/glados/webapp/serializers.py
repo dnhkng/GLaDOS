@@ -293,7 +293,9 @@ def build_minds(engine: Any) -> list[dict[str, Any]]:
                 continue
             row = serialize_agent(status)
             row.update(id=status.agent_id, kind="background", role=agent.config.role,
-                       paused=agent.paused, interval_s=agent.config.loop_interval_s,
+                       paused=agent.paused, interval_s=getattr(status, "interval_s", None),
+                       execution_status=getattr(status, "status", "waiting"),
+                       next_due_in_s=getattr(status, "next_due_in_s", None),
                        model=agent.llm.model if status.agent_id == "vision" else getattr(engine, "llm_model", "Unknown"))
             if status.agent_id == "vision":
                 row.update(interval_min_s=agent.settings.interval_min_s, interval_max_s=agent.settings.interval_max_s)

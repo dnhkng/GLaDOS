@@ -1,8 +1,8 @@
 """
 Subagent base class and configuration for the GLaDOS autonomy system.
 
-Subagents are independent agents that run their own loops, process events,
-and write outputs to slots for the main agent to consume.
+Subagents perform domain work and publish outputs to context slots.
+The shared mind scheduler owns their lifecycle and timing.
 """
 
 from __future__ import annotations
@@ -10,11 +10,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import threading
-import time
 from typing import TYPE_CHECKING, Any
 
-from loguru import logger
-
+from .mind_runtime import MindRuntime
 from .subagent_memory import SubagentMemory
 
 if TYPE_CHECKING:
@@ -29,10 +27,7 @@ class SubagentConfig:
     agent_id: str
     title: str
     role: str = ""
-    system_prompt: str = ""
-    loop_interval_s: float = 10.0
     memory_max_entries: int = 100
-    run_on_start: bool = True
 
 
 @dataclass
@@ -46,13 +41,15 @@ class SubagentOutput:
         notify_user: Whether this update should notify the user
         importance: Priority signal 0.0-1.0
         confidence: Confidence score 0.0-1.0
-        next_run: Seconds until next scheduled run
+        next_run: Optional progress metadata (does not control scheduling)
         raw: Arbitrary data for internal use
     """
 
     status: str
     summary: str
     report: str | None = None
+    context: str | None = None
+    turn_id: str | None = None
     notify_user: bool = False  # Compatibility for older producers; use update_priority in new code.
     importance: float | None = None
     confidence: float | None = None
@@ -63,11 +60,9 @@ class SubagentOutput:
 
 
 class Subagent(ABC):
-    """
-    Base class for all subagents.
+    """Domain worker. Timing, threads and execution status belong to MindScheduler.
 
-    Subagents run independently in their own threads, process on configurable
-    intervals, and write outputs to slots that the main agent can read.
+    Constructors receive only domain dependencies; inference is optional.
     """
 
     def __init__(
@@ -80,20 +75,10 @@ class Subagent(ABC):
     ) -> None:
         self._config = config
         self._slot_store = slot_store
-        self._mind_registry = mind_registry
         self._observability_bus = observability_bus
         self._shutdown_event = shutdown_event or threading.Event()
-        self._running = False
-        self._thread: threading.Thread | None = None
-        self._last_tick: float = 0.0
-        self._tick_count: int = 0
-        self._paused = threading.Event()
-        self._tick_requested = threading.Event()
-        self._tick_is_requested = False
-        self._memory = SubagentMemory(
-            agent_id=config.agent_id,
-            max_entries=config.memory_max_entries,
-        )
+        self.runtime = MindRuntime(self, self._shutdown_event)
+        self._memory = SubagentMemory(agent_id=config.agent_id, max_entries=config.memory_max_entries)
 
     @property
     def agent_id(self) -> str:
@@ -109,162 +94,40 @@ class Subagent(ABC):
 
     @property
     def is_running(self) -> bool:
-        return self._running
-
-    @property
-    def memory(self) -> SubagentMemory:
-        """Access this subagent's persistent memory."""
-        return self._memory
-
-    @abstractmethod
-    def tick(self) -> SubagentOutput | None:
-        """
-        Execute one iteration of the subagent's work.
-
-        Returns:
-            SubagentOutput if there's something to report, None otherwise.
-        """
-        ...
-
-    def on_start(self) -> None:
-        """Called when the subagent starts. Override for initialization."""
-        pass
-
-    def on_stop(self) -> None:
-        """Called when the subagent stops. Override for cleanup."""
-        pass
-
-    def run(self) -> None:
-        """Main loop for the subagent. Runs tick() at configured intervals."""
-        self._running = True
-        logger.info("Subagent %s started.", self._config.agent_id)
-
-        if self._mind_registry:
-            self._mind_registry.register(
-                mind_id=self._config.agent_id,
-                title=self._config.title,
-                status="running",
-                summary="Starting",
-                role=self._config.role,
-            )
-
-        if self._observability_bus:
-            self._observability_bus.emit(
-                source="subagent",
-                kind="start",
-                message=f"{self._config.title} started",
-                meta={"agent_id": self._config.agent_id},
-            )
-
-        try:
-            self.on_start()
-
-            # Run immediately on start if configured
-            if self._config.run_on_start and not self._paused.is_set():
-                self._do_tick()
-
-            while not self._shutdown_event.is_set():
-                if self._paused.is_set() and not self._tick_requested.is_set():
-                    self._shutdown_event.wait(timeout=0.1)
-                    continue
-                next_tick_in = self._seconds_until_next_tick()
-                if next_tick_in > 0 and not self._tick_requested.is_set():
-                    self._tick_requested.wait(timeout=min(next_tick_in, 1.0))
-                    if self._shutdown_event.is_set():
-                        break
-                    continue
-
-                self._tick_is_requested = self._tick_requested.is_set()
-                self._tick_requested.clear()
-                try:
-                    self._do_tick()
-                finally:
-                    self._tick_is_requested = False
-
-        except Exception as exc:
-            logger.exception("Subagent %s crashed: %s", self._config.agent_id, exc)
-            if self._mind_registry:
-                self._mind_registry.update(
-                    self._config.agent_id,
-                    status="error",
-                    summary=f"Crashed: {exc}",
-                )
-        finally:
-            self._running = False
-            self.on_stop()
-
-            if self._mind_registry:
-                self._mind_registry.update(
-                    self._config.agent_id,
-                    status="stopped",
-                    summary="Shutdown",
-                )
-
-            if self._observability_bus:
-                self._observability_bus.emit(
-                    source="subagent",
-                    kind="stop",
-                    message=f"{self._config.title} stopped",
-                    meta={"agent_id": self._config.agent_id, "tick_count": self._tick_count},
-                )
-
-            logger.info("Subagent %s stopped.", self._config.agent_id)
-
-    def _seconds_until_next_tick(self) -> float:
-        """Time until scheduled work; event-driven agents may reset their deadline."""
-        return self._config.loop_interval_s - (time.time() - self._last_tick)
-
-    def _do_tick(self) -> None:
-        """Execute a single tick and update slot."""
-        self._last_tick = time.time()
-        self._tick_count += 1
-
-        if self._mind_registry:
-            self._mind_registry.update(
-                self._config.agent_id,
-                status="running",
-                summary=f"Tick #{self._tick_count}",
-            )
-
-        try:
-            output = self.tick()
-        except Exception as exc:
-            logger.warning("Subagent %s tick failed: %s", self._config.agent_id, exc)
-            output = SubagentOutput(
-                status="error",
-                summary=f"Tick failed: {exc}",
-                notify_user=False,
-            )
-
-        if output is not None:
-            self.write_slot(
-                status=output.status,
-                summary=output.summary,
-                report=output.report,
-                notify_user=output.notify_user,
-                importance=output.importance,
-                confidence=output.confidence,
-                next_run=output.next_run,
-                attention_key=output.attention_key,
-                update_priority=output.update_priority,
-            )
+        return self.runtime.enabled
 
     @property
     def paused(self) -> bool:
-        return self._paused.is_set()
+        return self.runtime.paused
+
+    @property
+    def memory(self) -> SubagentMemory:
+        return self._memory
+
+    @abstractmethod
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
+        """Perform one unit of work, returning an optional final update."""
+        ...
+
+    def on_start(self) -> None:
+        return None
+
+    def on_stop(self) -> None:
+        return None
+
+    def on_pause(self, paused: bool) -> None:
+        """Optional domain cleanup, such as disabling camera capture."""
+        return None
 
     def set_paused(self, paused: bool) -> None:
-        """Pause future scheduled ticks; an in-progress tick may finish."""
-        if paused:
-            self._paused.set()
-        else:
-            self._paused.clear()
+        """Compatibility control; the scheduler owns pause state."""
+        self.runtime.set_paused(paused)
 
     def request_tick(self) -> None:
-        """Queue one tick on the existing worker, including while paused."""
-        if not self.is_running:
-            raise ValueError("Mind is not running")
-        self._tick_requested.set()
+        """Compatibility control for callers requesting a manual run."""
+        if not self.runtime.scheduler:
+            raise ValueError("Mind is not registered with a scheduler")
+        self.runtime.scheduler.trigger(self.agent_id)
 
     def write_slot(
         self,
@@ -280,10 +143,10 @@ class Subagent(ABC):
         update_priority: str | None = None,
         turn_id: str | None = None,
     ) -> None:
-        """Write output to this subagent's slot."""
+        """Publish domain context; progress and returned updates share this path."""
         self._slot_store.update_slot(
-            slot_id=self._config.agent_id,
-            title=self._config.title,
+            slot_id=self.agent_id,
+            title=self.title,
             status=status,
             summary=summary,
             report=report,
@@ -296,27 +159,3 @@ class Subagent(ABC):
             update_priority=update_priority,
             turn_id=turn_id,
         )
-
-    def start(self) -> threading.Thread:
-        """Start the subagent in a new daemon thread."""
-        if self._running:
-            raise RuntimeError(f"Subagent {self._config.agent_id} is already running")
-
-        self._thread = threading.Thread(
-            target=self.run,
-            name=f"Subagent-{self._config.agent_id}",
-            daemon=True,
-        )
-        self._thread.start()
-        return self._thread
-
-    def stop(self, timeout: float = 5.0) -> None:
-        """Signal the subagent to stop and wait for it."""
-        if not self._running:
-            return
-
-        self._shutdown_event.set()
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=timeout)
-            if self._thread.is_alive():
-                logger.warning("Subagent %s did not stop within timeout.", self._config.agent_id)

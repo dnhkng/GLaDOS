@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from itertools import pairwise
 import json
 from pathlib import Path
-import random
 import threading
 import time
 from typing import Any
@@ -19,6 +18,7 @@ from numpy.typing import NDArray
 import requests
 
 from ..autonomy.llm_client import LLMConfig
+from ..autonomy.mind_runtime import MindRuntime
 from ..autonomy.slots import TaskSlotStore
 from ..autonomy.subagent import Subagent, SubagentConfig, SubagentOutput
 from ..core.inference import InferenceCancelledError
@@ -142,8 +142,6 @@ class VisionMind(Subagent):
                 agent_id="vision",
                 title="Vision Core",
                 role="Scene and visual changes",
-                loop_interval_s=vision_config.interval_s,
-                run_on_start=True,
             ),
             slot_store=slot_store,
             mind_registry=mind_registry,
@@ -171,8 +169,6 @@ class VisionMind(Subagent):
             "scene": None, "changes": None, "recent_events": None, "revision": 0, "error": None,
             "inference_sequence": 0, "inference_active": 0,
         }
-        self._manual = threading.Event()
-        self._interval_quantile = random.random()
         self._presence_history = PresenceHistory(vision_config.greeting_absence_s)
         self._daily_greetings = DailyGreetingHistory(greetings_path)
 
@@ -188,35 +184,20 @@ class VisionMind(Subagent):
                 write_settings(self._settings_path, saved)
             self.settings.interval_min_s = validated.interval_min_s
             self.settings.interval_max_s = validated.interval_max_s
-            self._config.loop_interval_s = validated.interval_s
-            self._interval_quantile = random.random()
+        if self.runtime.scheduler:
+            self.runtime.scheduler.reschedule(self.agent_id)
 
-    def _do_tick(self) -> None:
-        # Draw once per analysis. Motion can change the deadline without drawing again.
-        with self._state_lock:
-            self._interval_quantile = random.random()
-        super()._do_tick()
-
-    def _motion_delay(self, activity: float) -> float:
-        quantile = self._interval_quantile
-        quiet = quantile ** 0.25
-        active = 1 - (1 - quantile) ** 0.25
-        weight = max(0.0, min(1.0, activity))
-        fraction = quiet * (1 - weight) + active * weight
-        return self.settings.interval_min_s + (self.settings.interval_max_s - self.settings.interval_min_s) * fraction
-
-    def _seconds_until_next_tick(self) -> float:
-        activity = self.camera.motion.snapshot()["activity"]
-        with self._state_lock:
-            return self._motion_delay(activity) - (time.time() - self._last_tick)
+    def _scheduled_delay(self) -> float:
+        scheduler = self.runtime.scheduler
+        delay = scheduler.delay(self.agent_id) if scheduler else None
+        return delay if delay is not None else self.settings.interval_s
 
     def on_stop(self) -> None:
         self.camera.stop()
         self.vision_state.clear()
 
-    def set_paused(self, paused: bool) -> None:
+    def on_pause(self, paused: bool) -> None:
         with self._state_lock:
-            super().set_paused(paused)
             self.camera.set_enabled(not paused)
             if paused:
                 self.vision_state.clear()
@@ -243,15 +224,9 @@ class VisionMind(Subagent):
             self._slot_store.update_slot("vision", "Vision Core", "paused" if self.paused else "waiting",
                                          "Waiting for the selected camera", notify_user=False)
 
-    def request_tick(self) -> None:
-        if not self.is_running:
-            raise ValueError("Mind is not running")
-        self._manual.set()
-        self.camera.set_enabled(True)
-        super().request_tick()
-
     def snapshot(self) -> dict[str, Any]:
         motion = self.camera.motion.snapshot()
+        delay = self._scheduled_delay()
         with self._state_lock:
             times = list(self._completed)
             rate = (len(times) - 1) / (times[-1] - times[0]) if len(times) > 1 and times[-1] > times[0] else None
@@ -264,8 +239,8 @@ class VisionMind(Subagent):
                 "interval_min_s": self.settings.interval_min_s,
                 "interval_max_s": self.settings.interval_max_s,
                 "motion_activity": motion["activity"],
-                "next_delay_s": round(self._motion_delay(motion["activity"]), 2),
-                "target_hz": round(1 / self._motion_delay(motion["activity"]), 2),
+                "next_delay_s": round(delay, 2),
+                "target_hz": round(1 / delay, 2),
                 "completed_hz": round(rate, 2) if rate is not None else None,
                 "camera": self.camera.snapshot(),
             }
@@ -280,11 +255,12 @@ class VisionMind(Subagent):
     def tracking_snapshot(self) -> dict[str, Any]:
         """Small camera-only telemetry, independent of E4B and preview encoding."""
         camera = self.camera.snapshot()
+        delay = self._scheduled_delay()
         with self._state_lock:
             return {
                 "paused": self.paused, "camera": camera,
                 "motion_activity": camera["motion"]["activity"],
-                "next_delay_s": round(self._motion_delay(camera["motion"]["activity"]), 2),
+                "next_delay_s": round(delay, 2),
                 "inference_sequence": self._state["inference_sequence"],
                 "inference_active": self._state["inference_active"],
             }
@@ -302,11 +278,12 @@ class VisionMind(Subagent):
             with self._state_lock:
                 self._state["inference_active"] -= 1
 
-    def tick(self) -> SubagentOutput | None:
-        manual = self._manual.is_set()
-        self._manual.clear()
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
+        manual = runtime.manual
+        if manual:
+            self.camera.set_enabled(True)
         try:
-            if self._shutdown_event.is_set() or (self.paused and not manual):
+            if self.runtime.cancelled() or (self.paused and not manual):
                 return None
             if not self.camera.wait_ready():
                 return self._failed("Waiting for a fresh webcam frame")
@@ -316,7 +293,7 @@ class VisionMind(Subagent):
                         "Vision",
                         "autonomy",
                         self.llm.model,
-                        lambda: self._shutdown_event.is_set() or (self.paused and not manual),
+                        lambda: self.runtime.cancelled() or (self.paused and not manual),
                     )
                     if self.llm.scheduler
                     else nullcontext()
@@ -332,7 +309,7 @@ class VisionMind(Subagent):
         except (requests.RequestException, ValueError, KeyError, TypeError, IndexError, cv2.error) as exc:
             return self._failed(f"Vision unavailable: {type(exc).__name__}")
         finally:
-            if self.paused and not self._manual.is_set():
+            if self.paused:
                 self.camera.set_enabled(False)
 
     def _failed(self, error: str) -> SubagentOutput:
@@ -410,7 +387,7 @@ class VisionMind(Subagent):
         # Only successful observations advance the bounded image window. No JPEGs enter conversation history.
         completed_at = time.time()
         with self._state_lock:
-            if self._shutdown_event.is_set() or (self.paused and not manual):
+            if self.runtime.cancelled() or (self.paused and not manual):
                 return None
             if not self._recent_images:
                 changes = "First observation; no previous image."

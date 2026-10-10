@@ -15,6 +15,7 @@ from loguru import logger
 
 from ..constitution import ConstitutionalState, PromptModifier
 from ..llm_client import LLMConfig, llm_call
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 if TYPE_CHECKING:
@@ -90,7 +91,7 @@ class ObserverAgent(Subagent):
         """Get the current constitutional state."""
         return self._constitutional_state
 
-    def tick(self) -> SubagentOutput | None:
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
         """Analyze recent conversations and propose adjustments."""
         if not self._llm_config:
             return SubagentOutput(

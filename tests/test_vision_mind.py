@@ -23,6 +23,8 @@ from glados.autonomy.events import TimeTickEvent
 from glados.autonomy.interaction_state import InteractionState
 from glados.autonomy.llm_client import LLMConfig
 from glados.autonomy.loop import AutonomyLoop
+from glados.autonomy.mind_schedule import AdaptiveInterval
+from glados.autonomy.mind_scheduler import MindScheduler
 from glados.autonomy.slots import TaskSlotStore
 from glados.core.engine import Glados
 from glados.core.inference import InferenceConfig, InferenceScheduler
@@ -106,15 +108,15 @@ def test_observed_return_is_published_once_and_pause_clears_it(
         monkeypatch.setattr(mind, "_infer", Mock(return_value=response))
         sequence[0] += 1
         return mind._observe(frame(sequence[0], captured_at=stamp), 1, False)
-    monkeypatch.setattr(mind, "tick", observe)
+    monkeypatch.setattr(mind, "run", lambda runtime: observe())
     for _ in range(5):
-        mind._do_tick()
+        mind.runtime.publish(mind.run(mind.runtime))
         assert mind._slot_store.get_slot("vision").attention_key is None
-    mind._do_tick()
+    mind.runtime.publish(mind.run(mind.runtime))
     arrived = mind._slot_store.get_slot("vision")
     assert arrived.attention_key and "person_arrived" in arrived.report
     assert mind.snapshot()["arrival"]["observed_absence_s"] == 65
-    mind._do_tick()
+    mind.runtime.publish(mind.run(mind.runtime))
     assert mind._slot_store.get_slot("vision").attention_key == arrived.attention_key
     mind.set_paused(True)
     assert mind._slot_store.get_slot("vision").attention_key is None
@@ -149,70 +151,40 @@ def test_interval_changes_schedule_and_survives_restart(
 ) -> None:
     path = tmp_path / "vision_settings.json"
     mind._settings_path = path
-    mind._last_tick = 100
-    monkeypatch.setattr("glados.autonomy.subagent.time.time", lambda: 102)
-    monkeypatch.setattr("glados.vision.vision_mind.random.random", lambda: 0.5)
-    monkeypatch.setattr(mind.camera.motion, "snapshot", lambda: {"activity": 0.5})
     mind.set_paused(True)
     mind.set_interval_range(6, 8)
-    assert mind._seconds_until_next_tick() == 5
-    assert mind.config.loop_interval_s == 7
     assert mind.snapshot()["interval_min_s"] == 6 and mind.snapshot()["interval_max_s"] == 8
     assert mind.snapshot()["target_hz"] == pytest.approx(1 / 7, abs=0.005)
-    assert mind.paused and not mind._tick_requested.is_set()
+    assert mind.paused
     assert json.loads(path.read_text()) == {"interval_min_s": 6, "interval_max_s": 8}
     restarted = VisionMind(VisionConfig(), mind.llm, VisionState(), TaskSlotStore(), settings_path=path)
-    assert restarted.settings.interval_s == restarted.config.loop_interval_s == 7
+    assert restarted.settings.interval_s == 7
     assert restarted.settings.face_interval_s == VisionConfig().face_interval_s
     for bounds in ((True, 8), ("4", 8), (0, 8), (6, 61), (9, 8), (2.5, 8), (float("nan"), 8)):
         with pytest.raises(ValueError):
             mind.set_interval_range(*bounds)
-        assert mind.config.loop_interval_s == 7 and json.loads(path.read_text())["interval_min_s"] == 6
+        assert json.loads(path.read_text())["interval_min_s"] == 6
 
 
-def test_random_delay_is_drawn_once_per_tick_not_per_poll(mind: VisionMind, monkeypatch: pytest.MonkeyPatch) -> None:
-    draw = Mock(side_effect=[0.25, 0.5, 0.75])
-    monkeypatch.setattr("glados.vision.vision_mind.random.random", draw)
-    monkeypatch.setattr(mind.camera.motion, "snapshot", lambda: {"activity": 0.5})
-    now = [100]
-    monkeypatch.setattr("glados.autonomy.subagent.time.time", lambda: now[0])
-    mind.tick = Mock(return_value=None)
-    mind.set_interval_range(2, 5)
-    mind._do_tick()
-    assert mind._seconds_until_next_tick() == 3.5
-    now[0] = 102
-    assert mind._seconds_until_next_tick() == 1.5
-    assert mind._seconds_until_next_tick() == 1.5
-    assert draw.call_count == 2
-    now[0] = 103.5
-    mind._do_tick()
-    assert 2 <= mind._seconds_until_next_tick() <= 5 and draw.call_count == 3
+def test_vision_snapshots_remain_serializable_after_schedule_failure(mind: VisionMind) -> None:
+    scheduler = MindScheduler(mind._slot_store)
+    signal = [5.0]
+    scheduler.register(mind, AdaptiveInterval(lambda: signal[0]), run_on_start=False)
+    signal[0] = float("nan")
+    try:
+        snapshot = mind.snapshot()
+        assert scheduler.list_agents()[0].status == "error"
+        assert snapshot["next_delay_s"] == mind.settings.interval_s
+        assert snapshot["target_hz"] == round(1 / mind.settings.interval_s, 2)
+        assert mind.tracking_snapshot()["next_delay_s"] == mind.settings.interval_s
+        json.dumps(snapshot)
+        json.dumps(mind.tracking_snapshot())
+        engine = _FakeEngine()
+        engine.vision_agent = mind
+        json.dumps(build_state(engine))
+    finally:
+        scheduler.shutdown()
 
-
-def test_motion_shortens_pending_wait_without_redrawing(mind: VisionMind, monkeypatch: pytest.MonkeyPatch) -> None:
-    draw = Mock(return_value=0.5)
-    monkeypatch.setattr("glados.vision.vision_mind.random.random", draw)
-    activity = [0.0]
-    monkeypatch.setattr(mind.camera.motion, "snapshot", lambda: {"activity": activity[0]})
-    monkeypatch.setattr("glados.autonomy.subagent.time.time", lambda: 102.8)
-    mind._last_tick = 100
-    mind.set_interval_range(2, 5)
-    assert mind._seconds_until_next_tick() > 1.5
-    activity[0] = 1.0
-    assert mind._seconds_until_next_tick() < 0
-    assert draw.call_count == 1
-
-
-def test_motion_bias_favours_long_quiet_and_short_active_delays(mind: VisionMind) -> None:
-    mind.set_interval_range(2, 5)
-    quiet, active = [], []
-    for index in range(100):
-        mind._interval_quantile = (index + 0.5) / 100
-        quiet.append(mind._motion_delay(0))
-        active.append(mind._motion_delay(1))
-    assert all(2 <= delay <= 5 for delay in quiet + active)
-    assert sum(quiet) / len(quiet) > 4.3
-    assert sum(active) / len(active) < 2.7
 
 
 def test_cpu_motion_ignores_exposure_and_decays_after_movement(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -270,7 +242,7 @@ def test_http_vision_interval_updates_real_schedule(mind: VisionMind) -> None:
     try:
         status, result = post({"interval_min_s": 2, "interval_max_s": 5})
         assert status == 200 and result["interval_min_s"] == 2 and result["interval_max_s"] == 5
-        assert mind.config.loop_interval_s == 3.5
+        assert mind.settings.interval_s == 3.5
         for body in ({"interval_min_s": 0, "interval_max_s": 5},
                      {"interval_min_s": True, "interval_max_s": 5},
                      {"interval_min_s": 6, "interval_max_s": 5},
@@ -303,16 +275,16 @@ def test_comparisons_advance_only_after_success(mind: VisionMind, monkeypatch: p
     post = Mock(return_value=reply())
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", post)
     mind.camera.frames.add(frame(1))
-    assert not mind.tick().notify_user
+    assert not mind.run(mind.runtime).notify_user
     first = [c for c in post.call_args.kwargs["json"]["messages"][-1]["content"] if c["type"] == "image_url"][-1]
     assert mind.snapshot()["changes"] == "First observation; no previous image."
     post.side_effect = requests.Timeout()
     mind.camera.frames.add(frame(2))
-    assert mind.tick().status == "error"
+    assert mind.run(mind.runtime).status == "error"
     assert mind.snapshot()["revision"] == 1
     post.side_effect = None
     mind.camera.frames.add(frame(3, 10))
-    assert mind.tick().status == "active"
+    assert mind.run(mind.runtime).status == "active"
     content = post.call_args.kwargs["json"]["messages"][-1]["content"]
     assert "HISTORICAL image" in content[0]["text"] and content[1] == first
     assert "CURRENT image" in content[2]["text"] and content[3] != first
@@ -333,7 +305,7 @@ def test_four_image_window_interleaves_true_timestamps_and_skips_failed_frames(
         now[0] = captured
         mind.camera.frames.add(frame(sequence, captured_at=captured))
         post.side_effect = requests.Timeout() if captured == 104 else None
-        output = mind.tick()
+        output = mind.run(mind.runtime)
         assert output.status == ("error" if captured == 104 else "active")
     content = post.call_args.kwargs["json"]["messages"][-1]["content"]
     assert len(content) == 9
@@ -363,7 +335,7 @@ def test_incomplete_events_report_does_not_advance_window(mind: VisionMind, monk
     response.json.return_value["choices"][0]["message"]["content"] = json.dumps(content)
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(return_value=response))
     mind.camera.frames.add(frame(1))
-    assert mind.tick().status == "error" and not mind._recent_images
+    assert mind.run(mind.runtime).status == "error" and not mind._recent_images
 
 
 def test_pick_happens_after_scheduler_admission(mind: VisionMind, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -376,7 +348,7 @@ def test_pick_happens_after_scheduler_admission(mind: VisionMind, monkeypatch: p
     mind.llm.scheduler = SimpleNamespace(lease=admission)
     mind.camera.frames.add(frame(1))
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(return_value=reply()))
-    mind.tick()
+    mind.run(mind.runtime)
     assert mind._previous_sequence == 2
 
 
@@ -401,7 +373,7 @@ def test_preview_overlay_matches_selected_frame_without_annotating_model_input(
     post = Mock(return_value=reply(face={"presence": "present", "box": [250, 250, 500, 500]}, expressions=expression))
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", post)
     mind.camera.frames.add(selected)
-    mind.tick()
+    mind.run(mind.runtime)
     locate.assert_not_called()
     for key, value in face.items():
         assert mind.snapshot()["preview_face"][key] == value
@@ -422,11 +394,11 @@ def test_preview_overlay_matches_selected_frame_without_annotating_model_input(
     # A new displayed frame without a face must not retain an old box.
     post.return_value = reply(face={"presence": "absent", "box": None})
     mind.camera.frames.add(CameraFrame(selected.image, time.time(), 10, 0.1, 2))
-    mind.tick()
+    mind.run(mind.runtime)
     assert not cv2.imdecode(np.frombuffer(mind.preview(), np.uint8), cv2.IMREAD_COLOR).any()
     post.return_value = reply(face={"presence": "present", "box": [800, 200, 600, 400]})
     mind.camera.frames.add(CameraFrame(selected.image, time.time(), 10, 0.1, 3))
-    assert mind.tick().status == "active", "Invalid face geometry must not discard a valid scene"
+    assert mind.run(mind.runtime).status == "active", "Invalid face geometry must not discard a valid scene"
     assert mind.camera.faces._state["present"] is True and "x" not in mind.camera.faces._state
 
 
@@ -440,13 +412,12 @@ def test_pause_discards_inflight_result_and_manual_tick_releases_camera(
 
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", pause_during_request)
     mind.camera.frames.add(frame(1))
-    assert mind.tick() is None
+    assert mind.run(mind.runtime) is None
     assert mind.vision_state.snapshot() is None and mind.snapshot()["revision"] == 0
-    mind._running = True
-    mind.request_tick()
+    mind.runtime.manual = True
     mind.camera.frames.add(frame(2))
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(return_value=reply()))
-    assert mind.tick().status == "active"
+    assert mind.run(mind.runtime).status == "active"
     assert mind.paused and not mind.camera.snapshot()["enabled"]
     assert mind.snapshot()["revision"] == 1
     mind.set_paused(False)
@@ -456,12 +427,12 @@ def test_pause_discards_inflight_result_and_manual_tick_releases_camera(
 def test_malformed_observation_does_not_replace_scene(mind: VisionMind, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(return_value=reply()))
     mind.camera.frames.add(frame(1))
-    mind.tick()
+    mind.run(mind.runtime)
     response = reply()
     response.json.return_value["choices"][0]["message"]["content"] = '{"scene": 123}'
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(return_value=response))
     mind.camera.frames.add(frame(2, 10))
-    assert mind.tick().status == "error"
+    assert mind.run(mind.runtime).status == "error"
     assert mind.snapshot()["scene"] == "A desk." and mind.snapshot()["revision"] == 1
 
 
@@ -683,7 +654,7 @@ def test_cpu_faces_do_not_request_e4b_boxes_or_overwrite_live_tracking(
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", post)
     mind.camera.faces._state = {"available": True, "present": True, "x": 0.8, "y": 0.8}
     mind.camera.frames.add(frame(1))
-    assert mind.tick().status == "active"
+    assert mind.run(mind.runtime).status == "active"
     request = post.call_args.kwargs["json"]
     assert "box_2d" not in request["messages"][0]["content"]
     assert mind.camera.faces._state["x"] == 0.8
@@ -827,13 +798,13 @@ def test_inference_blink_cue_starts_at_http_request_and_survives_failure(
         return reply()
 
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", infer)
-    mind.tick()  # No fresh frame: no inference and no blink.
+    mind.run(mind.runtime)  # No fresh frame: no inference and no blink.
     assert mind.tracking_snapshot()["inference_sequence"] == 0
     mind.camera.frames.add(frame(1))
-    mind.tick()
+    mind.run(mind.runtime)
     assert mind.tracking_snapshot()["inference_active"] == 0
     monkeypatch.setattr("glados.vision.vision_mind.requests.post", Mock(side_effect=requests.Timeout()))
     mind.camera.frames.add(frame(2))
-    assert mind.tick().status == "error"
+    assert mind.run(mind.runtime).status == "error"
     assert mind.tracking_snapshot()["inference_sequence"] == 2
     assert mind.tracking_snapshot()["inference_active"] == 0

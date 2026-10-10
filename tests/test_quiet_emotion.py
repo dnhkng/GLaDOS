@@ -35,12 +35,12 @@ def test_reaction_uses_current_input_and_idle_does_not_reset_anger(monkeypatch: 
     audio = [{"type": "input_audio", "input_audio": {"data": "audio", "format": "wav"}}]
     agent.react("You are useless", audio)
     model.assert_not_called()
-    agent.tick()
+    agent.run(agent.runtime)
     assert agent.state.pleasure == -.8
     assert "angry glare" in agent.state.response_instructions()
     assert model.call_args.args[1] == audio
     assert "You are useless" in model.call_args.args[0][0].description
-    agent.tick()
+    agent.run(agent.runtime)
     assert model.call_count == 1
     agent.on_stop()
 
@@ -50,7 +50,7 @@ def test_failed_affect_retains_previous_state(monkeypatch: pytest.MonkeyPatch) -
     previous = agent.state.to_dict()
     monkeypatch.setattr(agent, "_ask_llm", Mock(return_value=None))
     agent.react("Hello")
-    agent.tick()
+    agent.run(agent.runtime)
     current = agent.state.to_dict()
     previous.pop("last_update")
     current.pop("last_update")
@@ -80,6 +80,9 @@ def test_sleep_pauses_minds_drains_work_and_restores_previous_pauses() -> None:
         pending = queue.Queue()
         pending.put("stale")
         setattr(engine, name, pending)
+    engine.subagent_manager.pause = (
+        lambda agent_id, paused=True: engine.subagent_manager.get(agent_id).set_paused(paused)
+    )
     Glados.set_quiet_mode(engine, True)
     assert engine.quiet_event.is_set() and all(a.paused for a in agents.values())
     assert engine.audio_io.stop_speaking.call_count == 1

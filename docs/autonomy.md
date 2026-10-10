@@ -91,11 +91,75 @@ Model judgement and vision evidence still require tuning; this is not a determin
 | `turn_id` | Originating conversation turn for recall |
 | `revision` | Changes when slot content changes, not for timestamp refreshes |
 | `attention_key` | Stable identity for an ongoing condition or arrival |
-| `next_run` | Producer update interval |
+| `next_run` | Optional progress metadata; scheduling deadlines belong to the mind scheduler |
 
 Cores exposes Minds and their reports. Facility Settings shows the waiting stage, pending updates, last decision/reason, Central Core instruction and source IDs.
 
 `notify_user` remains a compatibility input/output for older tools; explicit `update_priority` takes precedence. Routing and immediate tool results keep their direct response path. This publication mechanism does not grant tools or prompt-modification authority to a core.
+
+## Mind execution and timing
+
+Background minds implement `run(runtime) -> SubagentOutput | None`. They perform
+one unit of domain work; they do not own a timer loop or a worker thread. A mind
+can use ordinary code, sensors, an external service or optional model inference.
+Model configuration and prompts are dependencies of the implementation, not
+requirements of the common interface.
+
+`MindScheduler` replaces the lifecycle machinery formerly in `SubagentManager`
+and `Subagent`. It uses one timer thread and a bounded pool of four workers. Each
+mind runs at most once concurrently. The scheduler owns deadlines, pending
+triggers, pause/run controls, cancellation generations and execution status.
+Domain hooks (`on_start`, `on_stop`, `on_pause`) only manage resources and private
+state. `SubagentManager` remains an import alias; old per-mind `tick`, `start`,
+`stop` and timing configuration are replaced by this interface.
+
+Timing is assigned at registration, separately from the mind:
+
+| Policy | Behavior | Current assignment or example |
+|---|---|---|
+| `FixedInterval(seconds)` | Fixed delay after a completed run | Health, Memory maintenance, Emotion, optional weather/news/observer |
+| `AdaptiveInterval(delay)` | Read a live delay from a signal | Example: 30 seconds with nobody present, 5 when occupied |
+| `RandomAdaptive(bounds, activity)` | One random draw per cycle, weighted toward shorter delays as activity increases | Vision: configurable 2–5 seconds, driven by motion |
+| `OnDemand()` | No periodic deadline | Search Core; requested research still uses its task queue |
+
+```python
+from glados.autonomy.mind_schedule import AdaptiveInterval, FixedInterval, RandomAdaptive
+
+scheduler.register(health, FixedInterval(health.settings.interval_s))
+scheduler.register(emotion, FixedInterval(5))
+scheduler.register(vision, RandomAdaptive(
+    bounds=lambda: (vision.settings.interval_min_s, vision.settings.interval_max_s),
+    activity=lambda: vision.camera.motion.snapshot()["activity"],
+))
+# An alternative presence policy for a future sensor mind:
+scheduler.register(sensor, AdaptiveInterval(lambda: 5 if presence.present else 30))
+```
+
+Timers restart after work completes, including interaction-triggered work.
+Emotion submits a trigger for accepted input, so it runs at the next opportunity
+and then waits five seconds. Vision's policy keeps its random draw while motion
+changes the pending deadline; timing checks do not redraw it. Changes to Vision's
+interval settings reschedule the policy and remain persisted.
+
+Triggers received during a run coalesce into one subsequent run. Missed intervals
+never create a catch-up backlog. Pause suppresses automatic triggers and invalidates
+in-flight output; resume cannot revive an old result. Manual run-once is allowed
+while paused and leaves the schedule paused. Stop affects only the selected mind,
+not the engine's shared shutdown event. Cancellation is cooperative: a blocking
+network request may finish, but cancelled final updates are discarded.
+
+`runtime.publish(update)` publishes intermediate progress through the same slot
+publisher as the returned final update. Regular and important updates retain the
+existing Autonomy review semantics. Execution state (`waiting`, `queued`,
+`running`, `paused`, `stopped`, `error`) is separate from findings in context slots.
+Memory recall submits its latest pending query to this same scheduler rather than
+starting a separate recall thread.
+
+The **mind scheduler** decides when domain work runs. The **inference scheduler**
+continues to control model-server capacity and interaction priority. Cheap probes
+need no inference lease; background model calls still wait during user interaction.
+Central, Routing and the Autonomy review loop retain their specialized input and
+inference paths. A scheduling policy never performs their domain work.
 
 ## Background Jobs
 

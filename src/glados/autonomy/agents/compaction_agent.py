@@ -15,6 +15,7 @@ from loguru import logger
 
 from ...core.memory_recall import MemoryRecall, RecallConfig
 from ..llm_client import LLMConfig, llm_call
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 from ..summarization import estimate_tokens
 
@@ -59,7 +60,6 @@ class CompactionAgent(Subagent):
         self._token_threshold, self._preserve_recent = token_threshold, preserve_recent
         self._max_tokens, self._input_tokens = summary_max_tokens, summary_input_tokens
         self._interactive_busy, self._clock = interactive_busy, clock
-        self._force = threading.Event()
         self._stats: dict = {}
         self._compaction_enabled = compaction_enabled
         self._memory_store = MemoryRecall(recall_config) if recall_config else None
@@ -74,7 +74,6 @@ class CompactionAgent(Subagent):
         self._recall_turn: str | None = None
         self._recall_attention: str | None = None
         self._pending_recall: tuple | None = None
-        self._recall_thread: threading.Thread | None = None
         self._recall_progress = ""
 
     @property
@@ -146,40 +145,37 @@ class CompactionAgent(Subagent):
             if (not query.strip() and not audio) or self.paused or self._shutdown_event.is_set():
                 return
             self._pending_recall = (self._recall_generation, self._recall_query, self._previous_query, audio)
-            if self._recall_thread is None:
-                self._recall_thread = threading.Thread(target=self._run_recall, name="MemoryRecall", daemon=True)
-                self._recall_thread.start()
+        self.runtime.request_run()
 
     def _run_recall(self) -> None:
-        while True:
-            with self._recall_lock:
-                request, self._pending_recall = self._pending_recall, None
-                if request is None or self._shutdown_event.is_set():
-                    self._recall_thread = None
-                    return
-            generation, query, previous, audio = request
-            try:
-                self._refresh_memory_notes()
-                result = (self._semantic_recall(query, previous, audio, generation) if self._llm_config
-                          else self._recall.retrieve(query, previous))
-            except Exception as exc:
-                logger.warning("Memory recall failed: {}", exc)
-                result = {"facts": [], "context": None, "unavailable": True}
-            with self._recall_lock:
-                if generation != self._recall_generation or self.paused or self._shutdown_event.is_set():
-                    continue
-                self._recall_query = result.get("query", query)
-                self._recall_progress = ""
-                self._recall_result = result
-                self._recall_attention = f"recall:{self._recall_turn}" if result["facts"] else None
-                self.write_slot(status="monitoring", summary=self._maintenance_summary,
-                                report=self._maintenance_report,
-                                update_priority="important" if result["facts"] else "regular")
+        """Process one latest request on the shared mind worker."""
+        with self._recall_lock:
+            request, self._pending_recall = self._pending_recall, None
+        if request is None or self.runtime.cancelled():
+            return
+        generation, query, previous, audio = request
+        try:
+            self._refresh_memory_notes()
+            result = (self._semantic_recall(query, previous, audio, generation) if self._llm_config
+                      else self._recall.retrieve(query, previous))
+        except Exception as exc:
+            logger.warning("Memory recall failed: {}", exc)
+            result = {"facts": [], "context": None, "unavailable": True}
+        with self._recall_lock:
+            if generation != self._recall_generation or self.paused or self.runtime.cancelled():
+                return
+            self._recall_query = result.get("query", query)
+            self._recall_progress = ""
+            self._recall_result = result
+            self._recall_attention = f"recall:{self._recall_turn}" if result["facts"] else None
+            self.write_slot(status="monitoring", summary=self._maintenance_summary,
+                            report=self._maintenance_report,
+                            update_priority="important" if result["facts"] else "regular")
 
     def _semantic_recall(self, query, previous, audio, generation):
         def cancelled():
             return (generation != self._recall_generation or self.paused or self._shutdown_event.is_set()
-                    or self._llm_config.cancelled())
+                    or self.runtime.cancelled() or self._llm_config.cancelled())
         config = replace(self._llm_config, owner="Memory recall", lane="autonomy", cancelled=cancelled,
                          request_options={**self._llm_config.request_options, "max_tokens": 256,
                                           "temperature": 0, "reasoning_budget_tokens": 0, "chat_template_kwargs": {"enable_thinking": False}})
@@ -290,8 +286,7 @@ class CompactionAgent(Subagent):
                 ]
             )
 
-    def set_paused(self, paused: bool) -> None:
-        super().set_paused(paused)
+    def on_pause(self, paused: bool) -> None:
         self.request_recall(self._recall_query or "", self._previous_query)
 
     def write_slot(self, **kwargs: Any) -> None:  # noqa: ANN401 - Base worker supplies slot fields.
@@ -316,10 +311,6 @@ class CompactionAgent(Subagent):
             if context:
                 kwargs["report"] = self._maintenance_report + "\n\n" + context
             super().write_slot(**kwargs)
-
-    def request_tick(self) -> None:
-        self._force.set()
-        super().request_tick()
 
     def _eligible(self, records: list[HistoryRecord]) -> list[HistoryRecord]:
         raw = [i for i, r in enumerate(records) if r.message.get("role") != "system" and r.summary_level is None]
@@ -397,7 +388,8 @@ class CompactionAgent(Subagent):
                 return None  # A failed reduction must not loop or destroy history.
             parts = [combined[i : i + limit] for i in range(0, len(combined), limit)]
 
-    def tick(self) -> SubagentOutput:
+    def run(self, runtime: MindRuntime) -> SubagentOutput:
+        self._run_recall()
         if self._recall is not None:
             with self._recall_lock:
                 query = self._recall_query
@@ -431,8 +423,7 @@ class CompactionAgent(Subagent):
                 report=report,
                 notify_user=False,
             )
-        force = self._force.is_set()
-        self._force.clear()
+        force = runtime.manual
         eligible = self._eligible(records)
         exchanges: list[list[HistoryRecord]] = []
         pending: list[HistoryRecord] = []

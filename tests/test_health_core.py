@@ -56,7 +56,7 @@ def health() -> HealthFixture:
 def test_cached_context_has_freshness_and_never_runs_new_probe(health: HealthFixture) -> None:
     core, clock, _, _, _ = health
     probe = core._host_status = Mock(wraps=core._host_status)
-    core.tick()
+    core.run(core.runtime)
     builder = ContextBuilder()
     builder.register("health", core.as_prompt, volatile=True)
     for _ in range(10):
@@ -76,18 +76,18 @@ def test_cached_context_has_freshness_and_never_runs_new_probe(health: HealthFix
 
 def test_alerts_only_emit_on_condition_transitions(health: HealthFixture) -> None:
     core, _, host, runtime, bus = health
-    core.tick()
+    core.run(core.runtime)
     assert not bus.snapshot()
     host["ram"]["used_percent"] = 96
     runtime["audio"] = {"enabled": True, "connected": False}
-    assert core.tick().notify_user
+    assert core.run(core.runtime).notify_user
     assert len(bus.snapshot()) == 2
     host["ram"]["used_percent"] = 97
-    assert not core.tick().notify_user
+    assert not core.run(core.runtime).notify_user
     assert len(bus.snapshot()) == 2
     host["ram"]["used_percent"] = 50
     runtime["audio"]["enabled"] = False  # Muted capture is not a failed microphone.
-    core.tick()
+    core.run(core.runtime)
     assert [e.kind for e in bus.snapshot()] == ["alert", "alert", "recovered", "recovered"]
     assert core.snapshot()["alerts"] == []
 
@@ -96,7 +96,7 @@ def test_gpu_headroom_and_log_threshold_alerts(health: HealthFixture) -> None:
     core, _, host, _, bus = health
     host["gpus"][0]["free_mib"] = 200
     host["logs"] = [{"name": "capture.log", "bytes": 21 * 1024**2, "files": 3}]
-    core.tick()
+    core.run(core.runtime)
     assert {e.kind for e in bus.snapshot()} == {"alert"}
     assert any("GPU" in a for a in core.snapshot()["alerts"])
     assert any("Log family" in a for a in core.snapshot()["alerts"])
@@ -106,32 +106,32 @@ def test_alert_identity_survives_resampling_but_changes_after_recovery(health: H
     core, clock, host, _, _ = health
     core.settings.summary_enabled = False
     host["gpus"][0]["temperature_c"] = 97
-    core._do_tick()
+    core.runtime.publish(core.run(core.runtime))
     first = core._slot_store.get_slot("health")
     assert first.attention_key and first.notify_user
     clock[0] += 10
     host["gpus"][0]["temperature_c"] = 98
-    core._do_tick()
+    core.runtime.publish(core.run(core.runtime))
     second = core._slot_store.get_slot("health")
     assert second.attention_key == first.attention_key and not second.notify_user
     clock[0] += 10
     host["gpus"][0]["temperature_c"] = 60
-    core._do_tick()
+    core.runtime.publish(core.run(core.runtime))
     assert core._slot_store.get_slot("health").attention_key is None
     clock[0] += 10
     host["gpus"][0]["temperature_c"] = 99
-    core._do_tick()
+    core.runtime.publish(core.run(core.runtime))
     assert core._slot_store.get_slot("health").attention_key != first.attention_key
 
 
 def test_requested_capture_is_monitored_even_if_stream_never_started(health: HealthFixture) -> None:
     core, _, _, runtime, bus = health
     runtime["audio"] = {"enabled": False, "expected": True, "connected": False}
-    core.tick()
+    core.run(core.runtime)
     assert len(bus.snapshot()) == 1
     runtime["audio"]["expected"] = False  # A muted microphone is intentionally unused.
     runtime["audio"]["enabled"] = True
-    core.tick()
+    core.run(core.runtime)
     assert core.snapshot()["alerts"] == []
     assert bus.snapshot()[-1].kind == "recovered"
 
@@ -143,7 +143,7 @@ def test_periodic_summary_is_cached_and_yields_to_interaction(
     core.llm = LLMConfig(url="http://test", model="E4B")
     summarize = Mock(return_value="Load is steady; no monitored alerts.")
     monkeypatch.setattr("glados.autonomy.agents.health_agent.llm_call", summarize)
-    core.tick()
+    core.run(core.runtime)
     core._summary_thread.join(2)
     assert summarize.call_count == 1
     assert core.snapshot()["comment"] == summarize.return_value
@@ -151,20 +151,20 @@ def test_periodic_summary_is_cached_and_yields_to_interaction(
     assert summarize.call_args.args[0].request_options["max_tokens"] == 128
     for _ in range(5):
         clock[0] += 10
-        core.tick()
+        core.run(core.runtime)
         core.as_prompt()
     assert summarize.call_count == 1
     clock[0] += 10
     core._interactive_busy = lambda: True
-    core.tick()
+    core.run(core.runtime)
     assert summarize.call_count == 1
     core._interactive_busy = lambda: False
-    core.tick()
+    core.run(core.runtime)
     core._summary_thread.join(2)
     assert summarize.call_count == 2
     for _ in range(20):
         clock[0] += 10
-        core.tick()
+        core.run(core.runtime)
         core._summary_thread.join(2)
     assert len(core._samples) == 12
     assert len(json.loads(summarize.call_args.args[2])) <= 12
@@ -174,7 +174,7 @@ def test_unavailable_readings_are_not_removed_from_routing(health: HealthFixture
     core, _, host, _, _ = health
     host["ram"] = None
     host["max_temperature_c"] = None
-    core.tick()
+    core.run(core.runtime)
     assert "memory_usage" not in core.covered_metrics()
     assert "temperatures" not in core.covered_metrics()
     assert "system_overview" not in core.covered_metrics()
@@ -182,7 +182,7 @@ def test_unavailable_readings_are_not_removed_from_routing(health: HealthFixture
 
 def test_health_context_replaces_metric_branches_but_keeps_other_tools(health: HealthFixture) -> None:
     core, clock, _, _, _ = health
-    core.tick()
+    core.run(core.runtime)
     tool = {
         "type": "function",
         "function": {
@@ -232,11 +232,11 @@ def test_slow_commentary_does_not_block_sampling_or_start_duplicate_calls(
     summarize = Mock(side_effect=slow)
     monkeypatch.setattr("glados.autonomy.agents.health_agent.llm_call", summarize)
     try:
-        core.tick()
+        core.run(core.runtime)
         assert entered.wait(1)
         clock[0] += 100
         host["ram"]["used_percent"] = 55
-        core.tick()
+        core.run(core.runtime)
         assert core.snapshot()["host"]["ram"]["used_percent"] == 55
         assert core.snapshot()["age_s"] == 0
         assert summarize.call_count == 1

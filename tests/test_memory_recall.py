@@ -132,9 +132,7 @@ def test_recall_is_in_memory_core_slot_and_clears_on_pause_and_topic_change(tmp_
     assert agent._slot_store.get_slot("compaction").context is None
     assert Glados._format_slots(engine) is None
     agent.set_paused(False)
-    worker = agent._recall_thread
-    if worker is not None:
-        worker.join(2)
+    agent._run_recall()
     assert "orange" in agent._slot_store.get_slot("compaction").context
     agent.recall_for("tea")
     assert agent._slot_store.get_slot("compaction").context is None
@@ -144,7 +142,7 @@ def test_compaction_update_cannot_overwrite_recall_for_newer_topic(tmp_path: Pat
     save(tmp_path / "facts.jsonl", "Workshop is orange", "Preferred tea is Earl Grey")
     agent = core(tmp_path)
     agent.recall_for("workshop")
-    old_output = agent.tick()  # Represents a pass begun before the topic changed.
+    old_output = agent.run(agent.runtime)  # Represents a pass begun before the topic changed.
     agent.recall_for("tea")
     agent.write_slot(
         status=old_output.status,
@@ -166,7 +164,7 @@ def test_saved_conversation_notes_are_browsable_and_recalled_without_extra_files
     page = agent.memory_snapshot(kind="summary")
     assert page["total"] == 1 and page["memories"][0]["source"] == "Compacted conversation"
     assert list(tmp_path.iterdir()) == []
-    assert agent.tick().summary == "Recall ready; compaction disabled"
+    assert agent.run(agent.runtime).summary == "Recall ready; compaction disabled"
 
 
 def test_memory_browsing_does_not_change_recall(tmp_path: Path) -> None:

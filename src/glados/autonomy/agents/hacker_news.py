@@ -11,6 +11,7 @@ import httpx
 from loguru import logger
 
 from ...core.llm_decision import LLMConfig, LLMDecisionError, RelevanceDecision, llm_decide_sync
+from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
 
@@ -34,7 +35,7 @@ class HackerNewsSubagent(Subagent):
         self._min_score = min_score
         self._llm_config = llm_config
 
-    def tick(self) -> SubagentOutput | None:
+    def run(self, runtime: MindRuntime) -> SubagentOutput | None:
         """Fetch top stories, store new ones, report unshown."""
         stories = self._fetch_top_stories()
         if not stories:
