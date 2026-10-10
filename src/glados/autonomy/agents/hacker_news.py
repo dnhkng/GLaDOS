@@ -52,15 +52,17 @@ class HackerNewsSubagent(Subagent):
                 self.memory.set(key, story)
 
         # Find unshown stories - use LLM to evaluate relevance if available
-        unshown = []
+        unshown, rejected = [], []
         for entry in self.memory.list_unshown():
             story = entry.value
             if not isinstance(story, dict):
                 continue
 
             if story.get("_reported") or story.get("_relevant") is False:
+                rejected.append(entry.key)  # Migrate verdicts stored before shown_at was used.
                 continue
-            if story.get("_relevant") is True:
+
+            if story.get("_relevant") is True:  # judged on an earlier tick, not yet reported
                 unshown.append(story)
                 continue
 
@@ -79,12 +81,17 @@ class HackerNewsSubagent(Subagent):
                             "Set importance 0.0-1.0. Be concise in your summary."
                         ),
                     )
-                    story = {**story, "_relevant": decision.relevant}
                     if decision.relevant:
-                        story["_importance"] = decision.importance
-                        story["_summary"] = decision.summary
+                        story = {
+                            **story,
+                            "_relevant": True,
+                            "_importance": decision.importance,
+                            "_summary": decision.summary,
+                        }
+                        self.memory.set(entry.key, story)  # keep the verdict; never ask twice
                         unshown.append(story)
-                    self.memory.set(entry.key, story)
+                    else:
+                        rejected.append(entry.key)
                 except LLMDecisionError as e:
                     logger.warning("HN: LLM decision failed, using fallback: %s", e)
                     if story.get("score", 0) >= self._min_score:
@@ -95,6 +102,7 @@ class HackerNewsSubagent(Subagent):
                     unshown.append(story)
 
         if not unshown:
+            self.memory.mark_shown(*rejected)
             top = stories[0]
             return SubagentOutput(
                 status="idle",
@@ -107,8 +115,8 @@ class HackerNewsSubagent(Subagent):
         unshown.sort(key=lambda s: s.get("_importance", 0.5), reverse=True)
         to_report = unshown[: self._top_n]
         # Published to the slot, not necessarily spoken: Autonomy owns delivery.
-        for story in to_report:
-            self.memory.set(f"hn_{story['id']}", {**story, "_reported": True})
+        # Rejected and reported stories leave list_unshown() together, in one save.
+        self.memory.mark_shown(*rejected, *(f"hn_{story['id']}" for story in to_report))
         titles = [s["title"] for s in to_report]
         summary = f"HN: {', '.join(titles)}"
 
