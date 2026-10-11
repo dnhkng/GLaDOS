@@ -42,8 +42,10 @@ of engine configuration. All styling and images are local; fonts use installed
 fonts with system fallbacks. Camera treatments are false colour, greyscale,
 ASCII and ordered dither; they do not change what the vision model receives.
 PotatOS places the green dither stream inside the transparent opening of
-`LCD-PCB-Module-Frame.png`. The original image is preserved as an overlay, with
-its ribbon cable and mounting holes transparent against the potato background.
+`LCD-PCB-Module-Frame-Extended-Ribbon.png`. The original transparent image is
+preserved as an overlay, with the camera fitted to its taller display opening.
+On the basic surface the ribbon extends behind the Portal banner. The layout
+targets desktop landscape and tablets in either orientation.
 The eye and camera shutter still blink on actual image analysis. Reduced-motion
 preferences disable animation and scanlines.
 

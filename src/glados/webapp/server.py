@@ -181,6 +181,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
             "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js",
             "/glados-portal.js", "/glados-portal.css", "/LCD-PCB-Module-Frame.png",
+            "/LCD-PCB-Module-Frame-Extended-Ribbon.png",
             "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
         ):
             return self._file(path[1:])

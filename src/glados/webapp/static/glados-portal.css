@@ -199,16 +199,20 @@ button.pict-tile:disabled { cursor: default; }
 :root[data-surface="presence"] .presence-info,
 :root[data-surface="presence"] .presence-speech {scrollbar-gutter:stable}
 
-/* The supplied PNG is a transparent overlay; the live LCD stays inside its opening. */
-:root[data-theme="potato"] .avatar-optic {aspect-ratio:4/3;border:0;border-radius:0;background:transparent;overflow:hidden}
+/* Display bounds are the board (x244, y210, 960x844), with its cable above.
+   The original transparent 1448x1086 PNG stays unmodified. */
+:root[data-theme="potato"] .avatar-optic {aspect-ratio:960/844;border:0;border-radius:0;background:transparent;overflow:hidden;isolation:isolate}
 :root[data-theme="potato"] .avatar-optic::before,
 :root[data-theme="potato"] .avatar-optic canvas,
-:root[data-theme="potato"] .avatar-optic-hud {inset:auto;left:16.15%;top:30.75%;width:68.1%;height:41.8%;border-radius:2px}
+:root[data-theme="potato"] .avatar-optic-hud {inset:auto;left:15.31%;top:23.34%;width:69.38%;height:53.2%;border-radius:2px}
 :root[data-theme="potato"] .avatar-optic::before {content:"";position:absolute;background:#0f380f}
-:root[data-theme="potato"] .avatar-optic::after {content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:url("LCD-PCB-Module-Frame.png") center/100% 100% no-repeat}
+:root[data-theme="potato"] .avatar-optic::after {content:"";position:absolute;inset:-24.88% 0 0;z-index:2;pointer-events:none;background:url("LCD-PCB-Module-Frame-Extended-Ribbon.png") center top/150.833% auto no-repeat}
 :root[data-theme="potato"] .avatar-optic-hud {overflow:hidden;color:#9bbc0f;font-size:clamp(7px,.8vw,10px);letter-spacing:.06em}
 :root[data-theme="potato"] .avatar-optic-hud span {background:rgba(15,56,15,.6)}
-:root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(110px,100dvh - 300px) * 4 / 3))}
+/* The opaque banner masks the cable end, without covering its controls. */
+:root[data-surface="basic"][data-theme="potato"] .chamber-sign {z-index:3}
+:root[data-surface="basic"][data-theme="potato"] .avatar-optic {overflow:visible;align-self:start;width:min(100%,calc(max(110px,100dvh - 300px) * 960 / 844))}
 @media(max-width:520px) {
-  :root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(120px,100dvh - 650px) * 4 / 3))}
+  :root[data-surface="basic"][data-theme="potato"] .overview-grid {grid-template-areas:"camera" "eye" "input" "reply"}
+  :root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(120px,100dvh - 650px) * 960 / 844))}
 }
