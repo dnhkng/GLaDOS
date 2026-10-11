@@ -1,215 +1,139 @@
-# Architecture simplification: validated review and implementation plan
+# Architecture simplification: decisions and acceptance criteria
 
-Reviewed 2026-10-07 against the current working tree. The original
-`architecture-simplification-review.md` is preserved unchanged. Its proposals are
-recommendations to assess, not instructions to execute wholesale.
+Reviewed **2026-10-11** against `codex/ui-mockup-refinements` at `21dc152`.
+The [review](architecture-simplification-review.md) is now the current status
+inventory; it is no longer an unchanged pre-cleanup proposal. This document
+records the constraints that matter when implementing its remaining work.
 
-## Outcome
+## Completed and verified in source
 
-The dead-code cleanup and B1–B5 fixes are implemented. B6's unreachable branch
-and inaccurate benchmark note are corrected; direct-audio speculation remains
-disabled. The structural extraction phase is now implemented; see
-`architecture-refactor-progress.md` for changes, final validation and the
-remaining runtime roadmap. The assessment below records the original audit.
+- B1–B5 fixes, B6's benchmark correction and dead-code cleanup are implemented.
+- ProcessorTurn/ResponseState, a shared draft/reply request builder, pipeline
+  phases, routing builders and bounded research helpers are implemented.
+- MindScheduler owns mind timing/lifecycle with external fixed, adaptive,
+  random-adaptive and on-demand policies. Minds need not use a model.
+- Memory recall uses scheduler triggers; Search's mind has no periodic no-op tick.
+- Interaction holds defer new background inference without pausing cheap probes.
+- The current branch additionally preserves turn-specific tool catalogs,
+  terminal tool metadata, clean post-gap audio, HN verdicts/legacy migration and
+  spoken-text edge cases. The web interface adds basic/detailed/Presence surfaces.
 
-The strongest next step is to extract a shared reply request builder and a typed
-per-turn state from `LanguageModelProcessor`, then separate the autonomy reviewer
-from speech streaming. Keep independent cores, shared slot evidence, concurrent
-inference admission and the reviewer → Central handoff. Avoid adding a generic
-orchestration framework.
+The AST scan finds no Python method/function over 200 lines (largest: research,
+185). Processor `run` is 17 lines; the processor is still one worker per instance.
+The old 631-line-loop and partial converter-test results describe superseded
+working trees. See [progress](architecture-refactor-progress.md#validation) for
+current verification evidence.
 
-This patch removes approximately **1,060 net Python source lines**, excluding a
-concurrent, unrelated spoken-text-converter rewrite. At the first inventory the
-source contained 127 Python files and 26,208 lines; that includes comments and
-blank lines, excludes frontend JS/HTML, and predates that concurrent rewrite.
-These are static counts, not performance measurements. After cleanup,
-`LanguageModelProcessor.run()` is still 631 lines, `Glados.__init__()` 529,
-`ToolExecutor.run()` 301 and `SearchAgent.research()` 292. Those are useful
-boundaries to improve. The claimed 4–5k LOC and eight-thread reductions are not
-validated savings; worker counts depend on configuration and lazy pool startup.
+## Boundaries to preserve
 
-## Bugs B1–B6
+### Minds, slots and events
 
-| Item | Finding | Implemented resolution and limits |
-|---|---|---|
-| B1 | Confirmed: engine supplied a SpeechListener-only kwarg to TextListener. | Removed that kwarg. A smoke test constructs the actual engine for both text and both modes, using fake models and suppressing worker startup. |
-| B2 | Confirmed: context-managed native-tool pool waited after timeout; late results could create duplicate outcomes. | A persistent four-worker pool has four admission permits, so no unbounded pool backlog develops. Native result queues publish one terminal outcome atomically. Timeout closes the queue, marks cooperative cancellation and releases the dispatcher without waiting. A fifth occupied call fails promptly. Regressions cover subsequent-tool execution and late-result suppression. |
-| B3 | Confirmed specifically for search instructions on reply drafts. Tool-result and routed-action instructions are for other request types and do not all belong in a reply draft. | Both drafts and normal replies use `_add_reply_instructions`; drafts use the same offered reply tools to determine search instructions. Existing private-draft tests now cover search instructions and background mood changes. A complete shared request builder remains the next refactor. |
-| B4 | Confirmed: WebSocket overflow did not signal discontinuity. | Added the flag and consumer method. Overflow, owner release and room takeover signal a gap; owner changes also clear buffered old-owner audio. Tests cover overflow, one-shot consumption, owner release and exclusive microphone capture. The speech listener already resets incomplete/pending speech on a signalled gap. |
-| B5 | Confirmed repeated relevance calls/publication; unconditional repeated audible announcements are an overstatement because Autonomy also deduplicates. | Successful relevance verdicts are persisted, including rejected stories. Relevant stories outside the report limit reuse their verdict. Published stories get `_reported`, not a false claim that they were heard. Autonomy continues to own actual speech delivery. Restart tests verify three stories are judged once and the two relevant stories are published once. Retention is bounded by the existing memory capacity; failed judgments may be retried. |
-| B6 | Confirmed by the executable guard and a regression: direct audio never creates a draft. A GPU run is unnecessary to prove that branch exclusion. | Removed the dead audio-content expression and corrected the voice benchmark note. Text speculation remains enabled when slots/backend permit it. Enabling audio drafts requires a separate quality/latency experiment: both router and draft would encode the clip. No new voice latency measurement was made. |
+A mind produces evidence. MindScheduler controls when it runs; InferenceScheduler
+controls whether its model request can start. A slot is neither worker nor GPU
+reservation. Execution status belongs to runtime telemetry; regular/important
+findings and reports belong to slots. Keep one publication operation that saves
+state and emits its update. Regular updates can withdraw/revise an alert without
+forcing a new announcement.
 
-A Python thread that never returns cannot be terminated by `Future.cancel()`.
-Four stuck native tools exhaust native capacity; other dispatcher branches stay
-available. `shutdown(wait=False)` stops dispatcher waiting, but Python can still
-join pool workers during interpreter exit. Subprocess-backed tools should retain
-real subprocess timeouts; guaranteed termination of arbitrary future tools needs
-process isolation or cooperative cancellation. The patch does not claim to solve
-that limitation or impose the native timeout policy on every MCP/search path.
+EventBus carries review-worthy publications; ObservabilityBus carries UI/log
+telemetry. Domain callbacks and tool queues serve local request/result boundaries.
+They are not interchangeable event frameworks that need a universal bus.
 
-## Cleanup implemented, and corrections to the deletion list
+Preserve latest-trigger coalescing, single-run-per-mind, manual run while paused,
+independent stop and stale-result rejection. Fixed delays restart after completion;
+Vision reuses one random draw while live motion adjusts its pending deadline.
+No catch-up backlog is required.
 
-Removed `core/memory_context.py`, `autonomy/jobs.py`, invisible `speak` and
-`do_nothing` registrations/modules/terminal executor handling, unused vision
-event and emotion forwarding, unused personality builder, unused context/store
-helpers, test-only summarization/fact extraction, unused tiktoken factory/setter,
-EmotionConstitutionBridge, unused shutdown convenience methods and obsolete
-configuration/display fields. The two whole-file sizes were 171 + 308 = 479,
-not 308 combined.
+### Autonomy review and delivery
 
-Preserved `estimate_tokens`, SimpleTokenEstimator and its live default getter.
-Replaced deep-snapshot test/example calls with explicit deep copies and kept the
-history-preservation regressions. Old obsolete YAML keys are ignored by existing
-Pydantic extra-field behavior; shipped configs no longer advertise them.
+Keep reviewer → Central → acknowledged delivery. A reviewer offers no tools and
+cannot speak directly. All-slot visibility includes healthy/recovered state and
+waiting task items; bounded reports should not conceal queued work. Evidence
+versions captured at admission must be checked again before handoff/delivery.
 
-Two claimed dead paths were **not deleted**:
+An attention key identifies an incident despite wording/temperature changes.
+Revision identifies exact evidence. Handled state retires a task. The delivery
+ledger records what actually reached speech/display. A single announced revision
+cannot replace these four meanings. Greeting eligibility/freshness can be code;
+whether to greet remains a conversation-aware decision.
 
-* The optional-context-builder fallback in `llm_processor.py` is used by direct
-  processor callers/tests, even though engine construction always supplies a
-  builder. Make the builder mandatory only in a coordinated caller migration.
-* `/api/state`, `/api/minds` and `/api/agents` are documented public routes in
-  `webapp/server.py`. Lack of static-frontend usage does not make them dead APIs.
+A future dedicated reviewer worker must keep event ingestion responsive while
+waiting/running inference. Use bounded work and monotonic deadlines; continuous
+slot traffic must not starve periodic checks. Do not perform network I/O while
+holding the loop's state lock.
 
-The generic legacy autonomy tool-queue adapter remains for now. Removing it
-requires removing the autonomy fields/callers together with the processor-lane
-refactor, rather than deleting a queue contract while callers still supply it.
+### Requests, routing and cancellation
 
-## Fast-decision proposals
+Draft and normal reply must offer equal tools/instructions for equivalent reply
+requests, snapshot live providers once per prepared request, and keep raw media
+out of stored history/inspection. The clock is transient live context; local
+clock questions need no tool. Direct-audio speculation remains disabled pending
+an explicit quality/latency experiment.
 
-| Proposal | Assessment | Recommended form |
-|---|---|---|
-| F1: one quiet/wake/noise definition | Accept definition sharing; qualify flat routing. | Define reusable intent text/options and one transition handler. Quiet-mode wake must work with operator-created lists. Preserve hierarchical category/tool/argument selection until flat routing is benchmarked for accuracy and label capacity. |
-| F2: remove prompt `str.replace` | Accept. | Compose explicitly named instruction fragments. Cover quiet negation, health context and recalled-topic cases in prompt tests. |
-| F3: one permit/filter | Accept one typed authorization interface; reject the proposed `(settings_revision, allowed_tools)` as insufficient. | Preserve list/option revisions, fixed argument binding, tool availability and scope. Recheck at execution because settings can change after scoring. Remove keyword filtering only once fallback routing quality and read-only restrictions are preserved. |
-| F4: generic context capability metadata | Qualified. | A small capability description can remove hard-coded core coupling, but it must describe fresh supplied evidence, not advertise stale or missing measurements as answered. Avoid a second registry of core schemas. |
-| F5: delete migrations/regenerate settings | Reject blanket deletion. | Existing saved operator choices are real user data. Retain compatibility until a versioned migration/retirement plan exists; never regenerate custom lists as cleanup. |
-| F6: consolidate background inference | Accept in stages. | Common config, scheduling/cancellation and transport; thin structured-response and letter-score wrappers. Remove unused pool/schemas separately. Generic providers cannot all return llama.cpp option logits. |
-| F7: deterministic greeting/pre-filter evidence | Qualified. | Compute a greeting candidate/freshness in code; Autonomy still decides whether speaking is useful in this conversation. Keep all-slot visibility. Healthy/resolved state can explain that an old alert no longer matters. Deduplicate on actual delivery. |
-| F8: speculation | Keep text speculation for now. | Use one request builder, retain private buffering and cancellation until routing accepts reply. Measure native-audio overlap before enabling it. A smaller routing duration alone does not prove speculation is useless. |
+A routing permit must retain list/option/settings revision, tool scope and fixed
+arguments. Recheck availability and authorization immediately before execution.
+Per-turn offered tools remain the authority during delayed tool continuations.
+A generic allowed-tool set must not widen fixed-action or read-only fallback
+permissions. Preserve custom saved lists and migration behavior.
 
-## Core-runtime proposals
+Admission holds and interaction busy state differ: the hold may release at first
+valid audio readiness while response streaming or playback continues. Capture,
+routing, responding, queued speech, playback and quiet/autonomy cancellation need
+explicit ownership. Queue draining bounds memory; generation checks reject stale
+work. Neither replaces the other by itself.
 
-| Proposal | Assessment | Recommended form |
-|---|---|---|
-| C1: split processor | Strongly accept. | Turn data, request assembly, provider stream and response sink. Preserve provenance, stable-prefix ordering, overflow retry and native audio isolation. Snapshot live context once per prepared request; do not call clock/core providers inside a supposedly pure builder. |
-| C2: separate autonomy inference | Strongly accept boundary; qualify direct synchronous loop call. | A dedicated bounded reviewer worker uses common inference transport. The event loop must remain responsive while inference waits/runs and must not hold its state lock across network I/O. Replace ticker with a monotonic deadline, not only a queue timeout that continuous events can starve. Preserve schema validation, evidence revalidation and Central handoff. |
-| C3: TurnState/cancellation | Accept typed generation cancellation; reject scheduler hold as the only busy state. | Admission hold ends at first audio readiness, while speaking/streaming can continue. Track recording, responding and playing phases separately from admission pressure. Queue draining bounds memory; generation checks enforce correctness. Do not drop either until its replacement covers those roles. |
-| C4: smaller engine | Accept. | Extract config, commands and agent factories without changing initialization order or dynamic enable/disable. One explicit context assembly surface is useful; sources must still preserve stable/live ordering. A 700-line target is not a correctness requirement. |
-| C5: tools return results | Accept as next boundary. | Typed result-returning tools let executor own envelopes, timeout and outcome arbitration. Migrate tools in a separate patch; legacy queue adapters stay only at that edge during migration. Native pool fix is already done. |
-| C6: 30-line shutdown | Reject equivalence claim. | Queue drain currently discards, but priorities, deadlines, joins, exception reporting and component cleanup still have semantics. Document abort versus finish policies, then simplify against tests. Never equate dispatcher exit with termination of hung pool work. |
-| C7: shared persistence | Accept helper reuse; qualify caching/append redesign. | Share atomic replacement with explicit durability/locking policy. Preserve optimistic history compaction and summary editing. Cache knowledge with edit invalidation if external edits remain supported. Do not replace concurrency control with a shared write helper alone. The MiniMax environment-key fallback is functional configuration, not a hard-coded credential. |
+### Tools, shutdown and persistence
 
-Dropping native Ollama transport is a compatibility change, not automatically
-safe dead-code cleanup. Validate streaming tools, thinking, headers and native
-media behavior on the OpenAI-compatible endpoint before retiring a supported
-backend path.
+The native four-worker pool has bounded admission and atomic one-terminal-result
+queues. A timeout must free dispatch and suppress all late outcomes, including
+metadata/context. Four hung Python workers exhaust native capacity and may hold
+interpreter exit; cancellation cannot kill them. MCP/search deadlines are
+separate contracts. A future result-returning Tool interface should migrate
+queue adapters at its boundary, not remove them before callers change.
 
-## Autonomy proposals
+Shutdown has component priorities, deadlines, joins and cleanup. Document abort
+versus finish policy and report surviving workers; a 30-line replacement is not
+behaviorally equivalent without tests.
 
-| Proposal | Assessment | Recommended form |
-|---|---|---|
-| A1: dead code | Implemented. | Preserve live token-budget/history behavior and the reachable fallback. |
-| A2: MindRegistry → slots | Reject literal merge. | `Subagent._do_tick` reports execution/tick state to MindRegistry and publishes semantic output to slots. Engine registers ASR/TTS/processors too. Use one status projection for UI, with distinct runtime and evidence data; runtime ticks must not change evidence revisions or trigger announcements. |
-| A3: scheduling | Accept modest consolidation. | Allow event-driven agents with no no-op polling. Route on-demand work through bounded named groups and use one progress timer. Preserve latest-topic recall cancellation, emotion interaction timing and deadlines; avoid a generalized workflow engine. |
-| A4: split Memory | Accept internal responsibilities; qualify two new agents/slots. | Separate compaction and recall services behind one Memory Core first. This preserves historical summaries and the late relevant-fact scenario without adding orchestration. Split public slots only if their independent lifecycles require it. |
-| A5: one revision ledger | Reject direct replacement. | Semantic incident attention keys suppress revised wording for the same incident; in-flight evidence versions prevent stale announcements; handled state retires tasks. One announced revision loses these distinctions. Document invariants and remove only proven derived caches. |
-| A6: slots/caches | Accept consolidation after producer migration. | New producers use regular/important consistently; remove `notify_user` after adapters migrate. One formatter per audience/purpose, not necessarily one string everywhere. Lazy agent caches and separate directories are useful; retain safe migrations and cross-writer semantics. |
-| A7: Observer/Constitution | Product decision, not dead code. | If retained, give Observer its own enable flag and regular priority for tone adjustments. Immutable rules currently are displayed but not injected by the engine; explicitly choose injection or removal. Deleting the whole feature requires a product decision. |
+Atomic replacement is not a transaction policy. Define single-writer ownership
+or lock reload/update/save before sharing persistence helpers. Preserve history
+record-identity compaction, external-edit invalidation, memory provenance and
+user settings. The SubagentMemory pre-lock truncation bug is fixed; stale-instance
+lost updates remain. The sync helper's running-event-loop deadlock also remains.
 
-EventBus delivers slot changes to the reviewer. ObservabilityBus publishes UI
-telemetry. Direct calls and callbacks handle local requests and completion.
-They are not four interchangeable pub/sub frameworks. Keep those purposes clear
-rather than routing every message through a new universal event bus.
+## Compatibility/product decisions
 
-## I/O, UI and vision proposals
+Retain direct processor calls without a ContextBuilder, public web routes,
+Ollama's native transport and TTS `reuse_tts` until callers/features migrate.
+TUI, Observer/Constitution and Haar/E4B face modes are supported features, not
+zero-risk deletion candidates. Immutable constitution rules currently are not
+injected; prompt modifiers are. Observer does not yet have its own enable flag.
 
-| Proposal | Assessment | Recommended form |
-|---|---|---|
-| I1: one audio contract | Accept defaults/contract cleanup; qualify moving all behavior to a base class. | Specify discontinuity and capture health explicitly. Playback begin must remain short/nonblocking so quiet/cancel locks are not held during audio playback. WebSocket `check_if_speaking` has internal uses; it cannot simply be erased. Centralize bounded capture behavior only with race/owner-switch tests. |
-| I2: UserTurn/encoders | Accept. | PCM and media metadata stay out of persisted chat/logs. Typed native/ASR encoders and optional deferred transcripts feed the shared Turn representation. Preserve continuation cancellation and English default. |
-| I3: status/UI | Accept a shared status projection; reject unused-route and `reuse_tts` deletion claims. | `serializers.build_state/build_snapshot` overlap, but public routes remain. `reuse_tts` affects production API loading and has documentation/tests. Retiring the TUI is a product choice; if retained, consume the same status interface without removing its bus drain until migrated. |
-| I4: vision trims | Qualified. | Yunet/E4B/Haar are supported configurable modes, not proven dead branches. Resolve precedence between config defaults and saved operator settings; preserve interval migration until stored configs migrate. No face-mode deletion without quality/compatibility evidence. |
+Deferred transcripts, flat routing, native embedding and Rust/AEC migration are
+experiments or future work. The faster tested shared-transcript path remains.
+Keep historical measurements with their dates, hardware and tested revisions;
+do not present old configuration or synthetic timings as current runtime facts.
 
-## Additional findings from the deeper scan
+## Remaining implementation sequence
 
-1. **`llm_decide_sync` blocks its own running event loop.**
-   `core/llm_decision.py` submits a coroutine with
-   `run_coroutine_threadsafe(..., loop)` and immediately calls `future.result`
-   from that loop's thread. An isolated fake that returns immediately still
-   times out. Current HN/Weather worker-thread callers generally take the
-   no-running-loop branch, so this is a latent public-helper bug. Prefer direct
-   synchronous inference from synchronous workers; async callers await the
-   async wrapper. Until migrated, fail clearly if sync usage occurs on a running
-   loop. Cancel timed-out submitted work; do not rely on the unused `_executor`.
+1. Common inference transport plus a bounded dedicated reviewer. Preserve provider
+   headers/options, schemas, candidate scores, streaming, admission and cancellation.
+2. Interaction ownership and result-returning tools. Test every cancellation
+   boundary, offered-tool authorization, timeout saturation and one terminal result.
+3. Persistence transactions and the async/sync helper bug. Test concurrent writers,
+   external edits, restart/migrations and explicit loop usage.
+4. Runtime status projection and focused engine/Memory housekeeping. Preserve
+   execution/evidence separation and existing controls without adding orchestration.
 
-2. **File locking does not protect SubagentMemory against stale-instance writes.**
-   Two instances loaded before either writes maintain separate `_entries`.
-   A writes `first`, B writes `second`, and reload contains only `second`.
-   Reproduced using temporary files. Locking serializes truncation but does not
-   merge state. Before consolidating persistence, define single-writer ownership
-   or lock the entire reload/update/save transaction. This is not fixed in this
-   patch because it affects cache/store contracts beyond the requested cleanup.
+Mind timing consolidation is already complete and should not be scheduled again.
+The [progress document](architecture-refactor-progress.md) records the same order.
 
-3. **Thread and latency reduction claims need operational measurement.**
-   An unused ThreadPoolExecutor creates no worker threads until submission.
-   Counting constructors/callbacks is not a runtime census. The inventory found
-   12 direct Thread construction sites, five pool construction sites and 11
-   queue construction sites; configurations and active tasks change actual
-   counts. A smaller processor may improve maintainability without reducing
-   GPU prefill, audio encoding or first-token latency.
+## Verification scope
 
-4. **Review coverage must include request parity and admission lifetime.**
-   Existing direct listener tests missed B1; route tests without search tools
-   missed B3. Keep engine-construction and captured-request regressions alongside
-   unit tests. Exercise foreground interruption during every background core,
-   not only a scheduler unit test.
-
-## Recommended implementation sequence
-
-1. **Shared request builder and Turn envelope.** Extract prepared context,
-   route/authorization, tool selection and prompts; both normal reply and draft
-   consume it. Keep a compatibility adapter for message dictionaries. Acceptance:
-   equal instructions/tools for equivalent reply requests; cached stable prefix
-   unchanged; live clock/vision/input last; no raw audio in stored history.
-2. **Common inference transport and separate reviewer worker.** Consolidate
-   provider configuration/admission/cancellation and structured/choice wrappers.
-   Move Autonomy away from the speech processor, with one bounded reviewer and
-   monotonic scheduling. Acceptance: updates remain ingestible during inference,
-   pending/queued work stays visible, stale evidence cannot speak, no duplicate
-   delivery after changed slot wording, foreground holds resume each core.
-3. **Explicit interaction state and tools that return results.** Centralize
-   generation/epoch/quiet checks and recording/responding/playing phases. Migrate
-   local tools to result-returning operations, then remove unused autonomy tool
-   plumbing. Acceptance: continuation before playback cancels old response;
-   timed-out work never supplies a second outcome; busy does not end merely
-   because the admission hold is released; shutdown reports remaining workers.
-4. **Runtime housekeeping.** Shared UI status projection, event-driven no-op
-   agents, shared progress timer, Memory internals, small atomic persistence
-   helper with safe ownership, commands/factories outside engine. Acceptance:
-   all current controls/APIs work, custom settings survive, regular state does
-   not create important events, memory summaries and recall remain available.
-
-After these, measure whether flat routing, direct-audio speculation or retiring
-Observer/TUI/face backends improves the actual product. Do not combine those
-product choices with a structural refactor. Each stage should be independently
-reviewable and preserve the existing foreground/background concurrency model.
-
-## Validation
-
-Regression coverage includes actual engine construction in text/both modes,
-native timeout/late-result behavior and four-worker saturation, persistent HN
-verdicts across restart, WebSocket overflow/ownership and draft search prompts.
-The servers stayed stopped; no GPU inference or end-to-end latency claims are
-made. Final checks: **632 passed** with the concurrent converter test module and API
-subdirectory excluded; **6 passed** in the separate API/API-config run (the API
-config tests also appear in the first run). The complete non-API run reported
-691 passes and seven failures in the concurrent converter rewrite. Compilation
-and patch whitespace checks passed. Existing deprecation warnings and harmless
-HTTP connection-reset logs remain.
-
-During validation an unrelated rewrite of `src/glados/utils/spoken_text_converter.py`
-appeared in the shared workspace. It was left untouched. The full suite then
-reported seven mathematical-notation failures in that file; the unchanged HEAD
-version passes a failing power-conversion example. Cleanup verification therefore
-also runs with that concurrently edited test module excluded. Do not attribute
-that rewrite or its test failures to this patch.
+Regression modules cover engine startup, request parity/media isolation, routing,
+voice continuation, capture discontinuities, tool timeouts/authorization, mind
+scheduling, interaction holds, memory and Autonomy evidence/delivery. The latest
+full run recorded before this documentation pass is **1,049 passed** on
+2026-10-10; the extended-frame update passed 16 focused webapp tests on 2026-10-11.
+This documentation pass runs static code/config/link checks and no GPU inference.
+A passing test suite is not a fresh end-to-end voice-latency or hardware benchmark.

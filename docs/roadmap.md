@@ -1,48 +1,65 @@
 # Roadmap
 
-Product direction and future feature ideas for GLaDOS.
+Reviewed **2026-10-11**. Implemented behavior and future work are separated here;
+[architecture progress](../plans/architecture-refactor-progress.md) tracks runtime
+refactoring, and [the documentation map](README.md) links the current guides.
 
-## Delivery Sequence
+## Current baseline
 
-Bring the current GLaDOS codebase close to feature complete, then migrate it to
-Rust. The working application provides the behavior and user experience against
-which the port is checked. Small feasibility probes can continue during feature
-development to resolve migration risks.
+- E4B direct audio with optional Gemma transcripts; Parakeet plus a chosen text
+  model remains the extended profile. English and disabled thinking are defaults.
+- One-token capability routing with editable lists, versioned tool authorization
+  and text-only speculative replies where capacity permits.
+- Independent Emotion/PAD, Memory recall/compaction, Health and motion-aware Vision.
+  Minds need not use an LLM; their timing policies belong to MindScheduler.
+- Regular/important slot publication and Autonomy reviewer → Central delivery.
+  Health threshold alerts, late relevant memory and requested research are live.
+- Basic Portal interface, detailed operator console and tablet Presence, with
+  local themes, camera treatments, device/settings controls and memory editing.
+- Microphone continuation/interruption, bounded queues, background inference
+  holds, MCP/native tools and tracked research/cancellation.
 
-The [Rust migration plan](rust-migration.md) records the desktop and model
-direction, native inference approach, and the tested Sonora AEC results. Native
-AEC is fast enough in the Linux probe and removes playback echo effectively;
-overlapping speech remains intelligible with noticeable degradation and needs
-further validation before production adoption.
+These features still need broader real speech, hardware and mixed-workload
+validation. Their existence does not imply an achieved voice-latency target.
 
-## Audio Setup Wizard
+## Remaining product work
 
-Interactive setup to configure audio devices:
-- Select input/output devices
-- Calibrate VAD threshold
-- Run loopback test
-- Webcam check (describe what it sees)
+### Audio setup wizard
 
-## Home Assistant Mapping Editor
+Device selection and capture-health inspection already exist. A guided workflow
+for selecting devices, VAD calibration, loopback/echo checks and camera verification
+is not implemented. Production acoustic echo cancellation also remains future work.
 
-Map HA entities to MCP tool calls with safe, discoverable aliases:
-- Data model: id, label, description, server, tool, args_template, confirm, cooldown_s, tags, examples
-- Discovery: pull entity list from server or manual entry
-- Editor UX: select server → search entities → pick action → edit args → test → save
-- Safety: required arg validation, cooldowns, optional confirmation for risky domains
+### Home Assistant mapping editor
 
-## Emotional State System
+MCP tools and manual fixed routing choices already work with a configured server.
+An editor that discovers entities, assigns useful aliases/arguments, validates
+bindings and tests actions is still an idea. Avoid introducing a new mapping
+framework before validating its need against existing decision lists.
 
-LLM-driven emotional regulation using HEXACO personality and PAD (Pleasure-Arousal-Dominance) affect:
-- Personality traits defined in system prompt (immutable)
-- PAD state updated by LLM based on events
-- Mood drifts slowly toward current state
-- Informs response tone without explicit mention
+### Additional evidence sources
 
-## Additional Slot Types
+Calendar/time-to-leave reminders, personal reminders and optional message/email
+summaries are potential new minds. System/GPU health is already implemented.
+Each future mind should use the existing scheduler, publication and inference
+contracts; a new source does not require another orchestration layer.
 
-Potential background jobs to add:
-- Calendar: upcoming events + time-to-leave reminders
-- System health: GPU/CPU temp, disk space, service status
-- Personal reminders: hydration, breaks, posture
-- Social: unread messages or emails (summary only)
+## Engineering priorities
+
+Common inference transport/dedicated reviewer, explicit interaction/tool ownership,
+persistence correctness and runtime status projection remain. Mind timing
+consolidation and the large-method extraction are done; see the
+[remaining sequence](../plans/architecture-refactor-progress.md#remaining-work).
+
+Broader AMD audio-model validation, streaming ASR and physical animatronics remain
+uncompleted. Flat routing, direct-audio speculation and recurring decisions to
+interrupt the user require explicit evaluation rather than automatic activation.
+
+## Rust delivery direction
+
+Bring the Python application close to the agreed feature baseline, then migrate
+to Rust. [Rust migration](rust-migration.md) describes the proposed Tauri/local
+model direction; [native inference](native-inference.md) and the Sonora probe
+provide dated feasibility evidence. Neither native embedding nor Sonora AEC is
+integrated into production. Overlapping speech quality and cross-platform/device
+behavior remain acceptance work; no delivery dates are assigned.
