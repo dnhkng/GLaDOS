@@ -1,5 +1,8 @@
 # Gemma 4 E4B locally
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 The default profile uses **E4B for direct audio and replies**, English by
 default, with thinking disabled. Parakeet is not instantiated or warmed up,
 which avoids its model allocation. The tested backend is llama.cpp's
@@ -114,8 +117,8 @@ revision `b8093469224f83f5c38f691eb906c380e9e63114`:
 | `gemma-4-E4B-it-Q4_0.gguf` | `a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2` |
 | `mmproj-gemma-4-E4B-it-Q8_0.gguf` | `197f49a93027f9843772bd24a6a9e0be2a32a788de5a3def330e9c585d86edd1` |
 
-Both verified files are in the ignored `models/gemma4-benchmark/` directory.
-The installed build on this machine is
+The experiments used both verified files in the ignored `models/gemma4-benchmark/` directory.
+The locally tested build for these dated experiments was
 `/home/dnhkng/Documents/LLM/llama.cpp/build-current/bin/llama-server` (commit `687e7789`).
 The earlier `/tmp/glados-gemma4-build` may disappear after reboot. Use a Gemma 4-capable
 CUDA build; the older `build/bin/llama-server` on this machine does not support this model.
@@ -212,8 +215,9 @@ desktop allocations. [Raw results](benchmarks/llamacpp-tuning-2026-10-06.json).
 
 Prompt assembly also preserves stable prefixes: personality, speech and console
 rules, operator instructions and preferences precede completed history. Retrieved
-memory, core reports, PAD, MCP data, clock, routing/tool-result metadata and the
-camera observation follow it, just before the current user/tool exchange. Tool
+memory, core reports, PAD, MCP data, clock, routing/tool-result metadata and camera
+observations are transient live sources near the current exchange. Their exact
+order and offered tool definitions are visible in Neural Buffer. Tool
 calls and results stay contiguous. Live state is transient, never written into
 conversation history. The context inspector displays this actual order.
 
@@ -266,8 +270,9 @@ and excess work queues. Increasing Python workers alone does not increase server
 For a one-slot server configure `inference: {slots: 1, reserved_interactive: 0}`.
 
 Routing uses one output token from the same E4B model, including direct audio;
-it does not load Parakeet. Settings → Decision lists controls its options and
-optional parallel drafts. The extended profile can still use any model; the
+it does not load Parakeet. Facility Settings controls decision lists, options and thresholds. Parallel drafts
+are managed automatically on compatible text/transcribed turns; there is no
+operator draft switch. The extended profile can still use any model; the
 scoring adapter requires llama.cpp's tokenization and post-sampling probability
 API, so leave routing disabled for other backends. Changing endpoint/model resets
 routing activation to the new profile's default while retaining editable lists.

@@ -207,18 +207,34 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <link rel="stylesheet" href="glados-avatar.css">
 <link rel="stylesheet" href="glados-themes.css">
 <link rel="stylesheet" href="glados-console.css">
+<link rel="stylesheet" href="glados-portal.css">
 <script src="glados-themes.js"></script>
 </head>
 <body>
+<div class="portal-boot" id="portal-loading" role="status" aria-live="polite">
+  <div class="boot-inner"><svg class="aperture-mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(0 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(45 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(90 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(135 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(180 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(225 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(270 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(315 50 50)"/></svg>
+    <h2>Aperture Science</h2><p class="boot-sub">GENETIC LIFEFORM AND DISK OPERATING SYSTEM</p>
+    <ol><li><span>Loading facility interface</span><b id="boot-interface">WAIT</b></li>
+      <li><span>Calibrating central optic</span><b id="boot-optic">WAIT</b></li>
+      <li><span>Receiving core state</span><b id="boot-snapshot">WAIT</b></li>
+      <li><span>Linking live telemetry</span><b id="boot-telemetry">WAIT</b></li></ol>
+    <div class="boot-bar" aria-hidden="true"><i id="boot-progress"></i></div>
+    <p id="boot-message">Please remain calm. Your cooperation has been noted.</p>
+    <button type="button" class="btn-secondary" id="boot-skip">Continue to interface</button>
+  </div>
+</div>
+
 <div id="app">
   <div class="hazard-bar"></div>
   <header class="topbar">
     <div class="brand"><svg class="aperture-mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(0 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(45 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(90 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(135 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(180 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(225 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(270 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(315 50 50)"/></svg><div class="brand-t"><div class="t1">GLaDOS</div><div class="sub">APERTURE SCIENCE &middot; CORE CONSOLE</div></div></div>
     <div class="spacer"></div>
     <label class="theme-label">Theme <select id="theme-choice" aria-label="Interface theme"></select></label>
-    <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
+    <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=console">Detailed view ↗</a>
+    <a class="btn-secondary operator-only" id="presence-switch" href="/?surface=presence">Presence screen ↗</a>
     <span class="uptime" id="uptime">UP —</span>
     <span class="clock" id="clock">--:--:--</span>
+    <span class="portal-pair" aria-hidden="true"><i class="p-in"></i><i class="p-out"></i><b id="portal-indicator">Connecting</b></span>
     <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
   </header>
 
@@ -240,31 +256,46 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
     <!-- MISSION CONTROL -->
     <section class="view active" id="view-home">
+      <header class="chamber-sign basic-only" aria-label="Aperture Science facility controls">
+        <div class="cs-num" aria-hidden="true">00<small>TEST CHAMBER</small></div>
+        <div class="cs-title"><strong>GLaDOS</strong><span>APERTURE SCIENCE · ENRICHMENT CENTER</span>
+          <div class="cs-ticks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="cs-status" aria-label="Audio and camera controls">
+          <button type="button" class="pict-tile" data-control="microphone" aria-label="Microphone" disabled></button>
+          <button type="button" class="pict-tile" data-control="voice" aria-label="Voice output" disabled></button>
+          <button type="button" class="pict-tile" data-control="camera" aria-label="Camera" disabled></button>
+          <button type="button" class="pict-tile" data-control="quiet" aria-label="Quiet mode" disabled></button>
+        </div>
+      </header>
+
       <div class="view-head operator-only">
         <h1>Enrichment Center</h1>
         <span class="sub">Facility observation and control.</span>
         <div class="right"><span class="chip teal" id="pool-status">shared processing —</span><span class="chip amber" id="mcInflight">in-flight 0</span></div>
       </div>
+      <div class="overview-grid" id="overview-layout">
       <section class="card avatar-card presence-stage" id="avatar-card" aria-label="GLaDOS eye and optic feed">
         <div class="avatar-stage">
-          <svg id="glados-eye" viewBox="-200 -200 400 400" role="img" aria-label="GLaDOS aperture, connecting"></svg>
+          <svg id="glados-eye" viewBox="-160 -160 320 320" role="img" aria-label="GLaDOS aperture, connecting"></svg>
           <div class="presence-state"><div id="presence-activity">Connecting</div><p class="console-note" id="presence-detail"></p></div>
         </div>
-        <div class="presence-info">
-          <div class="presence-speech" aria-live="polite">
-            <p class="presence-user"><span class="slice">You</span> <span id="latest-input">No input received yet.</span></p>
-            <p id="latest-reply">Replies appear here, including when voice output is muted.</p>
+          <div class="presence-speech" id="presence-dialogue" aria-live="polite" hidden>
+            <p class="presence-user"><span class="slice">You</span> <span id="latest-input"></span></p>
+            <p id="latest-reply"></p>
           </div>
+        <div class="presence-info">
           <div class="avatar-optic" id="avatar-optic" hidden>
             <canvas id="avatar-optic-view" role="img" aria-label="Live optic feed with theme treatment"></canvas>
             <img id="avatar-optic-source" alt="" hidden>
             <div class="avatar-optic-hud" aria-hidden="true"><span id="optic-subject" hidden>TEST SUBJECT</span><span id="optic-motion">MOTION 0.00</span></div>
           </div>
+          <div class="camera-placeholder basic-only"><span class="camera-placeholder-mark" aria-hidden="true">◎</span><p id="basic-camera-status">Connecting optical sensors…</p></div>
           <div class="vision-description"><div class="slice" id="vision-caption-meta">Vision Core</div><p class="console-note" id="vision-caption">No observation yet.</p></div>
           <div class="presence-thoughts"><h3>On her mind</h3><div id="presence-thoughts"></div></div>
         </div>
       </section>
-      <div class="card conversation-input">
+      <div class="card conversation-input" id="conversation-input">
         <h3>Talk to GLaDOS <span class="now" id="runtime-model">Connecting</span></h3>
         <form id="message-form"><label for="message-text">Send a message or ask her to work on a task</label>
           <input class="console-field" id="message-text" maxlength="8000" required placeholder="What would you like to do?">
@@ -272,18 +303,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         </form>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
       </div>
-      <div class="overview-grid operator-only">
-        <section class="card overview-turn"><h3>Latest turn <span class="now" id="turn-latency">Waiting for input</span></h3><div id="overview-route" class="decision-path"></div><div id="turn-waterfall" class="turn-waterfall"></div><p class="console-note">Recorded server events: input accepted → playback requested. Excludes endpoint silence and browser audio buffering.</p></section>
-        <section class="card"><h3>Inference slots <button class="btn-secondary" data-go="cores">Inspect</button></h3><div id="overview-slots" class="capacity-tiles"></div><p class="console-note" id="overview-hold"></p><div id="overview-queue" class="console-note"></div></section>
-        <section class="card"><h3>Core activity <button class="btn-secondary" data-go="cores">Inspect</button></h3><div class="table-scroll"><table class="core-table"><thead><tr><th>Core</th><th>State</th><th>Latest update</th></tr></thead><tbody id="overview-cores"></tbody></table></div></section>
-        <section class="card"><h3>Autonomy Core <button class="btn-secondary" data-go="settings">Settings</button></h3><p class="console-note" id="overview-autonomy"></p><p class="console-note" id="overview-handoff"></p></section>
+        <section class="card overview-turn operator-only" id="overview-turn-card"><h3>Latest turn <span class="now" id="turn-latency">Waiting for input</span></h3><div id="overview-route" class="decision-path"></div><div id="turn-waterfall" class="turn-waterfall"></div><p class="console-note">Recorded server events: input accepted → playback requested. Excludes endpoint silence and browser audio buffering.</p></section>
+        <section class="card overview-capacity operator-only"><h3>Inference slots <button class="btn-secondary" data-go="cores">Inspect</button></h3><div id="overview-slots" class="capacity-tiles"></div><p class="console-note" id="overview-hold"></p><div id="overview-queue" class="console-note"></div></section>
+        <section class="card overview-core-activity operator-only"><h3>Core activity <button class="btn-secondary" data-go="cores">Inspect</button></h3><div class="table-scroll"><table class="core-table"><thead><tr><th>Core</th><th>State</th><th>Latest update</th></tr></thead><tbody id="overview-cores"></tbody></table></div></section>
+        <section class="card overview-autonomy operator-only"><h3>Autonomy Core <button class="btn-secondary" data-go="settings">Settings</button></h3><p class="console-note" id="overview-autonomy"></p><p class="console-note" id="overview-handoff"></p></section>
       </div>
       <div class="grid cols-3 operator-only" style="margin-bottom:16px">
         <button type="button" class="card" data-go="tasks"><div class="stat"><div class="v" id="mc-slots">0</div><div class="l">Assignments tracked →</div></div></button>
         <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-minds">0</div><div class="l">Online cores →</div></div></button>
         <button type="button" class="card" data-go="cores"><div class="stat"><div class="v" id="mc-inflight">0</div><div class="l">User-facing inferences →</div></div></button>
       </div>
-      <div class="grid cols-2 home-controls">
+      <div class="grid cols-2 home-controls" id="presence-controls">
         <div class="card operator-only">
           <h3>Dual Lane Orchestration <span class="now" id="laneNow"></span></h3>
           <div class="lanes">
@@ -306,6 +336,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           </div>
         </div>
         <div class="card central-controls">
+          <div class="presence-clock"><time id="presence-clock"></time><span id="presence-date"></span></div>
           <h3>Central Core <span class="now" id="brainstem-source">Engine state</span></h3>
           <p class="console-note" id="brainstem-detail"></p>
           <div class="console-actions">
@@ -464,6 +495,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script src="glados-vision-themes.js"></script>
 <script src="glados-avatar.js"></script>
 <script src="glados-overview.js"></script>
+<script src="glados-portal.js"></script>
 <script src="glados-routing.js"></script>
 <script src="glados-context.js"></script>
 <script src="glados-memory.js"></script>
@@ -500,6 +532,7 @@ const S = {
 };
 const avatar = window.GladosAvatar.mount(document);
 const overview = window.GladosOverview.mount(document, {escape:esc, coreOwner, cores:allMinds, identity:coreIdentity, activity:coreActivity, describe:routingDescription});
+const portal = window.GladosPortal.mount(document);
 window.GladosThemes.mount(document, () => { avatar.update(S); overview.update(S); });
 const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
 const memoryBrowser = window.GladosMemory.mount(document, () => S.live && S.connection === 'live');
@@ -536,9 +569,11 @@ function entry(ev){
   ev.level = ({debug:"debg",success:"ok",warning:"warn",error:"err",critical:"err"})[ev.level] || ev.level;
   if(!("t" in ev)) ev.t = Date.now();
   if(ev.kind==='user_input'){
-    replyParts=[]; $('latest-reply').textContent='Waiting for GLaDOS…';
+    replyParts=[]; $('latest-reply').textContent='';
+    $('presence-dialogue').hidden=false;
   }
   if(ev.src==='tts' && ev.kind==='synthesize'){
+    $('presence-dialogue').hidden=false;
     replyParts.push(ev.msg); if(replyParts.length>40) replyParts.shift();
     $('latest-reply').textContent=replyParts.join(' ');
   }
@@ -645,6 +680,7 @@ function coreActivity(core){
   if(core.execution_status==='queued')return {label:'Queued',className:'s-paused',detail:'Waiting for a mind worker',active,waiting};
   if(core.execution_status==='running')return {label:'Working',className:'s-running',detail:'Processing update',active,waiting};
   if(core.research?.status==='researching')return {label:'Working',className:'s-running',detail:'Research round '+core.research.rounds+' of '+core.research.max_rounds,active,waiting};
+  if(core.execution_status==='error' || core.status==='error')return {label:'Error',className:'s-error',detail:core.error || core.summary || 'Last run failed',active,waiting};
   if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
   return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':core.interval_s==null?'On demand':'Delay '+core.interval_s+' s after completion':'Ready for requests',active,waiting};
 }
@@ -780,6 +816,7 @@ function paint(){
   syncLane("nc-priotrack", S.prioInflight, "priority");
   syncLane("nc-autotrack", S.lanes.autoInflight, "autonomy");
   renderConsoleControls(); renderHomeTasks(); renderBrainstem(); renderWorkers(); renderMinds(); renderTools(); renderSlots(); renderInference(); renderAutonomySettings(); renderDecisionSettings(); renderVitals(); renderVisionInspector(); updateBadges();
+  portal.update(S);
 }
 
 /* ============ drawer ============ */
@@ -910,10 +947,10 @@ async function apiPost(path,body){
 async function refreshSnapshot(){applySnapshot(await maybeFetch('/api/snapshot'));paint();}
 async function perform(action,feedback='console-feedback'){
   if(operationPending) return;
-  operationPending=true;renderConsoleControls();$(feedback).textContent='Working…';
+  operationPending=true;renderConsoleControls();portal.update(S);$(feedback).textContent='Working…';
   try{$(feedback).textContent=await action()||'Updated.';}
   catch(error){$(feedback).textContent=error.message;}
-  finally{operationPending=false;renderConsoleControls();}
+  finally{operationPending=false;renderConsoleControls();portal.update(S);}
 }
 let visionIntervalDirty=false;
 let searchSourcesDirty=false;
@@ -1001,6 +1038,7 @@ function renderHomeTasks(){
 
 /* ============ live layer ============ */
 function applySnapshot(j){
+  portal.snapshot();
   S.operator=j.operator||S.operator;
   if(j.decisions) S.decisions=j.decisions;
   S.agentMinds=j.agent_minds||null; S.tools=j.tools||[];
@@ -1058,11 +1096,13 @@ function startLive(){
     const es = new EventSource("/api/stream");
     es.addEventListener("obs", e=>entryEvent(JSON.parse(e.data)));
     es.addEventListener("state", e=>{ applyState(JSON.parse(e.data)); paint(); });
-    es.addEventListener("performance", e=>{ applyPerformance(JSON.parse(e.data)); avatar.update(S); overview.activity(S); });
+    es.addEventListener("performance", e=>{ applyPerformance(JSON.parse(e.data)); avatar.update(S); overview.activity(S);
+      portal.activity(S); });
     es.addEventListener("audio", e=>{
       applyAudio(JSON.parse(e.data));
       avatar.update(S);
       overview.activity(S);
+      portal.activity(S);
     });
     es.addEventListener("camera", e=>{
       const tracking=JSON.parse(e.data);
@@ -1291,6 +1331,10 @@ function testDecision(list){
 let bootT=Date.now();
 function renderClock(){ const up=Math.floor((Date.now()-(S.controls.started_at?S.controls.started_at*1000:bootT))/1000);
   $("clock").textContent=timeStr(Date.now());
+  const now=new Date();
+  $("presence-clock").textContent=timeStr(now.getTime());
+  $("presence-clock").setAttribute('datetime',now.toISOString());
+  $("presence-date").textContent=now.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
   $("uptime").textContent="UP "+pad(Math.floor(up/3600))+":"+pad(Math.floor(up%3600/60))+":"+pad(up%60); }
 renderFilters();
 startLive();

@@ -4,6 +4,10 @@ Standalone Rust AEC3 worker and Python measurement/device harness. This does not
 change GLaDOS's production audio path. Sonora is pinned to upstream commit
 `413f64e7404529aaae6980613527f0d6acb21ce7` (crate version 0.2.0).
 
+Status reviewed 2026-10-11: this is still an isolated feasibility probe.
+The recorded measurements below are from 2026-10-06 and were not rerun. See
+[the migration plan](../../docs/rust-migration.md) for remaining acceptance work.
+
 ## Run
 
 Requires Rust 1.91+, the project's Python environment, and existing GLaDOS TTS,

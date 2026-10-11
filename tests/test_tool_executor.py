@@ -169,3 +169,37 @@ def test_hung_tools_have_bounded_admission(monkeypatch):
         executor.shutdown_event.set()
         worker.join(1)
     assert not worker.is_alive()
+
+
+def test_failed_and_timed_out_tools_carry_lane_metadata(monkeypatch):
+    import glados.core.tool_executor as module
+    released = threading.Event()
+
+    class Tool:
+        def __init__(self, llm_queue, tool_config):
+            pass
+        def run(self, call_id, args):
+            if call_id == "slow":
+                released.wait(2)
+            else:
+                raise RuntimeError("boom")
+
+    monkeypatch.setattr(module, "all_tools", ["test"])
+    monkeypatch.setattr(module, "tool_classes", {"test": Tool})
+    executor = make_executor()
+    executor.tool_timeout = .03
+    executor.processing_active_event.set()
+    worker = threading.Thread(target=executor.run)
+    worker.start()
+    try:
+        for call_id, expected in (("broken", "failed"), ("slow", "timed out")):
+            executor.tool_calls_queue.put({"id": call_id, "function": {"name": "test", "arguments": {}}})
+            result = executor.llm_queue_priority.get(timeout=1)
+            assert expected in result["content"]
+            assert result["_lane"] == "priority" and "_enqueued_at" in result
+            assert result["_allow_tools"] is False and result["type"] == "function_call_output"
+    finally:
+        released.set()
+        executor.shutdown_event.set()
+        worker.join(1)
+    assert not worker.is_alive()

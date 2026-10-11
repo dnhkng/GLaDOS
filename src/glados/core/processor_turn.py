@@ -27,6 +27,7 @@ class ProcessorTurn:
     routing_permit: dict[str, Any] | None = None
     read_only: bool = False
     allow_tools: bool = False
+    available_tools: list[dict[str, Any]] | None = None
     tools: list[dict[str, Any]] = field(default_factory=list)
     tool_names: set[str] = field(default_factory=set)
     base_messages: list[dict[str, Any]] = field(default_factory=list)

@@ -211,19 +211,21 @@ def test_currency_and_percentages(converter: SpokenTextConverter, text: str, exp
         ("12:05:01 PM", "twelve oh five and one second in the afternoon"),
         ("00:00", "zero o'clock"),
         ("23:59", "twenty-three fifty-nine"),
-        ("25:00", "25:00"),
-        ("12:99", "12:99"),
-        ("13pm", "13pm"),
+        # Invalid dates and times are read as their numbers, never as an invented
+        # date, and never left as digits: the phonemizer drops digits entirely.
+        ("25:00", "twenty-five hundred"),
+        ("12:99", "twelve ninety-nine"),
+        ("13pm", "thirteen pm"),
         ("2026-10-07", "october seventh, twenty twenty-six"),
         ("2024-02-29", "february twenty-ninth, twenty twenty-four"),
         ("0001-01-01", "january first, one"),
-        ("2026-02-30", "2026-02-30"),
+        ("2026-02-30", "twenty twenty-six two thirty"),
         ("1/1/2005", "january first, twenty oh five"),
         ("31/12/2026", "december thirty-first, twenty twenty-six"),
         ("1/1/23", "january first, twenty twenty-three"),
         ("12/25/2000", "december twenty-fifth, two thousand"),
         ("4/5/2026", "april fifth, twenty twenty-six"),
-        ("11/31/2024", "11/31/2024"),
+        ("11/31/2024", "eleven thirty-one twenty twenty-four"),
         (
             "We'll meet at 3:00 PM on 2026-10-07, costing €1,234.56.",
             "we will meet at three in the afternoon on october seventh, twenty twenty-six, costing one thousand two "
@@ -310,3 +312,32 @@ def test_shared_converter_keeps_requests_independent(converter: SpokenTextConver
     expected = [converter.text_to_spoken(text) for text in cases]
     with ThreadPoolExecutor(max_workers=4) as pool:
         assert list(pool.map(converter.text_to_spoken, cases)) == expected
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        # "-ed" verbs in the present tense keep "would"; real participles take "had".
+        ("I'd need a minute.", "I would need a minute."),
+        ("We'd succeed.", "we would succeed."),
+        ("She'd feed the cat.", "she would feed the cat."),
+        ("I'd finished it. I'd agreed.", "I had finished it. I had agreed."),
+        # Units are case-sensitive: network generations and acronyms are not grams or milliseconds.
+        ("5G networks", "five g networks"),
+        ("4G LTE", "four g L T E"),
+        ("Top 10 MS products", "top ten M S products"),
+        ("use 2FA", "use two F A"),
+        ("It weighs 5 g. 5GB free.", "it weighs five grams. five gigabytes free."),
+        ("Wait 200 ms.", "wait two hundred milliseconds."),
+        ("3.5 GHz, 16 GB", "three point five gigahertz, sixteen gigabytes"),
+        ("Ms. Smith and Dr. Who", "miss smith and doctor who"),
+        # Year spans are read as years; phone numbers digit by digit; other spans as ranges.
+        ("2024-2025 season", "twenty twenty-four to twenty twenty-five season"),
+        ("year 1984-85", "year nineteen eighty-four to eighty-five"),
+        ("Call 555-1234", "call five five five, one two three four"),
+        ("1-800-555-1234", "one, eight zero zero, five five five, one two three four"),
+        ("pages 10-20", "pages ten to twenty"),
+    ],
+)
+def test_review_regressions(converter: SpokenTextConverter, text: str, expected: str) -> None:
+    assert converter.text_to_spoken(text) == expected

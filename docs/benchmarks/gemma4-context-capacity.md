@@ -31,9 +31,12 @@ while the global-attention layers retain the full context; it does not limit
 the complete conversation to the sliding-window length. It can cause more
 prompt reprocessing when conversations switch or cached prefixes are restored.
 
-## Suggested profile
+## Historical capacity profile (not the current default)
 
-For more memory headroom, remove `--swa-full` and use:
+The experiment suggested an eight-slot rolling-cache profile for more memory
+headroom. The current launcher instead uses four 16K slots, Q8_0 KV and full SWA;
+see [the current E4B setup](../gemma4.md#reproduce-with-llamacpp). To reproduce
+this historical alternative, remove `--swa-full` and use:
 
 ```sh
 -c 262144 --parallel 8 --cache-type-k q8_0 --cache-type-v q8_0

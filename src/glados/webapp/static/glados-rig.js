@@ -120,15 +120,14 @@
     }
 
     return `<defs>
-<radialGradient id="${id}g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(0 -10) scale(190)">
+<radialGradient id="${id}g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="scale(190)">
 <stop offset="0" stop-color="#1A2029"/><stop offset="1" stop-color="${BG}"/></radialGradient>
 <filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
 <clipPath id="${id}c"><circle cx="${f(mx)}" cy="${f(my)}" r="${f(Rm + 4)}"/></clipPath>
 </defs>
 <rect x="-200" y="-200" width="400" height="400" fill="url(#${id}g)"/>
 <g fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-<ellipse cx="0" cy="172" rx="${f(70 - p.dy * 0.3)}" ry="4" stroke-width="1.2" stroke-dasharray="2 7" opacity=".45"/>
-<g transform="translate(${f(p.ex)} ${f(p.dy - 10)}) rotate(${f(p.tilt)}) scale(${f(p.zoom)})">
+<g transform="translate(${f(p.ex)} ${f(p.dy)}) rotate(${f(p.tilt)}) scale(${f(p.zoom)})">
 ${echo}${arcs}${listeningHalo}
 <g clip-path="url(#${id}c)">
 <circle cx="${f(mx)}" cy="${f(my)}" r="${f(Rm)}" opacity=".5"/>

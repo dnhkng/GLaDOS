@@ -15,6 +15,7 @@ spoken response.
 [Discord](https://discord.com/invite/ERTDKwpjNB) ·
 [Sponsor](https://ko-fi.com/dnhkng) ·
 [Web console guide](docs/webapp.md) ·
+[Documentation map](docs/README.md) ·
 [Architecture](#how-the-cores-work)
 
 https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
@@ -191,10 +192,15 @@ device permissions and configuration.
 
 ## Using the console
 
-The top bar switches between the operator console and a Presence screen for
-tablets. Both use the same live engine state, controls and eye animation.
-Choose Dark, Clinical, Terminal or PotatOS in the top bar or Facility Settings;
-the theme is remembered by this browser.
+The default interface opens with an Aperture loading screen, then the Portal
+banner, animated eye, camera and text input. **Detailed view** opens the operator
+console without losing an unsent message or restarting the camera. Its top bar
+also opens **Presence**, with dialogue below the eye and persistent tablet controls.
+Desktop landscape and tablet portrait/landscape are the layout targets. All three
+surfaces share the same live engine state and animation. Choose Dark, Clinical,
+Terminal or PotatOS in the detailed/Presence top bar or Facility Settings; the
+theme is remembered by this browser. PotatOS uses the transparent LCD/PCB frame
+with its extended ribbon tucked behind the basic view’s banner.
 
 - **Central Core / Brainstem:** control input, spoken output, camera observations
   and Quiet mode. Quiet pauses replies and background cores until a wake request

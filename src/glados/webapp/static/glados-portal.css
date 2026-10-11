@@ -1,0 +1,218 @@
+/* Portal signage and loading artwork adapted from the supplied interface reference. */
+:root { --portal-in: var(--accent-2); --portal-out: var(--accent); --sign-ink: var(--bg); --sign-bg: var(--text); }
+:root[data-theme="potato"] { --sign-ink: #e8d6b0; --sign-bg: #2c3a1c; }
+
+/* ---------- topbar portal pair ---------- */
+.portal-pair { display: inline-flex; align-items: center; gap: 7px; font: 11px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; min-width: 118px; }
+.portal-pair i { width: 9px; height: 18px; border-radius: 50%; border: 2px solid currentColor; opacity: .35; transition: opacity .2s, box-shadow .2s, background .2s; }
+.portal-pair .p-in { color: var(--portal-in); }
+.portal-pair .p-out { color: var(--portal-out); }
+:root[data-activity="listening"] .portal-pair .p-in,
+:root[data-activity="speaking"] .portal-pair .p-out { opacity: 1; background: currentColor; box-shadow: 0 0 12px currentColor; }
+:root[data-activity="processing"] .portal-pair i { opacity: 1; animation: portal-swap 1s ease-in-out infinite; }
+:root[data-activity="processing"] .portal-pair .p-out { animation-delay: .5s; }
+@keyframes portal-swap { 0%,100% { background: transparent; } 50% { background: currentColor; box-shadow: 0 0 10px currentColor; } }
+.pict {display:block;width:100%;height:100%;fill:currentColor}
+
+/* ---------- chamber signage ---------- */
+.chamber-sign {
+  display: grid; grid-template-columns: auto minmax(0,1fr) auto; grid-template-areas: "num title status" "num ticks status";
+  align-items: center; gap: 6px 22px; padding: 14px 20px; margin-bottom: 20px;
+  background: var(--sign-bg); color: var(--sign-ink); border-radius: var(--radius);
+  box-shadow: var(--shadow); position: relative; overflow: hidden;
+}
+.chamber-sign::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.08) 50%, transparent 60%) -100% 0/200% 100% no-repeat; }
+.view.active .chamber-sign::after { animation: sign-sheen 1.1s .1s ease-out; }
+@keyframes sign-sheen { to { background-position: 200% 0; } }
+.view.active .chamber-sign { animation: sign-in .35s cubic-bezier(.2,.9,.3,1.1); }
+@keyframes sign-in { from { opacity: 0; transform: translateY(-8px) scale(.99); } }
+.cs-num { grid-area: num; font: var(--display-weight) 64px/0.9 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; padding-right: 22px; border-right: 2px solid currentColor; }
+.cs-num small { display: block; font: 600 10px var(--mono); letter-spacing: .14em; opacity: .55; margin-top: 6px; text-align: right; }
+.cs-title { grid-area: title; min-width: 0; }
+.cs-title strong { display: block; font: var(--display-weight) 24px/1.1 var(--font-display); text-transform: var(--display-case); letter-spacing: var(--display-tracking); }
+.cs-title span { display: block; font-size: 12px; opacity: .7; margin-top: 2px; }
+.cs-ticks { grid-area: ticks; display: flex; gap: 4px; }
+.cs-ticks i { flex: 1; max-width: 46px; height: 7px; padding: 0; border: 0; border-radius: 1px; background: currentColor; opacity: .18;  }
+.cs-status { grid-area: status; display: grid; grid-template-columns: repeat(3, 34px); gap: 6px; }
+.pict-tile { position: relative; width: 34px; height: 34px; padding: 6px; border: 2px solid currentColor; border-radius: 3px; opacity: .3; transition: opacity .25s, background .25s, color .25s; }
+.pict-tile.on { opacity: 1; }
+button.pict-tile { color: inherit; background: transparent; font: inherit; cursor: pointer; }
+button.pict-tile:hover:not(:disabled) { opacity: 1; transform: translateY(-1px); }
+button.pict-tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+button.pict-tile:disabled { cursor: default; }
+.pict-tile.off { opacity: .6; }
+/* ---------- conversation input ---------- */
+#message-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 10px; align-items: center; }
+#message-form > label { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+#message-form .console-field { margin: 0; padding: 13px 14px 13px 34px; font-size: 15px; border-color: var(--line-strong);
+  background: linear-gradient(var(--portal-in),var(--portal-in)) 16px 50%/3px 16px no-repeat, var(--surface-2); }
+#message-form .console-field:focus { border-color: var(--portal-in); box-shadow: 0 0 0 3px var(--accent-2-soft); outline: none; }
+#message-send { min-height: 46px; padding: 0 18px; background: var(--portal-out); border-color: var(--portal-out); color: var(--bg); font-weight: 700; }
+#message-send:hover:not(:disabled) { filter: brightness(1.1); color: var(--bg); }
+/* ---------- boot sequence ---------- */
+.portal-boot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); color: var(--text); cursor: default; }
+.portal-boot .boot-inner { width: min(460px, 86vw); }
+.portal-boot svg.aperture-mark { width: 84px; height: 84px; fill: var(--text); display: block; margin: 0 auto 22px; animation: boot-aperture 1.4s cubic-bezier(.3,1.2,.4,1) both; }
+@keyframes boot-aperture { from { transform: rotate(-200deg) scale(.4); opacity: 0; } }
+.portal-boot h2 { text-align: center; font: var(--display-weight) 20px var(--font-display); letter-spacing: .18em; text-transform: uppercase; margin-bottom: 4px; }
+.portal-boot .boot-sub { text-align: center; font: 10px var(--mono); letter-spacing: .2em; color: var(--muted); margin-bottom: 22px; }
+.portal-boot ol { list-style: none; font: 12px/1.9 var(--mono); color: var(--muted); min-height: 9.5em; }
+.portal-boot li { display: flex; gap: 8px; animation: fade-up .2s ease both; }
+.portal-boot li span { flex: 1; overflow: hidden; white-space: nowrap; }
+.portal-boot li span::after { content: " ........................................................"; color: var(--dim); }
+.portal-boot li b { color: var(--ok); font-weight: 600; }
+.portal-boot .boot-bar { height: 3px; background: var(--line); margin-top: 14px; overflow: hidden; }
+.portal-boot .boot-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--portal-in), var(--portal-out)); transition: width .25s ease; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(4px); } }
+
+
+/* The loading screen never blocks interaction after dismissal or reduced motion. */
+.portal-boot[hidden] {display:none}
+.portal-boot li b {color:var(--dim)}
+.portal-boot li b.ready {color:var(--ok)}
+.portal-boot #boot-message {font:12px/1.6 var(--mono);color:var(--muted);text-align:center;min-height:3.2em;margin:16px 0}
+.portal-boot #boot-skip {display:flex;margin:0 auto;padding:10px 16px}
+.basic-only {display:none}
+.cs-ticks i {display:block;flex:1;height:6px;background:currentColor;opacity:.2}
+.cs-ticks i:first-child {opacity:1}
+.pict-tile.off::after {content:"";position:absolute;top:50%;left:8%;width:84%;height:2px;background:currentColor;transform:rotate(45deg);box-shadow:0 0 0 2px var(--sign-bg)}
+
+/* Minimal conversation surface: one shared eye, feed, input and reply. */
+:root[data-surface="basic"] #app {height:100dvh;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+:root[data-surface="basic"] .sidebar,
+:root[data-surface="basic"] .operator-only,
+:root[data-surface="basic"] .home-controls,
+:root[data-surface="basic"] .presence-thoughts,
+:root[data-surface="basic"] .vision-description,
+:root[data-surface="basic"] .topbar .theme-label,
+:root[data-surface="basic"] .topbar .uptime {display:none}
+:root[data-surface="basic"] .main {grid-column:1;grid-row:2;min-height:0}
+:root[data-surface="basic"] .basic-only {display:block}
+:root[data-surface="basic"] .chamber-sign {display:grid;max-width:1120px;margin:0 auto 24px;grid-template-areas:"num title status";grid-template-columns:auto minmax(0,1fr) auto}
+:root[data-surface="basic"] .cs-ticks {margin-top:12px}
+:root[data-surface="basic"] .cs-status {grid-template-columns:repeat(4,38px)}
+:root[data-surface="basic"] .pict-tile {width:38px;height:38px}
+:root[data-surface="basic"] .view {padding:24px clamp(12px,4vw,56px) 36px}
+:root[data-surface="basic"] .overview-grid {max-width:1120px;margin:0 auto;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"eye camera" "input input" "reply reply";gap:22px 36px;align-items:center}
+:root[data-surface="basic"] .presence-stage,
+:root[data-surface="basic"] .presence-info {display:contents}
+:root[data-surface="basic"] .avatar-stage {grid-area:eye;gap:12px;align-self:center}
+:root[data-surface="basic"] .avatar-stage svg {width:min(100%,max(150px,100dvh - 300px));max-width:380px;min-width:0}
+:root[data-surface="basic"] #presence-activity {font-size:18px}
+:root[data-surface="basic"] #presence-detail {font-size:12px}
+:root[data-surface="basic"] .avatar-optic,
+:root[data-surface="basic"] .camera-placeholder {grid-area:camera;align-self:center;justify-self:center;width:min(100%,calc(max(110px,100dvh - 300px) * 16 / 9));aspect-ratio:16/9}
+:root[data-surface="basic"] .camera-placeholder {display:grid;place-content:center;text-align:center;gap:12px;border:1px solid var(--line-strong);border-radius:var(--radius);color:var(--muted);background:var(--surface)}
+.camera-placeholder-mark {font:64px var(--mono);opacity:.3}
+:root[data-surface="basic"][data-camera="live"] .camera-placeholder {display:none}
+:root[data-surface="basic"]:not([data-camera="live"]) .avatar-optic {display:none}
+:root[data-surface="basic"] .conversation-input {grid-area:input;padding:14px 16px}
+:root[data-surface="basic"] .conversation-input h3 {display:none}
+:root[data-surface="basic"] #message-form label {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+:root[data-surface="basic"] .presence-speech {grid-area:reply;max-width:100%;padding:0 16px}
+:root[data-surface="basic"] #latest-reply {font-size:20px;line-height:1.5;margin-top:6px}
+:root[data-surface="basic"] .presence-user {font-size:12px}
+:root[data-surface="basic"] .presence-user .slice {font-size:10px}
+
+/* Dialogue belongs to the eye column. The camera column keeps its dimensions. */
+:root[data-surface="presence"] .presence-stage {grid-template-areas:"eye camera" "speech camera";align-items:start}
+:root[data-surface="presence"] .avatar-stage {grid-area:eye;align-self:start}
+:root[data-surface="presence"] .presence-speech {grid-area:speech;min-width:0}
+:root[data-surface="presence"] .presence-info {grid-area:camera;align-self:start}
+@media(max-width:760px) {
+  .portal-pair {min-width:0}.portal-pair b {display:none}
+  :root[data-surface="basic"] .topbar {gap:6px}
+  :root[data-surface="basic"] .brand .t1 {font-size:16px}
+  :root[data-surface="basic"] .surface-switch {font-size:10px;padding:6px 8px}
+  :root[data-surface="basic"] .view {padding:14px 12px 24px}
+  :root[data-surface="basic"] .chamber-sign {grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"num title status";gap:12px;margin-bottom:16px;padding:12px 14px}
+  :root[data-surface="basic"] .cs-title strong {font-size:22px}
+  :root[data-surface="basic"] .cs-title span {font-size:9px}
+  :root[data-surface="basic"] .cs-status {grid-template-columns:repeat(4,36px);justify-content:end}
+  :root[data-surface="presence"] .presence-stage {grid-template-areas:"eye" "speech" "camera"}
+}
+
+/* Activity is already displayed in the top bar; keep the eye stage uncluttered. */
+.presence-state {display:none}
+:root[data-surface="console"] .avatar-stage {grid-template-columns:1fr;justify-items:center}
+:root[data-surface="console"] .avatar-stage svg {width:140px;max-width:140px}
+
+.presence-speech[hidden] {display:none}
+.presence-user:has(#latest-input:empty), #latest-reply:empty {display:none}
+
+@media(max-width:520px) {
+  :root[data-surface="basic"] .overview-grid {grid-template-areas:"eye" "camera" "input" "reply";grid-template-columns:1fr;gap:16px}
+  :root[data-surface="basic"] .avatar-stage svg {width:min(100%,clamp(110px,20dvh,190px));min-width:0}
+  :root[data-surface="basic"] .presence-speech {padding:0 4px}
+  :root[data-surface="basic"] #latest-reply {font-size:17px}
+}
+
+@media(max-width:760px) {
+  :root[data-surface="basic"] .cs-num {font-size:44px;padding-right:12px}
+  :root[data-surface="basic"] .cs-num small {font-size:8px}
+  :root[data-surface="basic"] .cs-title strong {font-size:20px}
+  :root[data-surface="basic"] .pict-tile {width:36px;height:36px}
+  :root[data-surface="basic"] .cs-ticks {margin-top:8px}
+  :root[data-surface="basic"] .overview-grid {gap:16px}
+}
+@media(max-width:520px) {
+  :root[data-surface="basic"] .chamber-sign {grid-template-areas:"num title" "status status";grid-template-columns:auto minmax(0,1fr);gap:8px}
+  :root[data-surface="basic"] .cs-status {grid-template-columns:repeat(4,44px)}
+  :root[data-surface="basic"] .pict-tile {width:44px;height:44px;padding:10px}
+  :root[data-surface="basic"] .cs-num {font-size:36px}
+  :root[data-surface="basic"] .avatar-optic,
+  :root[data-surface="basic"] .camera-placeholder {width:min(100%,calc(max(120px,100dvh - 650px) * 16 / 9))}
+  :root[data-surface="basic"] .conversation-input {padding:10px}
+  :root[data-surface="basic"] #message-send {padding:0 12px;font-size:10px}
+  :root[data-surface="basic"] #message-text {font-size:14px;padding-left:26px;background-position-x:12px;min-width:0}
+  :root[data-surface="basic"] .topbar .live {font-size:8px;padding:4px 5px}
+}
+@media(max-height:560px) and (min-width:521px) {
+  :root[data-surface="basic"] .view {padding-top:10px;padding-bottom:14px}
+  :root[data-surface="basic"] .chamber-sign {padding:10px 14px;margin-bottom:12px;gap:12px}
+  :root[data-surface="basic"] .cs-num {font-size:36px;padding-right:12px}
+  :root[data-surface="basic"] .cs-title strong {font-size:20px}
+  :root[data-surface="basic"] .cs-ticks {margin-top:6px}
+  :root[data-surface="basic"] .overview-grid {gap:12px}
+  :root[data-surface="basic"] .conversation-input {padding:10px 12px}
+}
+
+@media(max-width:520px) and (max-height:650px) {
+  :root[data-surface="basic"] .view {padding:10px 12px 12px}
+  :root[data-surface="basic"] .chamber-sign {padding:10px 12px;margin-bottom:10px}
+  :root[data-surface="basic"] .cs-num {font-size:30px}
+  :root[data-surface="basic"] .cs-title strong {font-size:18px}
+  :root[data-surface="basic"] .cs-title span {font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  :root[data-surface="basic"] .cs-ticks {display:none}
+  :root[data-surface="basic"] .overview-grid {gap:10px}
+  :root[data-surface="basic"] .avatar-stage svg {width:clamp(100px,18dvh,120px)}
+}
+
+/* Keep tablet input with the persistent controls, and scroll long speech under the eye. */
+:root[data-surface="presence"] .home-controls {display:flex;flex-direction:column;gap:10px}
+:root[data-surface="presence"] .conversation-input {flex-shrink:0}
+:root[data-surface="presence"] .presence-stage {min-height:0}
+:root[data-surface="presence"] .presence-speech {max-height:clamp(96px,calc(100dvh - 660px),220px);overflow-y:auto;padding-right:8px}
+
+:root[data-surface="presence"] .overview-grid,
+:root[data-surface="presence"] .presence-info,
+:root[data-surface="presence"] .presence-speech {scrollbar-gutter:stable}
+
+/* Display bounds are the board (x244, y210, 960x844), with its cable above.
+   The original transparent 1448x1086 PNG stays unmodified. */
+:root[data-theme="potato"] .avatar-optic {aspect-ratio:960/844;border:0;border-radius:0;background:transparent;overflow:hidden;isolation:isolate}
+:root[data-theme="potato"] .avatar-optic::before,
+:root[data-theme="potato"] .avatar-optic canvas,
+:root[data-theme="potato"] .avatar-optic-hud {inset:auto;left:15.31%;top:23.34%;width:69.38%;height:53.2%;border-radius:2px}
+:root[data-theme="potato"] .avatar-optic::before {content:"";position:absolute;background:#0f380f}
+:root[data-theme="potato"] .avatar-optic::after {content:"";position:absolute;inset:-24.88% 0 0;z-index:2;pointer-events:none;background:url("LCD-PCB-Module-Frame-Extended-Ribbon.png") center top/150.833% auto no-repeat}
+:root[data-theme="potato"] .avatar-optic-hud {overflow:hidden;color:#9bbc0f;font-size:clamp(7px,.8vw,10px);letter-spacing:.06em}
+:root[data-theme="potato"] .avatar-optic-hud span {background:rgba(15,56,15,.6)}
+/* The opaque banner masks the cable end, without covering its controls. */
+:root[data-surface="basic"][data-theme="potato"] .chamber-sign {z-index:3}
+:root[data-surface="basic"][data-theme="potato"] .avatar-optic {overflow:visible;align-self:start;width:min(100%,calc(max(110px,100dvh - 300px) * 960 / 844))}
+@media(max-width:520px) {
+  :root[data-surface="basic"][data-theme="potato"] .overview-grid {grid-template-areas:"camera" "eye" "input" "reply"}
+  :root[data-surface="basic"][data-theme="potato"] .avatar-optic {width:min(100%,calc(max(120px,100dvh - 650px) * 960 / 844))}
+}

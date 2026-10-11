@@ -855,9 +855,9 @@ class LanguageModelProcessor:
                 logger.warning(f"LLM Processor: Failed to load MCP tool definitions: {e}")
         return tools
 
-    def _reply_tools(self) -> list[dict[str, Any]]:
+    def _reply_tools(self, available: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         # Replies can need current facts or a fresh visual inspection.
-        return [tool for tool in self._build_tools(False)
+        return [tool for tool in (self._build_tools(False) if available is None else available)
                 if tool.get("function", {}).get("name") == INTERNET_SEARCH_TOOL
                 or (self.vision_state is not None and tool.get("function", {}).get("name") == "vision_look")]
 
@@ -898,7 +898,6 @@ class LanguageModelProcessor:
             turn.queue_depth = self.llm_input_queue.qsize()
         except NotImplementedError:
             turn.queue_depth = None
-        turn.autonomy_mode = bool(turn.llm_input.get("autonomy", False))
         if self._autonomy_cancelled():
             return False
         if self._autonomy_response and not self._autonomy_request_current(self._autonomy_meta):
@@ -1007,6 +1006,7 @@ class LanguageModelProcessor:
                     draft_turn = ProcessorTurn(llm_input=turn.llm_input, llm_message=turn.llm_message,
                                                route={"action": "reply"})
                     self._build_request(draft_turn, draft=True)
+                    turn.available_tools = draft_turn.available_tools
                     turn.draft_messages = draft_turn.base_messages
                     turn.draft_sources = dict(self._context_sources)
                     generation = self._reply_generation
@@ -1138,14 +1138,18 @@ class LanguageModelProcessor:
                 turn.route = {"action": "assist"}
                 turn.routing_permit = None
         turn.read_only = bool(turn.route and turn.route["action"] in {"assist", "reply"})
+        # One catalog per turn (shared with its draft): MCP definitions are not rebuilt per check.
+        if turn.available_tools is None:
+            turn.available_tools = self._build_tools(False)
+        reply_tools = self._reply_tools(turn.available_tools)
         turn.allow_tools = not self._autonomy_response and bool(turn.llm_input.get("_allow_tools", True)) and not (
             turn.route and (turn.route.get("context_source") == "clock" or turn.route["action"] == "clarify" or (
-                turn.route["action"] == "reply" and not self._reply_tools()
+                turn.route["action"] == "reply" and not reply_tools
             ))
         )
-        turn.tools = self._build_tools(False) if turn.allow_tools and not turn.autonomy_mode else []
+        turn.tools = list(turn.available_tools) if turn.allow_tools and not turn.autonomy_mode else []
         if turn.route and turn.route["action"] == "reply":
-            turn.tools = self._reply_tools() if turn.allow_tools else []
+            turn.tools = reply_tools if turn.allow_tools else []
         if turn.routing_permit:
             turn.tools = [tool for tool in turn.tools if tool.get("function", {}).get("name") in turn.routing_permit["tool_scope"]]
         if turn.read_only:
@@ -1336,7 +1340,6 @@ class LanguageModelProcessor:
     def _stream_request(self, turn: ProcessorTurn) -> None:
         state = ResponseState()
         try:
-            state.http_error_detail: tuple[str | int, str] | None = None
             request_urls = [str(self.completion_url)]
             if self._ollama_mode:
                 fallback_url = str(self.completion_url).replace("/api/chat", "/v1/chat/completions")

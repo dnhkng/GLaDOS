@@ -148,10 +148,11 @@ class SpeechListener:
                     sample, vad_confidence = self._sample_queue.get(timeout=self.pause_time)
                     discontinuity = getattr(self.audio_io, "consume_capture_discontinuity", None)
                     if discontinuity and discontinuity() is True:
+                        # Discard speech from before the gap, but keep this sample: it is the
+                        # first after the gap (e.g. a new WebSocket owner's first word).
                         self.reset()
                         if self._observability_bus:
                             self._observability_bus.emit("audio", "gap", "Microphone gap; discarded incomplete speech", level="warning")
-                        continue
                     if self._asr_muted_event and self._asr_muted_event.is_set():
                         if self._recording_started or self._samples or self._buffer or self._pending_voice:
                             self.reset()

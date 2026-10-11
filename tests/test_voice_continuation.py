@@ -253,3 +253,29 @@ def test_playback_boundary_acknowledges_only_current_generation(cancelled):
     assert not worker.is_alive()
     assert acknowledged == ([] if cancelled else [1])
     assert audio.start_speaking.call_count == (0 if cancelled else 1)
+
+
+def test_capture_gap_keeps_the_first_sample_after_the_gap():
+    """A gap discards earlier speech, not the new owner's first chunk (WebSocket rooms takeover)."""
+    samples, shutdown, flags = queue.Queue(), threading.Event(), [True]
+    audio = MagicMock()
+    audio.get_sample_queue.return_value = samples
+    audio.ensure_listening.return_value = False
+    audio.consume_capture_discontinuity = lambda: flags.pop() if flags else False
+    core = SpeechListener(audio, queue.Queue(), shutdown, threading.Event(), threading.Event(), MagicMock(), None, 0.001)
+    core._samples.append(np.ones(512, dtype=np.float32))  # incomplete speech from before the gap
+    seen = []
+
+    def handle(sample, vad):
+        seen.append((float(sample[0]), vad))
+        shutdown.set()
+
+    core._handle_audio_sample = handle
+    samples.put((np.full(512, 0.5, dtype=np.float32), True))
+    worker = threading.Thread(target=core.run, daemon=True)
+    worker.start()
+    worker.join(timeout=2)
+    shutdown.set()
+    worker.join(timeout=2)
+    assert seen == [(0.5, True)]
+    assert not core._samples

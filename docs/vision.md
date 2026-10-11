@@ -1,9 +1,14 @@
 # Vision mind
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 GLaDOS uses Gemma 4 E4B to describe what the camera sees and what changed
 since the previous observed image. The Vision mind runs quietly in the
 background; GLaDOS receives its latest scene, changes, and observation age.
-Camera updates do not trigger unsolicited speech.
+Routine camera updates do not directly queue speech. Fresh arrival or morning
+greeting evidence can request an Autonomy review; Autonomy may choose silence
+or ask Central to greet. See [Autonomy](autonomy.md#useful-events).
 When people are visible, the scene describes their visible expressions, gaze
 and posture before the surroundings. Obscured or small faces are described as
 having unclear expressions, rather than assigning unseen feelings.
@@ -16,10 +21,10 @@ Start the multimodal E4B server described in [Gemma 4](gemma4.md), including its
 `--mmproj` argument. The default endpoint is port 18080. Then run:
 
 ```bash
-uv run glados webapp --config configs/glados_gemma4_llamacpp.yaml
+uv run --no-sync glados webapp --config configs/glados_gemma4_llamacpp.yaml
 ```
 
-Open http://127.0.0.1:8050/ and inspect **Minds → Vision**. The inspector shows
+Open http://127.0.0.1:8050/ and inspect **Cores → Vision Core**. The inspector shows
 a live webcam stream with CPU face tracking, plus slower scene captions,
 changes, measured update rate and frame timing.
 The preview overlays the detected face box, gaze crosshair, and normalized X/Y
@@ -29,8 +34,10 @@ continues to receive the original image without annotations.
 **Run once now** works while paused and releases the camera afterwards.
 **Resume camera** restarts scheduled observations.
 
-The front page shows the design's **Original** optic treatment beside the eye
-when the camera is on: thermal colours, motion trails and contour lines. It
+The front page shows a theme-specific optic treatment beside the eye when the
+camera is on: Dark uses thermal colours, motion trails and contour lines;
+Clinical uses greyscale, Terminal ASCII, and PotatOS green ordered dither inside
+the transparent LCD/PCB frame. These are browser-only treatments. It
 reuses `/api/vision/live?overlay=0`, so the CPU preview box is not burned into
 this view. A circular **SUBJECT** target follows the eye's face-scanning gaze.
 Motion heat fades by 95% in about 0.6 seconds. The feed keeps 80% of the source
@@ -86,7 +93,9 @@ sharpest candidate, breaking ties in favor of the newer frame.
 
 The mind acquires capacity from the shared inference scheduler **before**
 selecting a frame. A busy model therefore cannot create a backlog of old camera
-requests. The schedule stays within the configured 2–5 second bounds. A small
+requests. MindScheduler owns the motion-aware policy and deadlines. Its chosen delay stays
+within the configured 2–5 second bounds; the actual start-to-start interval can
+be longer because the delay follows completion and admission may wait. A small
 96×72 grayscale CPU motion tracker measures changed pixels, compensates for
 uniform exposure shifts, and smooths activity with fast attack and slower decay.
 Still scenes favour the maximum delay; active scenes favour the minimum.
@@ -121,7 +130,7 @@ the capture age; unclear or obscured details must be reported as uncertain.
 Question inspections do not replace the background scene or its four-image
 window. They use the same dedicated E4B endpoint for API conversation profiles.
 A paused camera must be resumed before asking for a fresh inspection.
-The latest question and answer are shown in **Minds → Vision**.
+The latest question and answer are shown in **Cores → Vision Core**.
 `question_image_max_side` defaults to 1024 (the native 640×480 camera image is
 kept at that size); `question_max_tokens` defaults to 192.
 

@@ -1,5 +1,8 @@
 # WebSocket Audio Backend
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 GLADOS can stream audio over a WebSocket instead of using your local
 microphone/speaker. This lets the assistant run on a headless machine while
 microphones and speakers live on the network (a browser tab, an app, or a
@@ -60,7 +63,11 @@ Client → server: binary audio chunks, optionally `room:<tag>`.
 
 The server buffers at most `mic_queue_max_chunks` VAD windows (32 ms each).
 When the speech consumer falls behind, it drops the oldest window to bound
-memory while favoring recent, low-latency audio.
+memory while favoring recent, low-latency audio. Overflow marks a capture
+discontinuity so SpeechListener discards incomplete speech and its continuation
+buffer instead of sending spliced audio. Changing/releasing the microphone
+owner also marks a gap and clears old-owner samples. Clean samples arriving
+after a consumed gap are retained for the next utterance.
 
 The server runs VAD per client and enqueues speech with a confidence flag into
 the shared sample queue consumed by ASR.
@@ -76,9 +83,10 @@ When `rooms: true`, the backend arbitrates **multiple** clients:
   tag matches the active mic's room tag — so GLADOS "follows" you between rooms
   instead of playing everywhere.
 
-With `rooms: false` (the default) each connected mic is treated as a single
-source and audio is broadcast to every connected speaker — the simple
-single-user case.
+With `rooms: false` (the default), microphone ownership still excludes competing
+capture sources until release, and audio is broadcast to all connected speakers.
+Rooms add room selection and optional speaker filtering; they do not remove the
+single-owner capture boundary.
 
 ## Reference clients
 

@@ -1,24 +1,54 @@
 # Webapp Console
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 An in-process "mission control" for the running GLaDOS engine. It streams the
-live parallel state — the two autonomy lanes, subagent contexts, tool state,
+live parallel state — interactive/background inference lanes, mind contexts, tool state,
 PAD emotion, audio/MCP health — to a browser over HTTP + Server-Sent Events.
 No separate UI service to run. Tool argument validation uses jsonschema.
 
-## Console and Presence surfaces
+## Basic, detailed and Presence surfaces
+
+The default page is a minimal conversation screen: a Portal-style facility sign
+with live microphone, voice, camera and quiet controls, followed by the eye and
+camera side by side, then text input. Conversation text stays hidden until input
+or a reply arrives. **Detailed view** switches to the full operator console
+without reconnecting, clearing an unsent message or restarting the camera.
+**Basic view** returns to the conversation screen. `/?surface=console` opens
+the detailed view directly.
+
+A brief Aperture loading screen follows actual interface, eye, snapshot and live
+stream readiness. It can be skipped, honours reduced motion, and releases the
+interface after 6.5 seconds if the engine is unavailable while retrying continues.
+It does not delay engine inference. `?boot=0` skips it for direct access.
 
 The existing menu names and order are shared across the themed operator console.
 The Enrichment Center shows live routing choices, inference channels and queues,
 core reports, PAD state, autonomy decisions, and the observation log.
+The compact overview places the latest routing path and timing beside the eye
+and current reply. Expand a routing step's **All choices** disclosure to inspect
+its full instructions and option preferences; telemetry refreshes preserve the
+open disclosure. Core reports show their age, and important reports remain
+highlighted until Autonomy has handled them. Errors have a separate indicator.
 The top bar's **Presence screen** link opens `/?surface=presence`: a tablet view
-with the eye, current reply, camera description, recent core reports and input
+with the eye, dialogue beneath it, a separate camera column, camera description, recent core reports and input
 controls. It uses the same controller and backend camera as the console.
+The eye is centered without a ground shadow, with a tighter frame and no duplicate
+activity label underneath. The top bar shows current activity. A persistent footer shows local
+time, date, and touch-sized microphone, voice, camera and quiet controls. Content
+scrolls above the footer on smaller screens, keeping the controls accessible.
 
-Dark is the default. Clinical, Terminal and PotatOS are available from the top
-bar and Facility Settings. The choice is saved in browser storage, independently
+Dark is the default. Clinical, Terminal and PotatOS are available from the
+detailed/Presence top bar and Facility Settings. The choice is saved in browser storage, independently
 of engine configuration. All styling and images are local; fonts use installed
 fonts with system fallbacks. Camera treatments are false colour, greyscale,
 ASCII and ordered dither; they do not change what the vision model receives.
+PotatOS places the green dither stream inside the transparent opening of
+`LCD-PCB-Module-Frame-Extended-Ribbon.png`. The original transparent image is
+preserved as an overlay, with the camera fitted to its taller display opening.
+On the basic surface the ribbon extends behind the Portal banner. The layout
+targets desktop landscape and tablets in either orientation.
 The eye and camera shutter still blink on actual image analysis. Reduced-motion
 preferences disable animation and scanlines.
 
@@ -48,6 +78,71 @@ The webapp and the TUI are **mutually exclusive UI options** — you run either
 which one is attached.
 
 ## Running it
+
+Start the separate conversation model server, then launch:
+
+```bash
+uv run --no-sync glados webapp --config configs/glados_webapp_config.yaml
+```
+
+Open `http://127.0.0.1:8050/`. This profile enables the console explicitly;
+`WebappConfig.enabled` is false when omitted. The engine and server run in one
+process. Browser audio needs the separate WebSocket backend on port 5051; the
+standard profile uses host audio devices. See [README setup](../README.md#quick-start)
+and [WebSocket audio](audio_websocket.md).
+
+## Console configuration and access
+
+The console is **off by default**. Enable it, then start it with the webapp
+launcher:
+
+1) YAML config:
+
+   ```yaml
+   Glados:
+     webapp:
+       enabled: true
+       host: 127.0.0.1
+       port: 8050
+   ```
+
+2) Environment variables (no config edit):
+
+   ```bash
+   GLADOS_WEBAPP_ENABLED=1 GLADOS_WEBAPP_PORT=8050 uv run --no-sync glados webapp
+   ```
+
+Both can be combined with `--config`, `--input-mode`, `--tts-enabled`/
+`--tts-disabled`, and `--asr-muted`/`--asr-unmuted`:
+
+```bash
+uv run --no-sync glados webapp --config ./configs/glados_webapp_config.yaml
+```
+
+Then open `http://127.0.0.1:8050/`.
+
+The console accepts HTTP Host headers for loopback addresses and the configured
+listen host. To use additional browser hostnames, list them under
+`webapp.allowed_hosts` in YAML, without ports. A wildcard listen address such as
+`0.0.0.0` requires an explicit list, for example:
+
+```yaml
+Glados:
+  webapp:
+    enabled: true
+    host: 0.0.0.0
+    port: 8050
+    allowed_hosts: [192.168.1.20, glados.local]
+```
+
+These checks also apply to read-only routes and reject unexpected Host headers
+before accessing the engine. Mutation routes retain their separate Origin check.
+
+> **Demo mode.** A directly-opened static file can use simulated data for
+> styling. An HTTP console with an unavailable engine shows a disconnected
+> state and retries; it never substitutes simulated activity.
+
+## Search Core
 
 **Search Core** handles requested internet research through the Exa MCP tool.
 It searches, uses a background inference to identify useful quotations and gaps,
@@ -147,6 +242,8 @@ Glados:
       general: []
 ```
 
+## Health Core
+
 **Health Core** appears in Cores and as a dedicated Neural Buffer context source.
 It samples CPU load, RAM, local disk space, uptime, OS/kernel, temperatures and
 NVIDIA GPU readings, plus model/MCP connectivity, inference queues and microphone
@@ -181,6 +278,8 @@ The capture runner's own log is detected automatically on Linux. Explicit
 directories for arbitrary logs. Alerts observe conditions and do not perform
 repairs. Current measurements take precedence over an older model comment.
 
+## Memory and Test Chamber
+
 The **Test Chamber** tab browses saved facts, saved summaries and the Memory Core's
 existing compacted conversation notes. It shows the memories currently recalled
 for the conversation separately. Search, fact/summary filtering and paging are
@@ -188,18 +287,19 @@ read-only; browsing never changes the active recall topic. Saved text is escaped
 for display and excerpts are labelled. Memory responses are same-origin and
 not cached by the browser.
 
-Memory Core clears the previous recall before routing and starts a lookup once
-the user turn is accepted. Retrieval runs alongside response generation; Central
-can use a result that arrives before its context is built. Later relevant results
-publish an important slot update so Autonomy can compare them with the actual
-answer and decide whether a useful follow-up remains. New turns supersede old
-lookups, and at most one latest query waits behind an active lookup. Topic word overlap is
-ranked by specificity, then recency and importance. Relevant low-importance facts
-can be recalled; unrelated high-importance facts are not injected automatically.
-Short references such as “what about it?” can reuse the previous user topic.
-Recall currently uses local text matching, without an embedding model or another
-LLM call. Voice recall uses the optional transcript; raw audio without a transcript
-has no text query. Pausing Memory Core clears its recalled context.
+Memory Core clears the previous recall before routing and submits the latest
+accepted lookup to MindScheduler. Retrieval runs alongside response generation;
+Central can use evidence that arrives before request construction. Later relevant
+results publish important evidence for Autonomy to compare with the actual reply.
+A newer turn supersedes an unfinished lookup; one latest pending query coalesces
+behind the active run. Pausing Memory clears recalled context.
+
+E4B selects existing saved record IDs semantically from stable JSONL catalog pages
+(up to 32 records and 6,000 estimated input tokens each), with the changing query
+last. Pages use background admission sequentially. Evidence is the original saved
+text with provenance and edit revalidation, not an invented rewritten fact. Raw
+direct audio can produce a short internal lookup topic without Parakeet or a
+persisted full transcript. No embedding model or extra research archive is used.
 
 The bounded recall is published in the Memory Core slot's `context` field and
 included by the shared slots context source. Maintenance statistics stay in the
@@ -225,6 +325,8 @@ existing facts/summaries files are cached until they change and bounded to the
 newest 8 MiB per file, with at most 2,048 indexed memories overall. The memory
 browser reports when that bound applies. Context is capped independently, and
 the existing compacted conversation store is reused without duplicating it on disk.
+
+## Context and Neural Buffer
 
 The **Neural Buffer** tab inspects Central Core or Autonomy Core context in model
 message order. **Live preview** uses the same source assembly as inference and
@@ -257,6 +359,8 @@ summaries/recent turns, and all core/task slot evidence. It offers no tools. A v
 no-action decision ends the check; a prompt passes evidence and an internal instruction
 to Central Core, which composes the notification.
 
+## Devices and capture
+
 **Facility Settings → Facility Sensors & Audio** lists the host's webcams,
 microphones and speakers. Selections apply to the running backends for the
 current session. Linux cameras are enumerated with V4L2 capability queries, so
@@ -286,53 +390,6 @@ The front-page optic feed shows **MOTION** at bottom left, measured from actual
 frame differences in camera coordinates. **TEST SUBJECT** appears at top right
 only while a fresh face target is present. Face presence and animated panning
 do not themselves increase the motion reading.
-
-The console is **off by default**. Enable it, then start it with the webapp
-launcher:
-
-1) YAML config:
-
-   ```yaml
-   webapp:
-     enabled: true
-     host: 127.0.0.1
-     port: 8050
-   ```
-
-2) Environment variables (no config edit):
-
-   ```bash
-   GLADOS_WEBAPP_ENABLED=1 GLADOS_WEBAPP_PORT=8050 uv run glados webapp
-   ```
-
-Both can be combined with `--config`, `--input-mode`, `--tts-enabled`/
-`--tts-disabled`, and `--asr-muted`/`--asr-unmuted`:
-
-```bash
-uv run glados webapp --config ./configs/glados_webapp_config.yaml
-```
-
-Then open `http://127.0.0.1:8050/`.
-
-The console accepts HTTP Host headers for loopback addresses and the configured
-listen host. To use additional browser hostnames, list them under
-`webapp.allowed_hosts` in YAML, without ports. A wildcard listen address such as
-`0.0.0.0` requires an explicit list, for example:
-
-```yaml
-webapp:
-  enabled: true
-  host: 0.0.0.0
-  port: 8050
-  allowed_hosts: [192.168.1.20, glados.local]
-```
-
-These checks also apply to read-only routes and reject unexpected Host headers
-before accessing the engine. Mutation routes retain their separate Origin check.
-
-> **Demo mode.** A directly-opened static file can use simulated data for
-> styling. An HTTP console with an unavailable engine shows a disconnected
-> state and retries; it never substitutes simulated activity.
 
 ## Operator controls and shared tasks
 
@@ -368,7 +425,8 @@ compatible, including `/api/minds` and `/api/slots`.
   duplicated this infrastructure information.
 
 Each user-facing response receives a fresh host-clock reading near the current
-input, after routing, Emotion and inference admission. The context explicitly
+input, after routing and inference admission. Emotion runs independently and does not
+block this reply request. The context explicitly
 labels local time, date, weekday, timezone, UTC offset and the capture timestamp.
 It is authoritative for that response and is never saved as conversation history.
 Local clock questions use the ordinary conversational reply route, including
@@ -440,9 +498,13 @@ Emotional regulation follows `autonomy.emotion.enabled` (default true)
 independently of `autonomy.enabled` and `autonomy.jobs.enabled`. It uses the
 configured model and thinking settings, updating every
 `autonomy.emotion.tick_interval_s` seconds (default 5), even without new events.
-Accepted voice or text input updates affect immediately before the reply and
-restarts the five-second timer after the reaction finishes. Queued vision and tool
-events are processed at the next scheduled update. Elapsed-time exponential
+Accepted voice or text input triggers a background reaction without delaying
+Central’s reply; the five-second timer restarts after work completes. Three
+one-token option choices score the PAD axes. Idle runs apply decay in ordinary
+code without inference. Central uses the continuing mood available at request
+construction and chooses immediate expression from the current words. Changing
+PAD does not discard a compatible text draft. Queued tool events are processed
+at the next run. Elapsed-time exponential
 decay removes 95% of a PAD deviation in six minutes (`decay_settle_s: 360`),
 returning all axes toward zero. This does not enable
 background jobs or load another model. PAD represents GLaDOS's modeled persona,
@@ -454,8 +516,8 @@ The `manage_slot` tool saves the result and status under the same task ID; the
 inspector shows the full report and refreshes when it changes. Tasks can be
 marked done or reopened manually. Agent-owned slots remain read-only.
 
-Tasks and response instructions are in memory for this engine session and reset
-on restart. Creating an open task does not start a background job or schedule a
+Manually created task slots are in memory for this engine session and reset
+on restart. Response instructions persist in `data/operator_settings.yaml`. Creating an open task does not start a background job or schedule a
 reminder. Cores and inference lanes show registered components and actual worker
 capacity, including emotion requests when autonomy jobs are disabled.
 
@@ -547,6 +609,16 @@ audio stream, and autonomous internal reasoning gets no direction prompt.
 | POST   | `/api/vision/settings` | Save `interval_min_s` and `interval_max_s` (integers 1–60, minimum ≤ maximum); update the running motion-aware Vision schedule. |
 | POST   | `/api/slots`          | Create a task with `title` and `summary`; update using `slot_id`, with optional `status` and `report`. |
 | POST   | `/api/minds/control`  | `{"agent_id": "emotion", "action": "pause"}`; actions are `pause`, `resume`, or `run`. |
+| GET | `/api/memory` | Read-only saved memory and current recall. Supports `query`, `kind=all\|fact\|summary`, `offset` and `limit` (maximum 50). |
+| GET | `/api/context` | Neural Buffer: ordered preview or submitted request, using `mode=user\|autonomy` and `view=live\|request`. |
+| GET | `/api/decisions` | Versioned lists and activation settings. |
+| POST | `/api/decisions` | `action`: `save`, `delete`, or `activate`, with the current global `revision`. |
+| POST | `/api/decisions/test` | Preview a saved `list_id` using `text` or base64 mono 16 kHz WAV `audio` (max 30 s). Optional `spoken` treats text as spoken input. Never executes actions. |
+| GET/POST | `/api/devices` | List/select host devices; local audio selection is unavailable on WebSocket backends. |
+| POST | `/api/search/settings` | Save preferred Weather/News/Reddit/General sources. |
+| POST | `/api/memory/edit` | Edit/delete a saved fact or summary using its record identity. |
+| POST | `/api/tasks/cancel` | Cancel a tracked task by task ID. |
+| POST | `/api/tools/command` | Run one allowlisted native task, for example `{"task":"uptime"}`. |
 
 Snapshots include `agent_minds` for the operational agents and `tools` for their
 callable capabilities. The legacy `minds` field contains engine registry entries
@@ -603,8 +675,9 @@ the assistant receives the original request and only the tools selected by the
 route. It fills arguments from that request. Pending generated calls are checked
 again against the active list, settings revision, selected scope and current
 availability before execution. Editing settings revokes an old scoped call.
-Parallel private drafts may begin during the first routing step; only a final
-reply outcome releases the draft, and tool routes discard it.
+Parallel private text drafts may begin during the first routing step; only a
+final compatible reply outcome releases the draft, and tool routes discard it.
+Untranslated direct-audio input is not drafted.
 
 Settings shows the live routing tree and groups fixed choices by capability.
 Routing is enabled automatically on compatible llama.cpp backends; other backends
@@ -617,6 +690,84 @@ arguments and enabled state. Existing lists adopt the hierarchy without losing
 saved IDs or bindings; the list editor also offers the previous flat structure.
 Preview runs all needed steps and displays each probability table without
 executing tools or producing speech.
+
+### Decision lists and draft mechanics
+
+Settings supports creating, editing, reordering and deleting options and lists,
+selecting the active list, thresholds and fallback. Routing and spare-capacity
+drafts are automatic on compatible backends; there are no user-facing switches.
+An option binds to ignore, reply, clarify, general tool planning, or a specific
+tool with fixed arguments. Tool controls come from the live tool schemas.
+There are at most 20 options per list and 32 lists. Light actions require a
+connected lighting tool; the console does not invent devices.
+
+Settings are stored atomically in ignored `data/decision_lists.yaml`; unlike
+tasks they survive restart. List/option IDs remain stable when reordered.
+Edits use revision checks. An in-flight classifier retains its original list
+snapshot, but a fixed action is cancelled if its list changed, was disabled or
+deleted before dispatch. The tool executor checks again before starting.
+Already-started physical actions cannot be undone by editing a list.
+
+The llama.cpp adapter validates single-token labels, disables thinking, requests
+one output token, and reads scores for every option. Equal positive logit bias
+exposes the candidates; renormalizing over them cancels that shared bias.
+Top-k/top-p/min-p/penalty sampling is disabled. Incomplete or non-finite scores
+never authorize a fixed action; missing candidates never become zero-confidence
+options. Scores are relative preferences, not calibrated correctness estimates.
+
+The default routes completed turns before generating speech. Native audio goes
+directly to the classifier without transcription; extended mode uses its
+transcript. By default, a low-confidence classification delegates the original
+text or audio to the full assistant with read-only tools (`get_time` for named timezones,
+`run_safe_command`, `get_report`, `get_preferences`, and `vision_look` when the
+camera mind is enabled). The original threshold and
+margin still apply to fixed actions. This avoids treating classifier uncertainty
+as missing user intent. Unavailable routing also uses this restricted path.
+Only offered tool names can be dispatched, and fallback tool results disable
+further tool calls for the reply. Settings offers this fallback as “Let GLaDOS
+answer (read-only tools)”; existing saved settings can select it explicitly.
+The clarification option now lets the assistant assess the original request and
+ask a specific question when necessary, instead of playing a canned sentence.
+Typed input cannot be silently
+ignored as background speech. A selected fixed tool bypasses generated tool JSON
+and its result is passed to GLaDOS with further tool calls disabled.
+
+`docs/benchmarks/routing-assist-2026-10-05.json` records local E4B checks for
+spoken/typed small talk and CPU queries with transcripts disabled. A separate
+`routing-assist-fallback-2026-10-05.json` run deliberately sets the threshold to
+1.0 to exercise the full assistant's read-only CPU tool call rather than the
+fixed shortcut. These are generated speech-text checks, excluding TTS playback.
+
+**Parallel drafts** are managed automatically. After the router has its slot,
+a draft may acquire another free slot without queueing. Drafting is skipped on
+single-slot servers, Ollama endpoints and untranslated native audio, avoiding
+duplicated audio encoding. Optional transcription finishes first, allowing its
+text to be reused. The stream stays in a bounded private buffer and has only
+the same offered tools and request-specific instructions as a normal reply,
+including search instructions when search is offered. Only a compatible reply
+decision releases the stream to speech. PAD changes alone do not discard it.
+Other routing decisions
+cancel the draft using its own event, never the shared engine event. The producer
+releases its lease when HTTP streaming ends; cancelled prompt processing may
+retain capacity until the server yields or the request times out.
+Optional transcription holds its own lease and finishes before routing or drafts
+start, so it cannot exceed the shared capacity. Its HTTP stream closes when the
+interaction is interrupted. An experiment with deferred transcription was slower
+on this machine; see [Gemma evaluation](gemma4.md#optional-user-transcripts).
+No periodic user-interruption
+loop is implemented.
+
+The small live test found parallel drafts improved one conversational turn by
+about 0.09 s but slowed one clock-tool turn by about 0.15 s, with router latency
+increasing under contention. These are observed completion windows with voice
+muted, not first-audio latency. These historical checks predate automatic
+draft management and emotion freshness checks. Ten text cases plus one synthetic spoken clock question selected the
+expected action in ten cases; a hypothetical light command fell back to
+clarification. Natural speech and broader prompt calibration remain necessary.
+
+Snapshots include `decisions`, `inference`, and `routing`; frequent state events
+include current inference occupancy and the latest routing/preview scores.
+
 
 ## SSE contract — `/api/stream`
 
@@ -671,9 +822,11 @@ Because the webapp is the point of the `glados webapp` launcher, a disabled
 console or a bind failure (port in use) is **fatal for that command**: the
 launcher logs an error and exits rather than running the engine without the
 console. This does not affect other entry points — `tui`, `start`, and `say`
-are completely independent of the webapp and never bind a port.
+are independent of the HTTP console. A configured WebSocket audio backend
+can still bind its own port.
 
-- Request exceptions return JSON error bodies and never crash a worker thread.
+- Handled request errors return JSON; socket disconnects can end an individual
+  request thread without stopping the engine.
 - Client disconnects free their subscription.
 
 ## Lifecycle
@@ -685,7 +838,7 @@ The `glados webapp` command orchestrates the whole lifecycle:
 3. Build `Glados.from_config`, then `WebappServer(engine, host, port).start()`.
 4. Run `engine.run()`; on any exit (`try/finally`), shut the server down.
 
-The core engine stays decoupled and side-effect free. This mirrors the TUI's
+The core engine stays decoupled from HTTP console startup. This mirrors the TUI's
 launcher pattern: the same `GLADOS_WEBAPP_*` environment variables live on
 `GladosConfig.webapp`, so the launcher reads one merged config.
 `GladosConfig.webapp` stays a field on the shared config model, but the engine
@@ -731,134 +884,20 @@ Docker Compose also limits container logs to three 5 MB files.
   HTTP smoke test against a stub engine.
 - Example config: `configs/glados_webapp_config.yaml`.
 
-## Decision lists and speech routing
-
-Settings supports creating, editing, reordering and deleting options and lists,
-selecting the active list, enabling/disabling routing, thresholds and fallback.
-An option binds to ignore, reply, clarify, general tool planning, or a specific
-tool with fixed arguments. Tool controls come from the live tool schemas.
-There are at most 20 options per list and 32 lists. Light actions require a
-connected lighting tool; the console does not invent devices.
-
-Settings are stored atomically in ignored `data/decision_lists.yaml`; unlike
-tasks they survive restart. List/option IDs remain stable when reordered.
-Edits use revision checks. An in-flight classifier retains its original list
-snapshot, but a fixed action is cancelled if its list changed, was disabled or
-deleted before dispatch. The tool executor checks again before starting.
-Already-started physical actions cannot be undone by editing a list.
-
-The llama.cpp adapter validates single-token labels, disables thinking, requests
-one output token, and reads scores for every option. Equal positive logit bias
-exposes the candidates; renormalizing over them cancels that shared bias.
-Top-k/top-p/min-p/penalty sampling is disabled. Incomplete or non-finite scores
-never authorize a fixed action; missing candidates never become zero-confidence
-options. Scores are relative preferences, not calibrated correctness estimates.
-
-The default routes completed turns before generating speech. Native audio goes
-directly to the classifier without transcription; extended mode uses its
-transcript. By default, a low-confidence classification delegates the original
-text or audio to the full assistant with read-only tools (`get_time` for named timezones,
-`run_safe_command`, `get_report`, `get_preferences`, and `vision_look` when the
-camera mind is enabled). The original threshold and
-margin still apply to fixed actions. This avoids treating classifier uncertainty
-as missing user intent. Unavailable routing also uses this restricted path.
-Only offered tool names can be dispatched, and fallback tool results disable
-further tool calls for the reply. Settings offers this fallback as “Let GLaDOS
-answer (read-only tools)”; existing saved settings can select it explicitly.
-The clarification option now lets the assistant assess the original request and
-ask a specific question when necessary, instead of playing a canned sentence.
-Typed input cannot be silently
-ignored as background speech. A selected fixed tool bypasses generated tool JSON
-and its result is passed to GLaDOS with further tool calls disabled.
-
-`docs/benchmarks/routing-assist-2026-10-05.json` records local E4B checks for
-spoken/typed small talk and CPU queries with transcripts disabled. A separate
-`routing-assist-fallback-2026-10-05.json` run deliberately sets the threshold to
-1.0 to exercise the full assistant's read-only CPU tool call rather than the
-fixed shortcut. These are generated speech-text checks, excluding TTS playback.
-
-**Parallel drafts** are managed automatically. After the router has its slot,
-a draft may acquire another free slot without queueing. Drafting is skipped on
-single-slot servers, Ollama endpoints and untranslated native audio, avoiding
-duplicated audio encoding. Optional transcription finishes first, allowing its
-text to be reused. The stream stays in a bounded private buffer and has only
-the normal reply's read-only visual tool when applicable. Only a reply decision
-and fresh Emotion Core instructions release the stream to speech. If the current
-interaction changes the emotion context, the draft is discarded and a new reply
-uses the updated affect. Other routing decisions
-cancel the draft using its own event, never the shared engine event. The producer
-releases its lease when HTTP streaming ends; cancelled prompt processing may
-retain capacity until the server yields or the request times out.
-Optional transcription holds its own lease and finishes before routing or drafts
-start, so it cannot exceed the shared capacity. Its HTTP stream closes when the
-interaction is interrupted. An experiment with deferred transcription was slower
-on this machine; see [Gemma evaluation](gemma4.md#optional-user-transcripts).
-No periodic user-interruption
-loop is implemented.
-
-The small live test found parallel drafts improved one conversational turn by
-about 0.09 s but slowed one clock-tool turn by about 0.15 s, with router latency
-increasing under contention. These are observed completion windows with voice
-muted, not first-audio latency. These historical checks predate automatic
-draft management and emotion freshness checks. Ten text cases plus one synthetic spoken clock question selected the
-expected action in ten cases; a hypothetical light command fell back to
-clarification. Natural speech and broader prompt calibration remain necessary.
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/api/memory` | Read-only saved memory and current recall. Supports `query`, `kind=all\|fact\|summary`, `offset` and `limit` (maximum 50). |
-| GET | `/api/context` | Neural Buffer: ordered preview or submitted request, using `mode=user\|autonomy` and `view=live\|request`. |
-| GET | `/api/decisions` | Versioned lists and activation settings. |
-| POST | `/api/decisions` | `action`: `save`, `delete`, or `activate`, with the current global `revision`. |
-| POST | `/api/decisions/test` | Preview a saved `list_id` using `text` or base64 mono 16 kHz WAV `audio` (max 30 s). Optional `spoken` treats text as spoken input. Never executes actions. |
-
-Snapshots include `decisions`, `inference`, and `routing`; frequent state events
-include current inference occupancy and the latest routing/preview scores.
-
-### Vision mind
-
-Enable `Glados.vision` to add **Cores → Vision Core**. Its inspector displays the
-live webcam at up to 30 fps with CPU face tracking, plus E4B captions and
-changes on the configured motion-aware schedule (2–5 seconds by default), measured frequency and sharpness timing. Each displayed frame includes its own face box, gaze crosshair and normalized
-X/Y coordinates. Live video and slower captions update independently. Pause/resume controls release and reopen the camera; run-once
-also works while paused. **Recent events** describes up to four timestamped
-observations, while **What I see** describes the current image. The camera endpoint is independent of the speaking
-model, so API conversation profiles still use E4B for vision. See [Vision](vision.md).
-
-The main avatar and its in-flight counter show user-facing inference only.
-Continuous Vision and other background minds remain visible in their lanes
-and Cores → Shared processing without making the avatar say "Processing". Specific
-visual questions use `vision_look(question=...)` for a fresh E4B inspection;
-the Vision inspector shows the latest question, answer, and visible evidence.
-
-Enrichment Center's **Central Core** controls include **Microphone**, **Voice**, and
-**Camera: ON/OFF**. Camera toggles the Vision mind's pause/resume control and
-releases the webcam when turned off. Optional voice transcripts are controlled
-in **Facility Settings → Voice input** instead of the main page.
-
-
-Quiet mode and emotional replies
+## Quiet mode
 
 The Central Core panel and Facility Settings provide a Quiet control. Direct requests such as “go to sleep”, “be quiet”, or “stop replying until I tell you” enter quiet mode through one-token routing. A second small choice confirms a sleep request, including negation handling. While quiet, only the microphone/input queue and a two-option wake classifier remain active. Ordinary questions, insults and background sounds do not wake her. “Wake up” or the Wake button restores the prior paused state of each core. Speech already playing is stopped, queued audio and tools are discarded, and generation markers reject late results after a sleep/wake cycle. The microphone retains its existing ON/OFF setting.
 
 Noise, non-speech audio and unintelligible speech are routed to Ignore before the PAD update or reply generation. With optional transcripts enabled, classification uses the shared transcript when available. This is model classification, so real-room audio still benefits from tuning the options and thresholds.
 
-For accepted user turns, Emotion updates PAD before the reply request. Current PAD adds explicit tone and starting expression instructions to the reply prompt. Insults can produce an angry glare and sharp sarcasm, while normal factual questions do not erase an existing reaction. One-second ticks decay toward neutral using elapsed time, without an LLM inference.
-Decay is applied before new reactions as well, so ordinary activity does not prevent recovery.
-While cores are suspended the timer stops publishing; the next tick or wake reaction catches up for elapsed time. The live Central Core panel shows the same affect instructions used for the reply.
 
-Autonomy and conversation compaction
+Emotion is asynchronous and uses background admission. Its default idle interval
+is five seconds; elapsed-time decay catches up after a pause. It does not hold up
+the current response. [Autonomy](autonomy.md) describes review/delivery, background
+priority and PAD. [Vision](vision.md) describes camera timing, frame windows,
+question inspection, face tracking and arrival evidence.
 
-Facility Settings → Autonomy Core controls proactive responses at runtime, including profiles that start with autonomy OFF. Camera, Emotion and Compaction work independently. Turning autonomy OFF invalidates active and queued autonomous decisions, continuations and speech while preserving user replies. Work blocked inside model prefill or a non-cancellable tool can finish, but its stale output is rejected. Quiet mode pauses those cores as well.
-
-The setting displays the review/handoff stage, pending notifications, last decision,
-Central Core instruction/source IDs and time until the next idle check. All independent
-slots are reviewed with conversation evidence. Notifications survive user activity;
-stable condition keys and a delivery ledger suppress repeated announcements. Checks
-coalesce automatically, back off after silence and keep internal requests private.
-Requested searches run as background tasks when Autonomy is enabled; completed reports
-can prompt Central Core. Fresh Vision arrival evidence can justify one greeting. See
-[Autonomy Core](autonomy.md) for scheduling and the validated JSON protocol.
+## Conversation compaction and persistence
 
 The Compaction Mind retains at least the last 8 messages and complete tool exchanges. Older history becomes timestamped summaries in non-overlapping bands: the last hour, 1–4 hours, 4–8 hours, 8–24 hours, 1–3 days, 3–7 days, 1–4 weeks and older. Summaries merge and move to older bands over time. Compaction runs quietly on E4B, defers to interactive work, preserves concurrent appends and leaves originals intact on failure. Voice turns with transcripts disabled preserve their available placeholder/action summary rather than a full transcript.
 

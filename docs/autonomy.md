@@ -1,5 +1,8 @@
 # Autonomy Core
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 Independent Minds publish observations and results to shared slots. Autonomy reviews all slots, existing conversation summaries and recent chat during idle pauses. It returns a no-action decision or asks Central Core to tell the user something useful. Central Core writes and delivers the response using GLaDOS's normal personality, current emotion and animation markers.
 
 ```mermaid
@@ -19,6 +22,8 @@ flowchart LR
 A slot stores state; it is not an inference worker. Vision, Emotion, Memory and Health continue independently when Autonomy is off. The reviewer has its own policy, offers no tools and never queues speech itself. Internal inputs and decisions stay out of user conversation history. Only the delivered Central Core response is recorded.
 
 ## Configuration and scheduling
+
+Place this fragment inside the top-level `Glados:` mapping:
 
 ```yaml
 autonomy:
@@ -58,6 +63,11 @@ The reviewer returns one of two JSON objects:
 ```
 
 The uniform object format avoids an E4B bias toward notifications when a constrained schema combines literal null and an object. Literal JSON null is also accepted from custom endpoints. Prompt decisions must reference real eligible slot IDs with bounded nonempty instructions and reasons. Malformed output cannot prompt Central Core.
+
+The specialized reviewer still runs through the autonomy LanguageModelProcessor
+workers and a separate ticker; MindScheduler manages domain minds, not this path.
+A dedicated reviewer transport/worker remains in the
+[architecture plan](../plans/architecture-refactor-progress.md#remaining-work).
 
 OpenAI-compatible endpoints receive `response_format`; Ollama receives `format`. The default reviewer disables thinking, caps generation at 256 tokens and sets a separate llama.cpp reasoning budget of zero. Gemma's structured-output grammar otherwise permits a thought channel even when the template disables thinking. Optional `decision_thinking: true` permits a 128-token reasoning budget within a 512-token total on llama.cpp. The normal path costs one inference for silence and two for a notification: reviewer, then Central Core.
 
@@ -166,6 +176,11 @@ inference paths. A scheduling policy never performs their domain work.
 Built-in background jobs that populate slots:
 
 ### Hacker News
+
+Place these job fragments inside `Glados:`. Both optional jobs are disabled in
+the shipped profiles. HN caches successful relevance verdicts, including rejected
+stories, and records slot publication separately from audible delivery. Legacy
+shown entries are migrated so old dismissed stories do not get judged again.
 
 ```yaml
 autonomy:
