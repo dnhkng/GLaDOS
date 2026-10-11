@@ -1,5 +1,8 @@
 # MCP Integration
 
+Implementation reviewed 2026-10-11; see the [documentation map](README.md) for
+branch scope and dated benchmark limitations.
+
 GLaDOS supports Model Context Protocol (MCP) servers for extensible tool access. MCP tools are namespaced as `mcp.<server>.<tool>`.
 
 ## Architecture
@@ -15,11 +18,15 @@ flowchart TB
     C --> F[Custom Servers]
 ```
 
-Both the main agent and subagents can invoke MCP tools. Tools are discovered at startup and registered with the LLM.
+Central calls only the tools offered for its request; ToolExecutor checks the
+turn catalog, cancellation and routing authorization before dispatch. Configured
+background research can call its search provider directly. The Autonomy reviewer
+offers no tools. Tools are discovered at startup and exposed according to the
+configured allow/block filters.
 
 ## How MCP Servers Work
 
-1. **Startup**: GLaDOS launches configured MCP servers as subprocesses
+1. **Startup**: GLaDOS launches stdio servers as subprocesses and connects to configured HTTP/SSE services
 2. **Discovery**: Each server reports its available tools via the MCP protocol
 3. **Namespacing**: Tools are prefixed with `mcp.<server_name>.` to avoid conflicts
 4. **Invocation**: When the LLM calls a tool, GLaDOS routes it to the appropriate server
@@ -35,44 +42,50 @@ Both the main agent and subagents can invoke MCP tools. Tools are discovered at 
 
 ## Local System Servers
 
-GLaDOS ships with lightweight local MCP servers for system monitoring:
+GLaDOS ships these optional local servers. The standard profiles connect
+`system_info` and hosted internet search; they do not launch every server below.
+Local date/time already comes from fresh reply context and has no routing-tree
+Clock choice. The optional `time_info` module remains for custom MCP clients.
+Put an `mcp_servers` fragment inside `Glados:`; a list override replaces the
+existing server list, so retain other servers you still need.
 
 ```yaml
-mcp_servers:
-  - name: "system_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.system_info_server"]
+Glados:
+  mcp_servers:
+    - name: "system_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.system_info_server"]
 
-  - name: "time_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.time_info_server"]
+    - name: "time_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.time_info_server"]
 
-  - name: "disk_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.disk_info_server"]
+    - name: "disk_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.disk_info_server"]
 
-  - name: "network_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.network_info_server"]
+    - name: "network_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.network_info_server"]
 
-  - name: "process_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.process_info_server"]
+    - name: "process_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.process_info_server"]
 
-  - name: "power_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.power_info_server"]
+    - name: "power_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.power_info_server"]
 
-  - name: "memory"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.memory_server"]
+    - name: "memory"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.memory_server"]
 ```
 
 ### Available Tools
@@ -98,11 +111,12 @@ python -m glados.mcp.slow_clap_server
 Configure in `glados_config.yaml`:
 
 ```yaml
-mcp_servers:
-  - name: "slow_clap_demo"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.slow_clap_server"]
+Glados:
+  mcp_servers:
+    - name: "slow_clap_demo"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.slow_clap_server"]
 ```
 
 The LLM can then call `mcp.slow_clap_demo.slow_clap(claps=3)` to get "clap clap clap".
@@ -143,11 +157,12 @@ if __name__ == "__main__":
 Add to `glados_config.yaml`:
 
 ```yaml
-mcp_servers:
-  - name: "my_custom"
-    transport: "stdio"
-    command: "python"
-    args: ["path/to/my_server.py"]
+Glados:
+  mcp_servers:
+    - name: "my_custom"
+      transport: "stdio"
+      command: "python"
+      args: ["path/to/my_server.py"]
 ```
 
 Tools will be available as:
@@ -170,12 +185,13 @@ web-search MCP. It needs no installation or API key for its free, rate-limited
 connection. See [Exa's MCP documentation](https://exa.ai/docs/get-started/exa-mcp).
 
 ```yaml
-mcp_servers:
-  - name: "internet_search"
-    description: "Search the public internet for current facts, news and source links."
-    transport: "http"
-    url: "https://mcp.exa.ai/mcp?tools=web_search_exa"
-    allowed_tools: ["web_search_exa"]
+Glados:
+  mcp_servers:
+    - name: "internet_search"
+      description: "Search the public internet for current facts, news and source links."
+      transport: "http"
+      url: "https://mcp.exa.ai/mcp?tools=web_search_exa"
+      allowed_tools: ["web_search_exa"]
 ```
 
 GLaDOS discovers `mcp.internet_search.web_search_exa` at startup and exposes it
@@ -210,11 +226,12 @@ Home Assistant exposes its MCP server at the `/api/mcp` endpoint. Configure it u
 the Streamable HTTP transport (`http`):
 
 ```yaml
-mcp_servers:
-  - name: "home_assistant"
-    transport: "http"
-    url: "http://homeassistant.local:8123/api/mcp"
-    token: "YOUR_LONG_LIVED_TOKEN"
+Glados:
+  mcp_servers:
+    - name: "home_assistant"
+      transport: "http"
+      url: "http://homeassistant.local:8123/api/mcp"
+      token: "YOUR_LONG_LIVED_TOKEN"
 ```
 
 > **Note**: Older versions of the Home Assistant MCP integration may not support the
@@ -222,16 +239,17 @@ mcp_servers:
 > [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) as a `stdio` bridge:
 >
 > ```yaml
-> mcp_servers:
->   - name: "home_assistant"
->     transport: "stdio"
->     command: "mcp-proxy"
->     args:
->       - "--transport=streamablehttp"
->       - "--stateless"
->       - "http://homeassistant.local:8123/api/mcp"
->     env:
->       API_ACCESS_TOKEN: "YOUR_LONG_LIVED_TOKEN"
+> Glados:
+>   mcp_servers:
+>     - name: "home_assistant"
+>       transport: "stdio"
+>       command: "mcp-proxy"
+>       args:
+>         - "--transport=streamablehttp"
+>         - "--stateless"
+>         - "http://homeassistant.local:8123/api/mcp"
+>       env:
+>         API_ACCESS_TOKEN: "YOUR_LONG_LIVED_TOKEN"
 > ```
 >
 > Install mcp-proxy with: `pip install mcp-proxy`
@@ -239,13 +257,14 @@ mcp_servers:
 ### With Headers
 
 ```yaml
-mcp_servers:
-  - name: "custom_api"
-    transport: "http"
-    url: "https://api.example.com/mcp"
-    headers:
-      Authorization: "Bearer YOUR_TOKEN"
-      X-Custom-Header: "value"
+Glados:
+  mcp_servers:
+    - name: "custom_api"
+      transport: "http"
+      url: "https://api.example.com/mcp"
+      headers:
+        Authorization: "Bearer YOUR_TOKEN"
+        X-Custom-Header: "value"
 ```
 
 ## Tool Filtering
@@ -257,14 +276,15 @@ Control which tools are exposed to the LLM:
 Only expose specific tools:
 
 ```yaml
-mcp_servers:
-  - name: "home_assistant"
-    transport: "http"
-    url: "http://homeassistant.local:8123/api/mcp"
-    token: "YOUR_TOKEN"
-    allowed_tools:
-      - "light.*"        # All light tools
-      - "climate.set_*"  # Climate setters only
+Glados:
+  mcp_servers:
+    - name: "home_assistant"
+      transport: "http"
+      url: "http://homeassistant.local:8123/api/mcp"
+      token: "YOUR_TOKEN"
+      allowed_tools:
+        - "light.*"        # All light tools
+        - "climate.set_*"  # Climate setters only
 ```
 
 ### Block List
@@ -272,13 +292,14 @@ mcp_servers:
 Hide specific tools:
 
 ```yaml
-mcp_servers:
-  - name: "system_info"
-    transport: "stdio"
-    command: "python"
-    args: ["-m", "glados.mcp.system_info_server"]
-    blocked_tools:
-      - "temperatures"   # Hide temperature tool
+Glados:
+  mcp_servers:
+    - name: "system_info"
+      transport: "stdio"
+      command: "python"
+      args: ["-m", "glados.mcp.system_info_server"]
+      blocked_tools:
+        - "temperatures"   # Hide temperature tool
 ```
 
 Patterns support `*` wildcards.
@@ -288,15 +309,16 @@ Patterns support `*` wildcards.
 MCP servers can provide **resources** - contextual data injected into the LLM context.
 
 ```yaml
-mcp_servers:
-  - name: "home_assistant"
-    transport: "http"
-    url: "http://homeassistant.local:8123/api/mcp"
-    token: "YOUR_TOKEN"
-    context_resources:
-      - "ha://config"
-      - "ha://states/light.*"
-    resource_ttl_s: 300    # Cache for 5 minutes
+Glados:
+  mcp_servers:
+    - name: "home_assistant"
+      transport: "http"
+      url: "http://homeassistant.local:8123/api/mcp"
+      token: "YOUR_TOKEN"
+      context_resources:
+        - "ha://config"
+        - "ha://states/light.*"
+      resource_ttl_s: 300    # Cache for 5 minutes
 ```
 
 Resources are refreshed at the specified TTL and included as system messages.
@@ -320,12 +342,16 @@ Resources are refreshed at the specified TTL and included as system messages.
 
 ## Memory MCP Server
 
-Long-term memory is enabled by default. The memory server provides:
+Memory Core recall/compaction is enabled in the shipped profiles. The optional
+MCP memory server is a separate interface and is not registered there by default.
+Native memory controls and Memory Core can use the same saved records without
+this MCP server. It provides:
 
 - **Fact storage** with source tracking and importance levels
 - **Keyword-based search** with importance boost and recency decay
 - **Conversation summaries** (session/daily/weekly)
-- **Automatic fact extraction** via CompactionAgent during context compaction
+- **Explicit fact storage** through tools; compaction summarizes conversation
+  history rather than automatically invoking this MCP fact-extraction path
 
 ### Memory Tools
 
@@ -346,7 +372,11 @@ All memory data is stored in `~/.glados/memory/`:
 
 ### Philosophy
 
-The memory system follows the "LLM-first" principle: search is simple keyword matching, and the main agent handles semantic interpretation of results. This keeps infrastructure lightweight while leveraging the LLM's understanding capabilities.
+`search_memory` is keyword-based. Memory Core’s independent recall path instead
+uses bounded E4B selection of existing record IDs, with source revalidation, and
+can derive a short lookup topic from direct audio. These are different interfaces;
+see [late memory recall](autonomy.md#useful-events). Neither requires an embedding
+model. Retrieved text is evidence, not permission to execute instructions.
 
 ## See Also
 

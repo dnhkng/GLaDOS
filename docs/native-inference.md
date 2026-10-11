@@ -19,7 +19,9 @@ This is a feasibility result. The embedding prototype works; a production adapte
 
 The checkout at `/home/dnhkng/Documents/LLM/llama.cpp` was fetched and fast-forwarded from `687e7789271ec1276e3470f158428e11a4f80b6f` to **`6c73b3e12dc501de35fe5f6979960d06921a2f6c`**, matching `origin/master` when checked on 2026-10-06. Tracked upstream source remained unmodified.
 
-A separate CPU proof build was created in `build-glados-native`, reporting `b1112-6c73b3e12`. It successfully linked the native server core and ran both request modes without an HTTP listener. The live GPU server still uses the existing `b1-687e7789` binary. Updating the source checkout did not upgrade that running service.
+A separate CPU proof build was created in `build-glados-native`, reporting `b1112-6c73b3e12`. It successfully linked the native server core and ran both request modes without an HTTP listener. At the assessment date the live GPU server used the existing `b1-687e7789`
+binary; updating the source checkout did not upgrade that service. This is not
+a statement about a currently running instance.
 
 The exact revision, build configuration, reproduction commands and results are recorded in the [embedding assessment](benchmarks/llamacpp-embedding-assessment-2026-10-06.json).
 
@@ -58,7 +60,7 @@ GLaDOS's launcher already enables `--parallel 4 --cont-batching`. An embedded im
 
 At the end of prompt processing, the last prompt position produces logits predicting the next token. For a prompt ending at Gemma's assistant header, these can score answer labels such as `A`, `B` and `C`. There is no need to append an answer letter first.
 
-The current upstream `SERVER_TASK_TYPE_DECISION` accepts candidate token IDs and returns their raw logits. Its result path releases the slot before sampling. Direct native decision tasks worked with the ordinary Gemma-4 E4B GGUF; this does not establish compatibility with the public `/v1/systemone` endpoint, which imposes additional model metadata requirements. See the pinned [task definitions](https://github.com/ggml-org/llama.cpp/blob/6c73b3e12dc501de35fe5f6979960d06921a2f6c/tools/server/server-task.h) and [decision result path](https://github.com/ggml-org/llama.cpp/blob/6c73b3e12dc501de35fe5f6979960d06921a2f6c/tools/server/server-context.cpp#L2330).
+The pinned revision’s `SERVER_TASK_TYPE_DECISION` accepts candidate token IDs and returns their raw logits. Its result path releases the slot before sampling. Direct native decision tasks worked with the ordinary Gemma-4 E4B GGUF; this does not establish compatibility with the public `/v1/systemone` endpoint, which imposes additional model metadata requirements. See the pinned [task definitions](https://github.com/ggml-org/llama.cpp/blob/6c73b3e12dc501de35fe5f6979960d06921a2f6c/tools/server/server-task.h) and [decision result path](https://github.com/ggml-org/llama.cpp/blob/6c73b3e12dc501de35fe5f6979960d06921a2f6c/tools/server/server-context.cpp#L2330).
 
 A one-token completion selects and emits a token using those same final-prompt logits. Stopping after that first token avoids feeding it back for another transformer pass. Zero-token scoring removes token selection/emission, but does not eliminate an extra transformer pass relative to this one-token case. Native embedding also removes HTTP/JSON transport overhead; its performance benefit has not yet been measured.
 
@@ -75,7 +77,7 @@ The [embedding probe](../examples/probe_embedded_server.cpp) started three compl
 | Native decision task | 0 | All three had finished | B |
 | One-token completion | 1 | All three were still running | B |
 
-Both runs used the latest unmodified core, four slots and CPU inference. Each earlier completion generated 48 tokens. This verifies late-arrival behavior for the tested modes, rather than GPU throughput or a latency speedup.
+Both runs used the pinned unmodified core, four slots and CPU inference. Each earlier completion generated 48 tokens. This verifies late-arrival behavior for the tested modes, rather than GPU throughput or a latency speedup.
 
 Use completion-based scoring for an initial shared generation/routing engine. Ensure the probability result includes every required candidate; the probe's top-eight output is not a general guarantee. Use decision tasks for workloads containing only scoring requests. Mixing strict zero-token decisions with active generation needs an upstream compatibility change, a downstream patch or a separate scheduling/model arrangement.
 
@@ -97,6 +99,10 @@ Stopping at earlier prompt positions did not improve accuracy. The tested early-
 Keeping a small adapter and pinning upstream is preferable to copying the scheduler. Rebuild the adapter with each selected upstream revision and run compatibility checks before upgrading: the internal C++ API can change even when our public C ABI remains stable.
 
 A custom batcher is feasible for narrowly scoped text-only prompt scoring. GLaDOS also needs streaming, multimodal processing, prefix reuse, sliding-window cache handling and cancellation. Owning those behaviors would substantially increase the maintenance burden. A small mixed-task compatibility patch may be possible, but it still needs validation across cache handling, GPU execution and other task modes; no such patch was made in this investigation.
+
+These native-adapter steps remain future work; production Python inference
+still uses HTTP and its application scheduler. The broader Python refactor is
+tracked [separately](../plans/architecture-refactor-progress.md#remaining-work).
 
 The next implementation steps are:
 

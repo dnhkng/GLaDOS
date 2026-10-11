@@ -1,6 +1,8 @@
 # Rust migration plan
 
-Decision and evidence recorded on 2026-10-06.
+Decision and evidence recorded on 2026-10-06; status reviewed on 2026-10-11.
+This remains a future migration: the production application is Python/HTTP,
+and neither native embedding nor Sonora AEC is integrated.
 
 ## Delivery sequence
 

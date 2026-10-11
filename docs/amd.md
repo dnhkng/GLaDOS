@@ -1,5 +1,9 @@
 # AMD GPU setup
 
+Reviewed 2026-10-11 against the installer and provider selection code. The
+compatibility table below describes the installer’s explicit supported mapping,
+not every AMD wheel currently published.
+
 GLaDOS can select AMD's MIGraphX execution provider for its local ONNX audio
 models: Parakeet/CTC transcription, speech synthesis, phonemization and VAD.
 This does not install or configure the separate llama.cpp model server.

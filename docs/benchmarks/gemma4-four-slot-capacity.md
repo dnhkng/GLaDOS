@@ -4,7 +4,7 @@ Measured 2026-10-06 on the RTX 3080 (10,240 MiB VRAM), using llama.cpp
 `687e7789`, Gemma 4 E4B Q4_0 and the Q8_0 multimodal projector. Existing batch
 sizes, Flash Attention, native audio support and bounded log capture were retained.
 
-## Work distribution
+## Work distribution at the measurement date
 
 The main GLaDOS request includes conversation history, instructions, live state,
 tool definitions and tool results. It is the request expected to grow longest.
@@ -59,7 +59,7 @@ conversation. A long main context and a long speculative draft can consume
 almost the whole pool before background requests are included. Additional
 input-budget/admission policy would be needed to guarantee that allocation.
 
-## Recommendation
+## Historical recommendation and subsequent default
 
 Four independent 32K slots, Q8_0 key/value cache, full SWA retention, with two
 application slots reserved for interactive requests. This retains prompt reuse
@@ -87,7 +87,8 @@ Glados:
       target_utilization: 0.6
 ```
 
-The current compaction threshold is about 1,843 estimated stored tokens. Raising
+At the assessment’s starting configuration, compaction began at about 1,843
+estimated stored tokens. Raising
 only server context would leave that early compaction behavior in place. These
 suggested settings start compaction at about 19,660 estimated stored tokens,
 leaving room for system instructions, tools, current input and output. The
@@ -96,5 +97,10 @@ threshold counts stored history, not the entire serialized inference request.
 The live two-slot, 4K-per-slot server and all application controls/pause states
 were restored after the assessment. The recommended four-slot Q8_0 full-SWA
 profile was subsequently adopted as the default in the launcher and native
-E4B configurations, and activated in the running console. Application controls
-and core pause states were preserved during activation.
+E4B configurations, and activated in the console at that time. It was later reduced to **four 16K
+slots** (`-c 65536`), retaining Q8_0/full SWA and two reserved interactive slots.
+The current stored-history threshold is about 9,830 estimated tokens with
+`model_context_window: 16384` and `target_utilization: 0.6`. See the
+[current setup](../gemma4.md#cache-and-latency-tuning-2026-10-06).
+The older Emotion JSON workload above is measurement evidence; current Emotion
+uses three one-token PAD axis choices asynchronously.
