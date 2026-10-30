@@ -22,6 +22,7 @@ dependencies = [
     "threadpoolctl>=3.0.0",
     "mcp>=1.25.0,<2.0.0",
     "websockets>=16.0",
+    "tzdata>=2024.1; sys_platform == 'win32'",  # zoneinfo has no system database on Windows.
 ]
 
 [project.optional-dependencies]
