@@ -1,6 +1,7 @@
 /* Aperture Science Test Chamber: saved memory and current-topic recall. */
 (function (root) {
   'use strict';
+  const setHTML = (host, html) => root.GladosDom ? root.GladosDom.setHTML(host, html) : host && (host.innerHTML = html);
   const escape = value => String(value ?? '').replace(/[&<>"']/g,
     char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
   function renderFacts(facts, empty = 'No saved memories match this view.') {
@@ -38,7 +39,7 @@
         if (!response.ok) throw new Error(value.error || 'Memory could not be loaded.');
         if (!value.available) {
           $('memory-status').textContent = value.reason;
-          $('memory-facts').innerHTML = renderFacts([], value.reason);
+          setHTML($('memory-facts'), renderFacts([], value.reason));
           $('memory-recall').innerHTML = ''; $('memory-topic').textContent = 'Recall unavailable.';
           $('memory-prev').disabled = true; $('memory-next').disabled = true;
           return;
@@ -50,11 +51,11 @@
         const recall = value.recall || {};
         records.clear();
         for (const fact of [...(recall.facts || []), ...value.memories]) records.set(fact.id, fact);
-        $('memory-recall').innerHTML = renderFacts(recall.facts, recall.paused ?
-          'The Memory Core is paused.' : 'No saved facts match the current topic.');
+        setHTML($('memory-recall'), renderFacts(recall.facts, recall.paused ?
+          'The Memory Core is paused.' : 'No saved facts match the current topic.'));
         $('memory-topic').textContent = recall.enabled ? (recall.query ?
           'Current topic: ' + recall.query : 'Waiting for a conversation topic.') : 'Recall is disabled.';
-        $('memory-facts').innerHTML = renderFacts(value.memories);
+        setHTML($('memory-facts'), renderFacts(value.memories));
         $('memory-prev').disabled = offset === 0;
         $('memory-next').disabled = offset + value.memories.length >= value.total;
         $('memory-status').textContent = value.total ?

@@ -207,6 +207,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <link rel="stylesheet" href="glados-avatar.css">
 <link rel="stylesheet" href="glados-themes.css">
 <link rel="stylesheet" href="glados-console.css">
+<script src="glados-dom.js"></script>
 <script src="glados-themes.js"></script>
 </head>
 <body>
@@ -477,6 +478,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
    LIVE : /api/snapshot + /api/stream (SSE). Local-file demos are explicitly simulated. */
 const $ = id => document.getElementById(id);
 const $$ = s => document.querySelectorAll(s);
+// Falls back to plain writes if glados-dom.js is unavailable (older server).
+const setHTML = (host, html) => window.GladosDom ? window.GladosDom.setHTML(host, html) : host && (host.innerHTML = html);
 const el = (cls, html) => { const d=document.createElement("div"); d.className=cls; if(html) d.innerHTML=html; return d; };
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pad = n => String(n).padStart(2,"0");
@@ -531,7 +534,10 @@ function addWireRow(host, ev, cap){
     "<span class=\"src\">"+esc(ev.src)+"."+esc(ev.kind)+"</span>"+
     "<span class=\"msg\">"+esc(ev.msg)+"</span>"+
     (meta? "<span class=\"meta\">"+esc(meta)+"</span>" : ""));
+  // New rows go on top; when the reader has scrolled down, keep the rows they are reading in place.
+  const reading=host.scrollTop>0, before=host.scrollHeight;
   host.prepend(row);
+  if(reading) host.scrollTop+=host.scrollHeight-before;
   while (host.children.length > (cap||110)) host.removeChild(host.lastChild);
 }
 function track(ev){ eventLog.push(ev); if(eventLog.length>400) eventLog.shift(); }
@@ -605,7 +611,7 @@ function renderWorkers(){
   const countText = n+" configured";
   if($("worker-count").textContent !== countText) $("worker-count").textContent = countText;
   const html = n ? kv("In-flight requests",S.lanes.autoInflight)+kv("Available capacity",Math.max(0,n-S.lanes.autoInflight))+kv("Queued requests",S.lanes.autoQ) : '<div class="msum">Background processing is unavailable. The Central Core and test assignments remain available.</div>';
-  if($("workers").innerHTML !== html) $("workers").innerHTML = html;
+  setHTML($("workers"), html);
 }
 
 /* ============ brainstem + interaction ============ */
@@ -678,9 +684,7 @@ function renderMinds(){
   const list = allMinds();
   if(!list.length){
     mindsRenderKey = "";
-    if(host.innerHTML !== '<div class="msum">No cores connected.</div>') {
-      host.innerHTML = '<div class="msum">No cores connected.</div>';
-    }
+    setHTML(host, '<div class="msum">No cores connected.</div>');
     return;
   }
   const existingMap = new Map();
@@ -707,9 +711,7 @@ function renderMinds(){
       if(!child) return;
       const identity = coreIdentity(a), activity = coreActivity(a);
       const html = renderMindCardHtml(a, identity, activity);
-      if(child.innerHTML !== html) {
-        child.innerHTML = html;
-      }
+      setHTML(child, html);
     });
   }
 }
@@ -723,9 +725,7 @@ function renderSlots(){
   const list = taskSlots();
   if(!list.length){
     slotsRenderKey = "";
-    if(host.innerHTML !== '<div class="msum">No assignments.</div>') {
-      host.innerHTML = '<div class="msum">No assignments.</div>';
-    }
+    setHTML(host, '<div class="msum">No assignments.</div>');
     return;
   }
   const key = JSON.stringify(list.map(s => [s.slot_id, s.title, s.status, s.summary, s.importance, s.confidence, s.next_run, s.update_priority, s.notify_user, s.owner_id]));
@@ -793,31 +793,31 @@ function renderVitals(){
                        '<span class="chip red">LOW / CPU</span>';
       const fb = h.feedback;
       const feedbackStr = fb && fb.recent_avg_ttft_s != null ? ' · TTFT '+fb.recent_avg_ttft_s+'s (scale '+(fb.context_multiplier*100)+'%)' : '';
-      $("v-hardware").innerHTML = kv("Host Tier", tierChip) +
+      setHTML($("v-hardware"), kv("Host Tier", tierChip) +
         kv("Device", esc(h.gpu_name || h.gpu_type || 'Unknown') + (h.vram_total_gb ? ' (' + h.vram_total_gb + ' GB VRAM' + (h.unified_memory ? ', shared' : '') + ')' : '')) +
         kv("System RAM", (h.ram_total_gb ? h.ram_total_gb.toFixed(1) + ' GB total' : '—') + (h.ram_available_gb ? ' · ' + h.ram_available_gb.toFixed(1) + ' GB free' : '')) +
         kv("Adaptive Context", (h.num_ctx || 4096) + ' tokens' + feedbackStr) +
         kv("Max Output", (h.num_predict || 512) + ' tokens') +
         kv("CPU Cores / Threads", (h.cpu_count || 4) + ' cores · ' + (h.num_thread || 4) + ' threads') +
         kv("Inference Timeout", (h.llm_timeout || 60) + 's') +
-        '<div class="mem-row" style="margin-top:8px;font-size:11px;color:var(--text-sub)">' + esc(h.recommendation || '') + '</div>';
+        '<div class="mem-row" style="margin-top:8px;font-size:11px;color:var(--text-sub)">' + esc(h.recommendation || '') + '</div>');
     } else {
-      $("v-hardware").innerHTML = '<span class="chip">Hardware telemetry standby</span>';
+      setHTML($("v-hardware"), '<span class="chip">Hardware telemetry standby</span>');
     }
   }
-  $("components").innerHTML=S.minds.filter(m=>!S.agents.some(a=>a.agent_id===m.mind_id)).map(m=>kv(esc(m.title),esc(m.status)+" · "+esc(m.summary||""))).join("")||"No engine components reported.";
+  setHTML($("components"), S.minds.filter(m=>!S.agents.some(a=>a.agent_id===m.mind_id)).map(m=>kv(esc(m.title),esc(m.status)+" · "+esc(m.summary||""))).join("")||"No engine components reported.");
   if(!$("v-audio")) return;
   const a = S.audio;
   const vision = typeof S.vision === "string" ? S.vision : (S.vision&&S.vision.summary) || "—";
-  $("v-audio").innerHTML = kv("Speaking", S.speaking?"YES":"no")+kv("Microphone VAD", a.vad?"hot":"idle")+kv("RMS", a.rms.toFixed(1)+" dB")+
-    '<div style="margin-top:14px">'+meter("input level", clamp((a.rms+60)/60*100,0,100),"var(--teal)")+"</div>";
-  $("v-interaction").innerHTML = kv("Since last user", ago(S.sinceUser))+kv("Since last spoke", ago(S.sinceAsst));
-  $("v-vision").innerHTML = kv("Scene", esc(vision));
-  $("v-mcp").innerHTML = S.mcpServers.length
+  setHTML($("v-audio"), kv("Speaking", S.speaking?"YES":"no")+kv("Microphone VAD", a.vad?"hot":"idle")+kv("RMS", a.rms.toFixed(1)+" dB")+
+    '<div style="margin-top:14px">'+meter("input level", clamp((a.rms+60)/60*100,0,100),"var(--teal)")+"</div>");
+  setHTML($("v-interaction"), kv("Since last user", ago(S.sinceUser))+kv("Since last spoke", ago(S.sinceAsst)));
+  setHTML($("v-vision"), kv("Scene", esc(vision)));
+  setHTML($("v-mcp"), S.mcpServers.length
     ? S.mcpServers.map(m => '<div style="display:flex;justify-content:space-between;padding:4px 0"><span>'+esc(m.name)+'</span><span>'+
         (m.connected!==false ? '<span class="chip green">online · '+(m.tools||0)+' tools</span>' : '<span class="chip red">offline</span>')+
         '</span></div>').join("")
-    : '<span class="chip">none configured</span>';
+    : '<span class="chip">none configured</span>');
 }
 
 /* ============ counters + badges ============ */
@@ -946,7 +946,7 @@ function renderVisionInspector(){
   const faceSummary=face=>!face?.available?'Unavailable':face.present===false?'No person detected':
     face.present!==true?'Presence unclear':Number.isFinite(face.x)&&Number.isFinite(face.y)?
       'X '+fmtNum(face.x)+' · Y '+fmtNum(face.y):'Person present · face location unavailable';
-  $('vision-metrics').innerHTML=kv('Observed',v?.captured_at?esc(new Date(v.captured_at*1000).toLocaleTimeString())+' · '+age:age)+
+  setHTML($('vision-metrics'), kv('Observed',v?.captured_at?esc(new Date(v.captured_at*1000).toLocaleTimeString())+' · '+age:age)+
     kv('Face in caption frame',faceSummary(v?.preview_face))+
     kv('Face tracking',esc(v?.camera?.face?.source==='e4b'?'E4B · same scene update':v?.camera?.face?.source==='haar'?'Haar · CPU':'YuNet · CPU')+' · '+faceSummary(v?.camera?.face))+
     kv('Compared with',v?.previous_captured_at?esc(new Date(v.previous_captured_at*1000).toLocaleTimeString()):'First observation')+
@@ -957,7 +957,7 @@ function renderVisionInspector(){
     kv('Face detection',v?.camera?.face?.tracking_ms!==undefined?v.camera.face.tracking_ms+' ms · CPU':'—')+
     kv('Inference',v?.inference_ms!==undefined?v.inference_ms+' ms':'—')+
     kv('Frame selection',v?.selected_age_ms!==undefined?v.selected_age_ms+' ms old · '+v.candidates+' candidates':'—')+
-    kv('Focus score',v?.sharpness!==undefined?v.sharpness+' · scoring '+v.scoring_ms+' ms':'—');
+    kv('Focus score',v?.sharpness!==undefined?v.sharpness+' · scoring '+v.scoring_ms+' ms':'—'));
 }
 async function openSlot(id, refresh=false){
   const token=++drawerRequest;
@@ -1111,9 +1111,7 @@ function renderHomeTasks(){
   if(key===homeTasksRenderKey) return;
   homeTasksRenderKey=key;
   if(!list.length){
-    if(host.innerHTML !== '<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>') {
-      host.innerHTML = '<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>';
-    }
+    setHTML(host, '<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>');
     return;
   }
   host.innerHTML='';
@@ -1250,18 +1248,18 @@ function renderInference(){
   $('command-status').textContent=commands?(commands.active?'1 / 1 active':'0 / 1 active'):'Unavailable';
   const commandKey=JSON.stringify(commands);
   if(commandKey!==commandRenderKey){commandRenderKey=commandKey;
-  $('command-activity').innerHTML=commands?(commands.active?kv('Running',esc(commands.active.label)):'<p class="console-note">Ready for a command.</p>')+commands.recent.slice(0,5).map(r=>'<details><summary>'+esc(r.label)+' · '+(r.ok?'Completed':'Failed')+' · '+timeStr(r.started_at*1000)+'</summary><pre class="mem-row">'+esc(r.command.join(' ')+'\n'+commandResult(r))+'</pre></details>').join(''):'Facility command queue unavailable.';
+  setHTML($('command-activity'), commands?(commands.active?kv('Running',esc(commands.active.label)):'<p class="console-note">Ready for a command.</p>')+commands.recent.slice(0,5).map(r=>'<details><summary>'+esc(r.label)+' · '+(r.ok?'Completed':'Failed')+' · '+timeStr(r.started_at*1000)+'</summary><pre class="mem-row">'+esc(r.command.join(' ')+'\n'+commandResult(r))+'</pre></details>').join(''):'Facility command queue unavailable.');
   }
   const state=S.inference;
   if(!state){$('inference-summary').textContent='Capacity unavailable';return;}
   $('inference-summary').textContent=state.active.length+' / '+state.capacity+' channels active · '+state.waiting.length+' queued'+(state.interaction_hold?' · Background inference waiting for user response':'');
-  $('inference-slots').innerHTML=Array.from({length:state.capacity},(_,i)=>{
+  setHTML($('inference-slots'), Array.from({length:state.capacity},(_,i)=>{
     const r=state.active.find(r=>r.slot===i);
     return '<div class="card"><h3>Channel '+(i+1)+' <span class="chip '+(r?'amber':'teal')+'">'+(r?'Active':'Idle')+'</span></h3>'+kv('Capacity',i<state.reserved_interactive?'Reserved for interactive requests':'Shared')+(r?kv('Core',esc(coreOwner(r.owner)))+kv('Lane',esc(r.lane))+kv('Model',esc(r.model))+kv('Elapsed',Math.max(0,Date.now()/1000-r.started_at).toFixed(1)+' s'):'<p class="console-note">Ready for inference.</p>')+'</div>';
-  }).join('');
-  $('inference-waiting').innerHTML=state.waiting.map(r=>kv(esc(coreOwner(r.owner)),esc(r.lane)+' · '+(r.wait_reason==='user_response'?'Waiting for user response · ':'')+Math.max(0,Date.now()/1000-r.queued_at).toFixed(1)+' s')).join('')||'<p class="console-note">No requests waiting.</p>';
+  }).join(''));
+  setHTML($('inference-waiting'), state.waiting.map(r=>kv(esc(coreOwner(r.owner)),esc(r.lane)+' · '+(r.wait_reason==='user_response'?'Waiting for user response · ':'')+Math.max(0,Date.now()/1000-r.queued_at).toFixed(1)+' s')).join('')||'<p class="console-note">No requests waiting.</p>');
   const latest=S.routing?.latest;
-  $('routing-latest').innerHTML=latest?decisionResult(latest):'<p class="console-note">No decision yet.</p>';
+  setHTML($('routing-latest'), latest?decisionResult(latest):'<p class="console-note">No decision yet.</p>');
 }
 function routingDescription(o){
   try{const value=JSON.parse(o.description);return value.tool?value.tool+' · '+value.purpose:value.server?value.server+' · '+value.capabilities:o.description;}catch(e){return o.description;}
@@ -1291,7 +1289,7 @@ function renderAutonomySettings(){
   b.onclick=()=>perform(async()=>{const state=await apiPost('/api/control',{action:'autonomy',enabled:!S.controls.autonomy_enabled});applyState(state);paint();return S.controls.autonomy_enabled?'Autonomy enabled.':'Autonomy disabled.';},'autonomy-settings-feedback');
 }
 function renderRoutingStructure(structure){
-  if(!structure){$('routing-structure').innerHTML='<p class="console-note">The active list uses one flat choice.</p>';return;}
+  if(!structure){setHTML($('routing-structure'), '<p class="console-note">The active list uses one flat choice.</p>');return;}
   const structureKey=JSON.stringify(structure),settings=S.decisions;
   const active=settings?.lists?.find(l=>l.id===settings.active_list);
   const latest=active&&S.routing?.latest?.list_id===active.id&&S.routing.latest.revision===active.revision?S.routing.latest:null;
@@ -1304,7 +1302,7 @@ function renderRoutingStructure(structure){
     return '<details '+(!depth?'open':'')+' style="margin:10px 0"><summary>'+esc(node.name)+' · '+node.options.length+' choices</summary>'+node.options.map((o,i)=>'<div style="margin:8px 0 8px 12px"><span class="console-note">'+esc(String.fromCharCode(65+i)+' · '+routingDescription(o))+'</span>'+(o.next?branch(o.next,depth+1):o.action==='tool'?'<div class="console-note">Fixed: '+esc(o.tool)+' '+esc(JSON.stringify(o.arguments))+'</div>':'')+'</div>').join('')+'</details>';
   }
   const source=GladosRouting.mermaid(structure,latest);
-  $('routing-structure').innerHTML='<div class="console-actions"><button type="button" class="btn-secondary" id="routing-expand">Expand all</button><button type="button" class="btn-secondary" id="routing-collapse">Overview</button><button type="button" class="btn-secondary" id="routing-follow">Show latest route</button><a class="btn-secondary" download="glados-routing.mmd" href="data:text/plain;charset=utf-8,'+encodeURIComponent(source)+'">Download Mermaid</a></div><p class="console-note">'+(latest?(latest.dry_run?'Latest preview':'Latest request')+' · '+esc(latest.category||latest.action)+' · '+(latest.accepted?'accepted':'fallback'): 'No route selected yet.')+'</p><div id="routing-map" class="routing-map">'+GladosRouting.svg(structure,routingExpanded,latest)+'</div><details><summary>All choices and descriptions</summary>'+branch(structure.root,0)+'</details><details style="margin-top:12px"><summary>Mermaid source</summary><textarea class="console-field mono" rows="10" readonly aria-label="Mermaid routing diagram source">'+esc(source)+'</textarea></details>';
+  setHTML($('routing-structure'), '<div class="console-actions"><button type="button" class="btn-secondary" id="routing-expand">Expand all</button><button type="button" class="btn-secondary" id="routing-collapse">Overview</button><button type="button" class="btn-secondary" id="routing-follow">Show latest route</button><a class="btn-secondary" download="glados-routing.mmd" href="data:text/plain;charset=utf-8,'+encodeURIComponent(source)+'">Download Mermaid</a></div><p class="console-note">'+(latest?(latest.dry_run?'Latest preview':'Latest request')+' · '+esc(latest.category||latest.action)+' · '+(latest.accepted?'accepted':'fallback'): 'No route selected yet.')+'</p><div id="routing-map" class="routing-map">'+GladosRouting.svg(structure,routingExpanded,latest)+'</div><details><summary>All choices and descriptions</summary>'+branch(structure.root,0)+'</details><details style="margin-top:12px"><summary>Mermaid source</summary><textarea class="console-field mono" rows="10" readonly aria-label="Mermaid routing diagram source">'+esc(source)+'</textarea></details>');
   $('routing-expand').onclick=()=>{routingExpanded=new Set(nodes.keys());renderRoutingStructure(structure);};
   $('routing-collapse').onclick=()=>{routingExpanded=new Set([structure.root]);renderRoutingStructure(structure);};
   $('routing-follow').onclick=()=>{routingExpanded=new Set([structure.root,...(latest?.stages||[]).map(s=>s.list_id)]);renderRoutingStructure(structure);};
@@ -1328,10 +1326,10 @@ function renderDecisionSettings(){
   const key=JSON.stringify(settings)+JSON.stringify(S.tools)+JSON.stringify(S.routing);
   if(key===decisionRenderKey)return;decisionRenderKey=key;
   renderRoutingStructure(S.routing?.structure);
-  $('decision-activation').innerHTML='<label>Active list<select id="decision-active" class="console-field">'+settings.lists.map(l=>'<option value="'+esc(l.id)+'" '+(settings.active_list===l.id?'selected':'')+' '+(!l.enabled?'disabled':'')+'>'+esc(l.name)+'</option>').join('')+'</select></label><p class="console-note">'+(settings.enabled?'Routing is automatic. Private drafts use spare capacity and are released only after routing and Emotion Core approve the reply.':'This model handles routing in its replies.')+'</p>';
+  setHTML($('decision-activation'), '<label>Active list<select id="decision-active" class="console-field">'+settings.lists.map(l=>'<option value="'+esc(l.id)+'" '+(settings.active_list===l.id?'selected':'')+' '+(!l.enabled?'disabled':'')+'>'+esc(l.name)+'</option>').join('')+'</select></label><p class="console-note">'+(settings.enabled?'Routing is automatic. Private drafts use spare capacity and are released only after routing and Emotion Core approve the reply.':'This model handles routing in its replies.')+'</p>');
   $('decision-active').onchange=()=>perform(async()=>{S.decisions=await apiPost('/api/decisions',{action:'activate',revision:settings.revision,id:$('decision-active').value});renderDecisionSettings();return 'Active routing list saved.';},'settings-feedback');
   $('decision-new').onclick=()=>editDecision();
-  $('decision-lists').innerHTML=settings.lists.map(l=>'<div class="card"><h3>'+esc(l.name)+' <span class="chip">'+(l.enabled?'Enabled':'Disabled')+'</span></h3><p class="console-note">'+l.options.filter(o=>o.enabled).length+' saved choices · '+(l.strategy==='flat'?'single step':'capability → action')+' · threshold '+Math.round(l.threshold*100)+'% · margin '+Math.round(l.margin*100)+'%</p><p class="console-note">'+esc(l.instructions)+'</p><div class="console-actions"><button class="btn-secondary" data-decision-edit="'+esc(l.id)+'">Edit</button><button class="btn-secondary" data-decision-test="'+esc(l.id)+'">Test without executing</button><button class="btn-secondary" data-decision-delete="'+esc(l.id)+'">Delete</button></div></div>').join('')||'<p>No decision lists. Create one to get started.</p>';
+  setHTML($('decision-lists'), settings.lists.map(l=>'<div class="card"><h3>'+esc(l.name)+' <span class="chip">'+(l.enabled?'Enabled':'Disabled')+'</span></h3><p class="console-note">'+l.options.filter(o=>o.enabled).length+' saved choices · '+(l.strategy==='flat'?'single step':'capability → action')+' · threshold '+Math.round(l.threshold*100)+'% · margin '+Math.round(l.margin*100)+'%</p><p class="console-note">'+esc(l.instructions)+'</p><div class="console-actions"><button class="btn-secondary" data-decision-edit="'+esc(l.id)+'">Edit</button><button class="btn-secondary" data-decision-test="'+esc(l.id)+'">Test without executing</button><button class="btn-secondary" data-decision-delete="'+esc(l.id)+'">Delete</button></div></div>').join('')||'<p>No decision lists. Create one to get started.</p>');
   $$('[data-decision-edit]').forEach(b=>b.onclick=()=>editDecision(settings.lists.find(l=>l.id===b.dataset.decisionEdit)));
   $$('[data-decision-test]').forEach(b=>b.onclick=()=>testDecision(settings.lists.find(l=>l.id===b.dataset.decisionTest)));
   $$('[data-decision-delete]').forEach(b=>b.onclick=()=>{

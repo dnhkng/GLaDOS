@@ -152,7 +152,7 @@ class Element {
     EventSource, setInterval() {}, clearInterval() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-dom.js", "glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
@@ -274,6 +274,15 @@ class Element {
   assert.match(document.title,/^Cores .*Aperture Science$/);
   vm.runInContext("go('home')",context);
   assert.equal(JSON.stringify(context.GladosFavicon.mode({connection:'disconnected'}).rgb),'[220,50,40]','Tab icon shows a lost engine');
+  {
+    // Browsers normalise innerHTML; unchanged sources must not be rewritten (it resets scroll and flickers).
+    let writes=0,dom='';
+    const box={get innerHTML(){return dom;},set innerHTML(v){writes++;dom=v.replace('&rarr;','\u2192');}};
+    context.GladosDom.setHTML(box,'a &rarr; b');context.GladosDom.setHTML(box,'a &rarr; b');
+    assert.equal(writes,1,'Unchanged live content is left alone');
+    dom='edited elsewhere';context.GladosDom.setHTML(box,'a &rarr; b');
+    assert.equal(writes,2,'Content changed by other code is restored');
+  }
   assert.ok(stream, "Client should establish the live stream, not fall back to demo data");
   stream.onopen();
   assert.equal(node("connection-status").textContent, "LIVE TELEMETRY");

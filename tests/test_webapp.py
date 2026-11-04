@@ -226,6 +226,7 @@ def test_webapp_server_serves_snapshot_and_stream() -> None:
             ("glados-overview.js", "application/javascript"),
             ("glados-vision-themes.js", "application/javascript"),
             ("glados-favicon.js", "application/javascript"),
+            ("glados-dom.js", "application/javascript"),
             ("glados-themes.css", "text/css"),
             ("glados-console.css", "text/css"),
             ("potato-skin.svg", "image/svg+xml"),

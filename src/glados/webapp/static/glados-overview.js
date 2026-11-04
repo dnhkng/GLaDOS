@@ -1,6 +1,7 @@
 /* Read-only overview over the console's existing state and observability stream. */
 (function (root) {
   'use strict';
+  const setHTML = (host, html) => root.GladosDom ? root.GladosDom.setHTML(host, html) : host && (host.innerHTML = html);
   const age = (seconds) => seconds < 60 ? Math.floor(seconds)+'s' : seconds < 3600 ? Math.floor(seconds/60)+'m' : Math.floor(seconds/3600)+'h';
   function mount(doc, helpers) {
     const {escape:esc, coreOwner, cores, identity, activity} = helpers;
@@ -13,10 +14,10 @@
       const end = points.at(-1)?.t ?? latest.t;
       const duration = Math.max(1,end-latest.t);
       summary.textContent = latest.finished ? (points.length?((end-latest.t)/1000).toFixed(2)+' s · ':'')+latest.finished : state.connection==='disconnected'?'Telemetry disconnected':'Turn in progress';
-      host.innerHTML = points.map(p => {
+      setHTML(host, points.map(p => {
         const offset = Math.max(0,p.t-latest.t);
         return '<div class="timing-label">'+esc(p.label)+'</div><div class="timing-track"><span class="timing-point '+esc(p.kind)+'" style="left:'+Math.min(99,offset/duration*100)+'%"></span></div><div class="timing-value">'+Math.round(offset)+' ms</div>';
-      }).join('') || '<p class="console-note">Input accepted; waiting for a recorded response event.</p>';
+      }).join('') || '<p class="console-note">Input accepted; waiting for a recorded response event.</p>');
     }
     function event(ev) {
       const meta = ev.meta || {};
@@ -60,7 +61,7 @@
         const description=o=>o?helpers.describe(o):'';
         return '<div class="decision-step"><div class="slice">'+esc(s.name || 'Decision')+'</div><strong>'+esc(s.fallback_selected || !s.accepted?'Fallback':description(chosen) || 'Selected')+'</strong><p class="console-note">'+(winner?(winner.probability*100).toFixed(1)+'% preference · lead '+((s.margin || 0)*100).toFixed(1)+'%':'')+'</p><p class="console-note">'+scores.slice(1,4).map(o=>esc(description(o))+' '+(o.probability*100).toFixed(1)+'%').join(' · ')+'</p></div>';
       }).join('')+'<div class="decision-step"><div class="slice">'+(decision.dry_run?'Preview only':'Action')+'</div><strong>'+esc(decision.tool || decision.action)+'</strong><p class="console-note">'+esc(decision.reason || '')+'</p></div>';
-      if (host.innerHTML !== html) host.innerHTML = html;
+      setHTML(host, html);
     }
     function renderCapacity() {
       const inference=state.inference;
@@ -76,14 +77,14 @@
           const tile = host.children[i];
           if (tile.className !== 'capacity-tile ' + busyClass) tile.className = 'capacity-tile ' + busyClass;
           const tileHtml = '<div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p>';
-          if (tile.innerHTML !== tileHtml) tile.innerHTML = tileHtml;
+          setHTML(tile, tileHtml);
         }
       } else {
         const slotsHtml=Array.from({length:inference.capacity},(_,i)=>{
           const request=inference.active.find(r=>r.slot===i);
           return '<div class="capacity-tile '+(request?'busy':'')+'"><div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p></div>';
         }).join('');
-        if (host.innerHTML !== slotsHtml) host.innerHTML = slotsHtml;
+        setHTML(host, slotsHtml);
       }
       const status=inference.interaction_hold?'User interaction active · new background inference paused. Running requests may finish.':inference.reserved_interactive+' reserved for interaction · '+inference.active.length+' / '+inference.capacity+' active';
       const holdText=(state.connection==='disconnected'?'Disconnected · last known state: ':'')+status;
@@ -100,14 +101,14 @@
           const status = activity(core);
           const rowHtml = '<td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td>';
           const row = host.children[i];
-          if (row.innerHTML !== rowHtml) row.innerHTML = rowHtml;
+          setHTML(row, rowHtml);
         }
       } else {
         const coresHtml=coreList.map(core=>{
           const status=activity(core);
           return '<tr><td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td></tr>';
         }).join('') || '<tr><td colspan="3">No core state available.</td></tr>';
-        if (host.innerHTML !== coresHtml) host.innerHTML = coresHtml;
+        setHTML(host, coresHtml);
       }
       const slots=[...(state.slots || [])].filter(s=>s.summary).sort((a,b)=>Number(b.update_priority==='important')-Number(a.update_priority==='important') || b.updated_at-a.updated_at).slice(0,3);
       const thoughtsHost = node('presence-thoughts');
@@ -118,11 +119,11 @@
           const child = thoughtsHost.children[i];
           const importantClass = s.update_priority === 'important' ? 'thought important' : 'thought';
           if (child.className !== importantClass) child.className = importantClass;
-          if (child.innerHTML !== thoughtHtml) child.innerHTML = thoughtHtml;
+          setHTML(child, thoughtHtml);
         }
       } else {
         const thoughtsHtml=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
-        if (thoughtsHost.innerHTML !== thoughtsHtml) thoughtsHost.innerHTML = thoughtsHtml;
+        setHTML(thoughtsHost, thoughtsHtml);
       }
     }
     function update(next) {
