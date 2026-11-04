@@ -28,7 +28,7 @@ class LLMConfig:
     url: str
     api_key: str | None = None
     model: str = "gpt-4o-mini"
-    timeout: float = 30.0
+    timeout: float = 60.0
     request_options: dict[str, Any] = field(default_factory=dict)
 
     scheduler: InferenceScheduler | None = None
@@ -73,6 +73,20 @@ def llm_call(
 
     if json_response:
         data["response_format"] = {"type": "json_object"}
+
+    url_lower = str(config.url).lower()
+    if "/api/chat" in url_lower or "/api/generate" in url_lower:
+        ollama_param_keys = {
+            "num_ctx", "num_predict", "num_thread", "temperature", "top_k", "top_p",
+            "min_p", "repeat_penalty", "repeat_last_n", "seed", "tfs_z", "mirostat",
+            "mirostat_tau", "mirostat_eta", "stop"
+        }
+        opts = dict(data.get("options") or {})
+        for key in ollama_param_keys:
+            if key in data:
+                opts[key] = data.pop(key)
+        if opts:
+            data["options"] = opts
 
     try:
         guard = (

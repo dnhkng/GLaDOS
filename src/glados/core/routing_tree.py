@@ -16,6 +16,7 @@ CATEGORIES = {
         "convert time only for an explicitly named foreign timezone (Tokyo, New York, UTC)",
     ),
     "tasks": ("Tasks", "Retrieve a saved task report or create/update a tracked task or cancel queued/running research"),
+    "nexus": ("Nexus", "Turn the Nexus Core on or off, or consult an external advisor AI for slow, hard or out-of-reach questions"),
     "other": ("Other tools", "Use another local tool, such as a requested slow clap"),
 }
 LOCAL_CATEGORIES = {
@@ -28,6 +29,8 @@ LOCAL_CATEGORIES = {
     "run_safe_command": "system",
     "get_report": "tasks",
     "manage_slot": "tasks",
+    "nexus_control": "nexus",
+    "nexus_consult": "nexus",
 }
 
 

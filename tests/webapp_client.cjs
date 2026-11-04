@@ -152,7 +152,7 @@ class Element {
     EventSource, setInterval() {}, clearInterval() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
@@ -273,6 +273,7 @@ class Element {
   vm.runInContext("go('slots')",context);
   assert.match(document.title,/^Cores .*Aperture Science$/);
   vm.runInContext("go('home')",context);
+  assert.equal(JSON.stringify(context.GladosFavicon.mode({connection:'disconnected'}).rgb),'[220,50,40]','Tab icon shows a lost engine');
   assert.ok(stream, "Client should establish the live stream, not fall back to demo data");
   stream.onopen();
   assert.equal(node("connection-status").textContent, "LIVE TELEMETRY");

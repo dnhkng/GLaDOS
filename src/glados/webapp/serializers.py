@@ -193,12 +193,14 @@ def build_state(engine: Any) -> dict[str, Any]:
         "vision_mind": engine.vision_agent.snapshot() if getattr(engine, "vision_agent", None) else None,
         "search_settings": (engine.search_agent.preferences.snapshot()
                             if getattr(engine, "search_agent", None) else None),
+        "nexus": engine.nexus_agent.status() if getattr(engine, "nexus_agent", None) else None,
         "vision": engine.vision_state.snapshot() if getattr(engine, "vision_state", None) else None,
         "audio": build_audio_state(engine),
         "emotion": _emotion_state(engine),
         "mcp": _mcp_summary(engine),
         "speaking": bool(engine.currently_speaking_event.is_set()),
         "performance": engine.speech_animation.snapshot() if getattr(engine, "speech_animation", None) else None,
+        "hardware": getattr(engine, "hardware_status", None),
     }
 
 
@@ -218,6 +220,7 @@ def build_snapshot(engine: Any) -> dict[str, Any]:
         "vision_mind": engine.vision_agent.snapshot() if getattr(engine, "vision_agent", None) else None,
         "search_settings": (engine.search_agent.preferences.snapshot()
                             if getattr(engine, "search_agent", None) else None),
+        "nexus": engine.nexus_agent.status() if getattr(engine, "nexus_agent", None) else None,
         "audio": build_audio_state(engine),
         "emotion": _emotion_state(engine),
         "mcp": _mcp_summary(engine),
@@ -227,6 +230,7 @@ def build_snapshot(engine: Any) -> dict[str, Any]:
         },
         "speaking": bool(engine.currently_speaking_event.is_set()),
         "performance": engine.speech_animation.snapshot() if getattr(engine, "speech_animation", None) else None,
+        "hardware": getattr(engine, "hardware_status", None),
         "minds": [_safe(serialize_mind, m) for m in engine.mind_registry.snapshot()],
         "slots": [_safe(serialize_slot, s) for s in getattr(engine, "autonomy_slots", None).list_slots()] if getattr(engine, "autonomy_slots", None) else [],
         "agents": (_safe_agents(engine) if getattr(engine, "subagent_manager", None) else []),

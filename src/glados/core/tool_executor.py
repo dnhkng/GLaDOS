@@ -204,15 +204,7 @@ class ToolExecutor:
                                       "content": json.dumps({"error": str(exc)})}, lane=call.lane)
             return
         if not background_search:
-            while not handle.future.done() and not call.cancelled():
-                self.shutdown_event.wait(.05)
-            if not call.cancelled():
-                completed = handle.future.result()
-                slot = tasks._slot_store.get_slot(slot_id)
-                tasks._slot_store.mark_handled(slot_id, slot.revision)
-                self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
-                    "content": completed.report or json.dumps({"status": completed.status,
-                                                            "summary": completed.summary})}, lane=call.lane)
+            self._await_task_result(call, tasks, handle)
             return
         self._enqueue(call.llm_queue, {
             "role": "tool", "tool_call_id": call.tool_call_id,
@@ -225,6 +217,65 @@ class ToolExecutor:
             self._observability_bus.emit("tool", "background", "Web search started",
                                          meta={"slot_id": slot_id, "query": query})
         return
+
+    def _await_task_result(self, call: ToolInvocation, tasks, handle) -> None:
+        """Without Autonomy to deliver it later, the caller waits for the tracked task's result."""
+        while not handle.future.done() and not call.cancelled():
+            self.shutdown_event.wait(.05)
+        if not call.cancelled():
+            completed = handle.future.result()
+            slot = tasks._slot_store.get_slot(handle.id)
+            tasks._slot_store.mark_handled(handle.id, slot.revision)
+            self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": completed.report or json.dumps({"status": completed.status,
+                                                        "summary": completed.summary})}, lane=call.lane)
+
+    def _execute_nexus(self, call: ToolInvocation, tasks) -> None:
+        core = self.tool_config.get("nexus_agent")
+        if core is None or not core.consult_active:
+            self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                "content": json.dumps({"error": "Nexus consultation is off"})}, lane=call.lane)
+            return
+        background = self._autonomy_enabled() and not call.autonomy_mode
+        cancel_event = threading.Event()
+        slot_id = "task_nexus_" + uuid.uuid4().hex[:10]
+        question = str(call.args.get("question") or "Consultation")[:160]
+
+        def consult(parameters: dict = call.args, task_id: str = slot_id) -> TaskResult:
+            report = core.consult(parameters, task_id=task_id,
+                                  cancelled=lambda: cancel_event.is_set() or self.shutdown_event.is_set())
+            status = json.loads(report)["status"]
+            self._emit_tool_event("tool_failure" if status == "error" else "tool_success", "nexus_consult")
+            if self._observability_bus:
+                self._observability_bus.emit("tool", "error" if status == "error" else "finish", "nexus_consult",
+                    level="error" if status == "error" else "info", meta={"slot_id": task_id})
+            # A cancelled consultation has nothing left to deliver.
+            return TaskResult(status, f"Nexus consultation {status}: {question}", notify_user=status != "cancelled",
+                              report=report, importance=0.8,
+                              update_priority="important" if status != "cancelled" else "regular")
+
+        try:
+            handle = tasks.submit(slot_id, "Nexus: " + question, consult, group="nexus", cancelled=cancel_event,
+                                  progress=lambda: "Waiting for the external advisor")
+        except ValueError as exc:
+            self._enqueue(call.llm_queue, {"role": "tool", "tool_call_id": call.tool_call_id,
+                                      "content": json.dumps({"error": str(exc)})}, lane=call.lane)
+            return
+        if not background:
+            self._await_task_result(call, tasks, handle)
+            return
+        self._enqueue(call.llm_queue, {
+            "role": "tool", "tool_call_id": call.tool_call_id,
+            "content": json.dumps({"status": handle.status if isinstance(handle.status, str) else "queued",
+                "task_id": slot_id, "question": question,
+                "instruction": "Give one short acknowledgement, in your own voice, that you are consulting the "
+                "Nexus advisor about this question. Do not guess its answer. Keep talking normally about "
+                "anything else. The advisor's answer will be handed to you when ready; interpret it then and "
+                "answer this question."}),
+        }, lane=call.lane)
+        if self._observability_bus:
+            self._observability_bus.emit("tool", "background", "Nexus consultation started",
+                                         meta={"slot_id": slot_id, "question": question})
 
     def _execute_mcp(self, call: ToolInvocation) -> None:
         if not self.mcp_manager:
@@ -381,6 +432,8 @@ class ToolExecutor:
             return
         if call.tool.startswith("mcp."):
             self._execute_mcp(call)
+        elif call.tool == "nexus_consult" and self.tool_config.get("task_manager"):
+            self._execute_nexus(call, self.tool_config["task_manager"])
         elif call.tool in all_tools:
             self._execute_native(call)
         else:

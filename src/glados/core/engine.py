@@ -34,6 +34,7 @@ from ..autonomy import (
 )
 from ..autonomy.agents import CompactionAgent, EmotionAgent, HackerNewsSubagent, ObserverAgent, WeatherSubagent
 from ..autonomy.agents.health_agent import HealthAgent, HealthConfig
+from ..autonomy.agents.nexus_agent import NexusAgent, NexusConfig
 from ..autonomy.agents.search_agent import SearchAgent, SearchConfig
 from ..autonomy.emotion_state import EmotionEvent
 from ..autonomy.events import TimeTickEvent
@@ -52,6 +53,7 @@ from ..webapp import WebappConfig
 from .audio_data import AudioMessage
 from .audio_state import AudioState
 from .context import ContextBuilder
+from .hardware import HardwareAdaptationController, detect_hardware, get_adaptive_llm_settings, probe_model_spec
 from .conversation_store import ConversationStore
 from .decision_lists import DecisionListStore
 from .inference import InferenceConfig, InferenceScheduler
@@ -144,7 +146,11 @@ class GladosConfig(BaseModel):
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
+    nexus: NexusConfig = Field(default_factory=NexusConfig)
     llm_request_options: dict[str, Any] | None = None
+    llm_timeout: float | None = None
+    adaptive_hardware: bool = True
+    hardware_profile: dict[str, Any] | None = None
     tui_theme: str | None = None
     personality_preprompt: list[PersonalityPrompt]
     slow_clap_audio_path: str = "data/slow-clap.mp3"
@@ -197,6 +203,43 @@ class GladosConfig(BaseModel):
                 "host": host or base.host,
                 "port": env_port or base.port,
             }
+        )
+        return self
+
+    @model_validator(mode="after")
+    def _apply_hardware_profile(self) -> "GladosConfig":
+        """Adapt LLM parameters (context size, tokens, timeouts, workers) dynamically to host hardware."""
+        if not self.adaptive_hardware:
+            return self
+        is_local = any(h in str(self.completion_url).lower() for h in ("localhost", "127.0.0.1", "0.0.0.0", ":11434"))
+        profile = detect_hardware()
+        spec = probe_model_spec(str(self.completion_url), self.llm_model) if is_local else None
+        adaptive = get_adaptive_llm_settings(profile, spec=spec, is_local=is_local)
+        self.hardware_profile = adaptive
+        if self.llm_timeout is None:
+            self.llm_timeout = adaptive["llm_timeout"]
+        if is_local:
+            req_opts = dict(self.llm_request_options or {})
+            has_ctx = "num_ctx" in req_opts or (
+                "options" in req_opts and isinstance(req_opts["options"], dict) and "num_ctx" in req_opts["options"]
+            )
+            opts = dict(req_opts.get("options") or {})
+            if not has_ctx:
+                opts["num_ctx"] = adaptive["num_ctx"]
+            if "num_predict" not in opts and "num_predict" not in req_opts:
+                opts["num_predict"] = adaptive["num_predict"]
+            if "num_thread" not in opts and "num_thread" not in req_opts:
+                opts["num_thread"] = adaptive["num_thread"]
+            req_opts["options"] = opts
+            self.llm_request_options = req_opts
+            if self.autonomy and self.autonomy.autonomy_parallel_calls == 2:
+                self.autonomy.autonomy_parallel_calls = adaptive["autonomy_parallel_calls"]
+        logger.info(
+            "Adaptive hardware: {} -> Context: {} tok, Timeout: {}s, Autonomy workers: {}",
+            adaptive["hardware_summary"],
+            adaptive["num_ctx"],
+            self.llm_timeout,
+            self.autonomy.autonomy_parallel_calls if self.autonomy else 1,
         )
         return self
 
@@ -316,10 +359,15 @@ class Glados:
         routing_config: RoutingConfig | None = None,
         health_config: HealthConfig | None = None,
         search_config: SearchConfig | None = None,
+        nexus_config: NexusConfig | None = None,
+        llm_timeout: float = 60.0,
+        hardware_status: dict[str, Any] | None = None,
     ) -> None:
         """Wire injected models/backends, then start components in dependency order."""
         self._asr_model = asr_model
         self.started_at = time.time()
+        self._hardware_status = hardware_status
+        self.hardware_controller = HardwareAdaptationController()
         self.quiet_event = threading.Event()
         self._quiet_lock = threading.RLock()
         self._quiet_saved_pauses: dict[str, bool] = {}
@@ -336,6 +384,7 @@ class Glados:
         self.completion_url = completion_url
         self.llm_model = llm_model
         self.api_key = api_key
+        self.llm_timeout = llm_timeout
         self.llm_request_options = dict(llm_request_options or {})
         self.interruptible = interruptible
         self.wake_word = wake_word
@@ -348,6 +397,9 @@ class Glados:
         self.health_agent: HealthAgent | None = None
         self.search_config = search_config or SearchConfig()
         self.search_agent: SearchAgent | None = None
+        self.nexus_config = nexus_config or NexusConfig()
+        self.nexus_agent: NexusAgent | None = None
+        self._llm_headers = llm_headers
         self._init_context_and_state(personality_preprompt, vision_config, asr_muted, tts_enabled)
 
         self._init_background_cores()
@@ -444,8 +496,9 @@ class Glados:
         self.autonomy_slots = TaskSlotStore(observability_bus=self.observability_bus)
         self.context_builder.register("slots", lambda: self._format_slots(), priority=8, volatile=True)
         self.autonomy_event_bus = EventBus()
-        self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus)
-        if self.search_config.enabled or self.health_config.enabled or self.vision_state is not None or self.autonomy_config.emotion.enabled or self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled or (
+        self.autonomy_tasks = TaskManager(self.autonomy_slots, self.autonomy_event_bus,
+                                          nexus_workers=self.nexus_config.max_parallel)
+        if self.nexus_config.enabled or self.search_config.enabled or self.health_config.enabled or self.vision_state is not None or self.autonomy_config.emotion.enabled or self.autonomy_config.tokens.enabled or self.autonomy_config.tokens.recall.enabled or (
             self.autonomy_config.enabled and self.autonomy_config.jobs.enabled
         ):
             self.subagent_manager = MindScheduler(
@@ -560,6 +613,7 @@ class Glados:
             autonomy_generation=lambda: self._autonomy_generation,
             on_autonomy_done=self._on_autonomy_done,
             autonomy_request_current=self._autonomy_request_current,
+            nexus=lambda: self.nexus_agent,
             quiet_mode=self.quiet_event.is_set,
             set_quiet_mode=self.set_quiet_mode,
             quiet_generation=lambda: self._quiet_generation,
@@ -573,6 +627,8 @@ class Glados:
             inference_scheduler=self.inference_scheduler,
             native_audio=self.native_audio,
             request_options=llm_request_options,
+            llm_timeout=self.llm_timeout,
+            hardware_controller=self.hardware_controller,
         )
         self.decision_lists = DecisionListStore(
             resource_path("data/decision_lists.yaml"), lambda: self.llm_processor._build_tools(False),
@@ -627,6 +683,8 @@ class Glados:
                     inflight_counter=self._autonomy_inflight,
                     inference_scheduler=self.inference_scheduler,
                     request_options=llm_request_options,
+                    llm_timeout=self.llm_timeout,
+                    hardware_controller=self.hardware_controller,
                 )
             )
 
@@ -655,6 +713,7 @@ class Glados:
                 "slot_store": self.autonomy_slots,
                 "task_manager": self.autonomy_tasks,
                 "search_agent": self.search_agent,
+                "nexus_agent": self.nexus_agent,
                 "memory_agent": self.compaction_agent,
             },
             tool_timeout=self.tool_timeout,
@@ -725,6 +784,7 @@ class Glados:
                 observability_bus=self.observability_bus,
                 inflight_counter=self._autonomy_inflight,
                 pause_time=self.PAUSE_TIME,
+                central_queue=self.llm_queue_priority,
             )
             self.autonomy_ticker_thread = threading.Thread(
                 target=self._run_autonomy_ticker,
@@ -859,6 +919,7 @@ class Glados:
             url=str(self.completion_url),
             api_key=self.api_key,
             model=self.llm_model,
+            timeout=self.llm_timeout,
             request_options=self.llm_request_options,
             scheduler=self.inference_scheduler,
             shutdown_event=self.shutdown_event,
@@ -889,6 +950,26 @@ class Glados:
                 observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
             )
             self.subagent_manager.register(self.search_agent, OnDemand())
+
+        nexus = getattr(self, 'nexus_config', None)
+        if nexus and nexus.enabled:
+            local_headers = {"Content-Type": "application/json", **(getattr(self, "_llm_headers", None) or {})}
+            if self.api_key:
+                local_headers["Authorization"] = f"Bearer {self.api_key}"
+            self.nexus_agent = NexusAgent(
+                settings=nexus,
+                local_backend={"url": str(self.completion_url), "model": self.llm_model, "headers": local_headers,
+                               "request_options": dict(self.llm_request_options)},
+                set_backend=lambda backend: self.llm_processor.set_backend(backend),
+                idle=lambda: not self._autonomy_user_busy(),
+                settings_path=resource_path("data/nexus_settings.yaml"),
+                # Native audio needs the local multimodal endpoint, so Central cannot move to the API.
+                base_switching=self.native_audio is None,
+                slot_store=self.autonomy_slots, mind_registry=self.mind_registry,
+                observability_bus=self.observability_bus, shutdown_event=self.shutdown_event,
+            )
+            self.context_builder.register("nexus", self.nexus_agent.as_prompt, priority=7, volatile=True)
+            self.subagent_manager.register(self.nexus_agent, FixedInterval(30))
 
         # Vision stays on E4B even when conversation uses a remote API model.
         if self.vision_state is not None and self.vision_config is not None:
@@ -1108,6 +1189,9 @@ class Glados:
                 routing_config=config.routing,
                 health_config=config.health,
                 search_config=config.search,
+                nexus_config=config.nexus,
+                llm_timeout=config.llm_timeout or 60.0,
+                hardware_status=getattr(config, "hardware_profile", None),
             )
         except Exception:
             cls._close_audio_backend(audio_io)
@@ -1139,6 +1223,18 @@ class Glados:
             glados = Glados.from_yaml('config/default.yaml')
         """
         return cls.from_config(GladosConfig.from_yaml(path))
+
+    @property
+    def hardware_status(self) -> dict[str, Any]:
+        """Current hardware adaptation profile, settings and real-time latency feedback."""
+        res = dict(self._hardware_status or {})
+        if not res:
+            profile = detect_hardware()
+            res = get_adaptive_llm_settings(profile, is_local=True)
+            self._hardware_status = res
+        if getattr(self, "hardware_controller", None):
+            res["feedback"] = self.hardware_controller.snapshot()
+        return res
 
     def run(self) -> None:
         """
@@ -1967,9 +2063,9 @@ class Glados:
         """Format task slots for LLM context."""
         if not self.autonomy_slots:
             return None
-        # These cores already have dedicated context: observation, PAD and compacted history.
+        # These cores already have dedicated context: observation, PAD, compacted history and Nexus status.
         slots = [slot for slot in self.autonomy_slots.list_slots()
-                 if slot.slot_id not in {"vision", "emotion", "compaction", "health"} and not slot.handled]
+                 if slot.slot_id not in {"vision", "emotion", "compaction", "health", "nexus"} and not slot.handled]
         memory = self.autonomy_slots.get_slot("compaction")
         recall = memory.context if memory else None
         if not slots and not recall:

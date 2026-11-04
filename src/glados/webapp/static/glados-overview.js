@@ -48,34 +48,82 @@
     function renderRouting() {
       const decision = state.routing?.latest;
       const host=node('overview-route');
-      if (!decision) {host.textContent='No routing decision yet.'; return;}
+      if (!decision) {
+        if (host.textContent !== 'No routing decision yet.') host.textContent='No routing decision yet.';
+        return;
+      }
       const stages=decision.stages || [{name:'Decision',scores:decision.scores,accepted:decision.accepted}];
-      host.innerHTML=stages.map(s => {
+      const html=stages.map(s => {
         const scores=[...(s.scores || [])].sort((a,b)=>b.probability-a.probability);
         const winner=scores[0];
         const chosen=scores.find(o=>o.id===s.option_id) || winner;
         const description=o=>o?helpers.describe(o):'';
         return '<div class="decision-step"><div class="slice">'+esc(s.name || 'Decision')+'</div><strong>'+esc(s.fallback_selected || !s.accepted?'Fallback':description(chosen) || 'Selected')+'</strong><p class="console-note">'+(winner?(winner.probability*100).toFixed(1)+'% preference · lead '+((s.margin || 0)*100).toFixed(1)+'%':'')+'</p><p class="console-note">'+scores.slice(1,4).map(o=>esc(description(o))+' '+(o.probability*100).toFixed(1)+'%').join(' · ')+'</p></div>';
       }).join('')+'<div class="decision-step"><div class="slice">'+(decision.dry_run?'Preview only':'Action')+'</div><strong>'+esc(decision.tool || decision.action)+'</strong><p class="console-note">'+esc(decision.reason || '')+'</p></div>';
+      if (host.innerHTML !== html) host.innerHTML = html;
     }
     function renderCapacity() {
       const inference=state.inference;
-      if (!inference) {node('overview-slots').textContent='Capacity unavailable.'; node('overview-hold').textContent=''; node('overview-queue').textContent=''; return;}
-      node('overview-slots').innerHTML=Array.from({length:inference.capacity},(_,i)=>{
-        const request=inference.active.find(r=>r.slot===i);
-        return '<div class="capacity-tile '+(request?'busy':'')+'"><div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p></div>';
-      }).join('');
+      const host=node('overview-slots');
+      if (!inference) {
+        if (host.textContent !== 'Capacity unavailable.') host.textContent='Capacity unavailable.';
+        node('overview-hold').textContent=''; node('overview-queue').textContent=''; return;
+      }
+      if (host.children && host.children.length === inference.capacity) {
+        for (let i = 0; i < inference.capacity; i++) {
+          const request = inference.active.find(r => r.slot === i);
+          const busyClass = request ? 'busy' : '';
+          const tile = host.children[i];
+          if (tile.className !== 'capacity-tile ' + busyClass) tile.className = 'capacity-tile ' + busyClass;
+          const tileHtml = '<div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p>';
+          if (tile.innerHTML !== tileHtml) tile.innerHTML = tileHtml;
+        }
+      } else {
+        const slotsHtml=Array.from({length:inference.capacity},(_,i)=>{
+          const request=inference.active.find(r=>r.slot===i);
+          return '<div class="capacity-tile '+(request?'busy':'')+'"><div class="capacity-number">'+String(i+1).padStart(2,'0')+'</div><strong>'+esc(request?coreOwner(request.owner):'Idle')+'</strong><p class="console-note">'+(request?esc(request.lane)+' · '+Math.max(0,Date.now()/1000-request.started_at).toFixed(1)+' s':i<inference.reserved_interactive?'Interactive reservation':'Shared capacity')+'</p></div>';
+        }).join('');
+        if (host.innerHTML !== slotsHtml) host.innerHTML = slotsHtml;
+      }
       const status=inference.interaction_hold?'User interaction active · new background inference paused. Running requests may finish.':inference.reserved_interactive+' reserved for interaction · '+inference.active.length+' / '+inference.capacity+' active';
-      node('overview-hold').textContent=(state.connection==='disconnected'?'Disconnected · last known state: ':'')+status;
-      node('overview-queue').textContent=inference.waiting.length?'Waiting: '+inference.waiting.map(r=>coreOwner(r.owner)+' ('+(r.wait_reason==='user_response'?'user response':'capacity')+')').join(', '):'No requests waiting.';
+      const holdText=(state.connection==='disconnected'?'Disconnected · last known state: ':'')+status;
+      if (node('overview-hold').textContent !== holdText) node('overview-hold').textContent = holdText;
+      const queueText=inference.waiting.length?'Waiting: '+inference.waiting.map(r=>coreOwner(r.owner)+' ('+(r.wait_reason==='user_response'?'user response':'capacity')+')').join(', '):'No requests waiting.';
+      if (node('overview-queue').textContent !== queueText) node('overview-queue').textContent = queueText;
     }
     function renderCores() {
-      node('overview-cores').innerHTML=cores().map(core=>{
-        const status=activity(core);
-        return '<tr><td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td></tr>';
-      }).join('') || '<tr><td colspan="3">No core state available.</td></tr>';
+      const coreList = cores();
+      const host = node('overview-cores');
+      if (host.children && host.children.length === coreList.length && coreList.length > 0) {
+        for (let i = 0; i < coreList.length; i++) {
+          const core = coreList[i];
+          const status = activity(core);
+          const rowHtml = '<td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td>';
+          const row = host.children[i];
+          if (row.innerHTML !== rowHtml) row.innerHTML = rowHtml;
+        }
+      } else {
+        const coresHtml=coreList.map(core=>{
+          const status=activity(core);
+          return '<tr><td>'+esc(identity(core).title)+'</td><td>'+esc(status.label)+'</td><td>'+esc(core.summary || status.detail || 'No update yet.')+'</td></tr>';
+        }).join('') || '<tr><td colspan="3">No core state available.</td></tr>';
+        if (host.innerHTML !== coresHtml) host.innerHTML = coresHtml;
+      }
       const slots=[...(state.slots || [])].filter(s=>s.summary).sort((a,b)=>Number(b.update_priority==='important')-Number(a.update_priority==='important') || b.updated_at-a.updated_at).slice(0,3);
-      node('presence-thoughts').innerHTML=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
+      const thoughtsHost = node('presence-thoughts');
+      if (thoughtsHost.children && thoughtsHost.children.length === slots.length && slots.length > 0) {
+        for (let i = 0; i < slots.length; i++) {
+          const s = slots[i];
+          const thoughtHtml = '<span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small>';
+          const child = thoughtsHost.children[i];
+          const importantClass = s.update_priority === 'important' ? 'thought important' : 'thought';
+          if (child.className !== importantClass) child.className = importantClass;
+          if (child.innerHTML !== thoughtHtml) child.innerHTML = thoughtHtml;
+        }
+      } else {
+        const thoughtsHtml=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
+        if (thoughtsHost.innerHTML !== thoughtsHtml) thoughtsHost.innerHTML = thoughtsHtml;
+      }
     }
     function update(next) {
       state=next;

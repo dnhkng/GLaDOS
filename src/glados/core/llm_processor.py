@@ -107,8 +107,14 @@ class LanguageModelProcessor:
         on_autonomy_prompt: Callable[[dict, dict], bool] | None = None,
         autonomy_thinking: bool = False,
         autonomy_request_current: Callable[[dict], bool] = lambda meta: True,
+        nexus: Callable[[], Any] = lambda: None,
+        llm_timeout: float = 60.0,
+        hardware_controller: Any | None = None,
     ) -> None:
         self.llm_input_queue = llm_input_queue
+        self.llm_timeout = llm_timeout
+        self._nexus = nexus
+        self._hardware_controller = hardware_controller
         self._autonomy_enabled = autonomy_enabled
         self._autonomy_generation, self._on_autonomy_done = autonomy_generation, on_autonomy_done
         self._on_autonomy_prompt = on_autonomy_prompt
@@ -159,6 +165,27 @@ class LanguageModelProcessor:
             self.prompt_headers["Authorization"] = f"Bearer {api_key}"
         if extra_headers:
             self.prompt_headers.update(extra_headers)
+        self._local_backend = {"url": completion_url, "model": model_name, "headers": dict(self.prompt_headers),
+                               "request_options": dict(self._request_options)}
+        self._backend_lock = threading.Lock()
+        self._pending_backend: dict[str, Any] | None = None
+        self._remote_backend = False
+
+    def set_backend(self, backend: dict[str, Any] | None) -> None:
+        """Switch Central's model endpoint from the next request; None restores the configured base."""
+        with self._backend_lock:
+            self._pending_backend = backend or self._local_backend
+
+    def _apply_backend(self) -> None:
+        with self._backend_lock:
+            backend, self._pending_backend = self._pending_backend, None
+        if backend is None:
+            return
+        self.completion_url, self.model_name = backend["url"], backend["model"]
+        self.prompt_headers = dict(backend["headers"])
+        self._request_options = dict(backend["request_options"])
+        self._remote_backend = bool(backend.get("remote"))
+        self._ollama_mode = self._is_ollama_endpoint()
 
     def _is_ollama_endpoint(self) -> bool:
         try:
@@ -276,6 +303,11 @@ class LanguageModelProcessor:
             if line.get("done_marker"):  # Handle [DONE] marker
                 return None
             elif "choices" in line:  # OpenAI format
+                if not line["choices"]:
+                    # The final streamed chunk of a remote base reports token usage.
+                    if self._remote_backend and (nexus := self._nexus()):
+                        nexus.observe_usage(self.model_name, line.get("usage"))
+                    return None
                 delta = line.get("choices", [{}])[0].get("delta", {})
                 tool_calls = delta.get("tool_calls")
                 if tool_calls:
@@ -793,7 +825,7 @@ class LanguageModelProcessor:
         self, request_url: str, data: dict[str, Any], originals: list[dict[str, Any]], autonomy_mode: bool,
     ) -> requests.Response:
         for attempt in range(3):
-            response = requests.post(request_url, headers=self.prompt_headers, json=data, stream=True, timeout=30)
+            response = requests.post(request_url, headers=self.prompt_headers, json=data, stream=True, timeout=self.llm_timeout)
             if response.status_code != 400 or attempt == 2:
                 return response
             try:
@@ -848,6 +880,11 @@ class LanguageModelProcessor:
         tools = list(tool_definitions)
         if self.vision_state is None:
             tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
+        nexus = self._nexus()
+        hidden = {"nexus_control", "nexus_consult"} if nexus is None else (
+            set() if nexus.consult_active else {"nexus_consult"})
+        if hidden:
+            tools = [tool for tool in tools if tool.get("function", {}).get("name") not in hidden]
         if self.mcp_manager:
             try:
                 tools.extend(self.mcp_manager.get_tool_definitions())
@@ -871,6 +908,7 @@ class LanguageModelProcessor:
 
     def _accept_turn(self, turn: ProcessorTurn) -> bool:
         self._request_active.set()
+        self._apply_backend()
         turn.autonomy_mode = bool(turn.llm_input.get("autonomy", False))
         self._autonomy_response = bool(turn.llm_input.get("_autonomy_response"))
         if turn.autonomy_mode or self._autonomy_response:
@@ -1002,7 +1040,8 @@ class LanguageModelProcessor:
             decision = self.router.store.get(active=True)
             if decision:
                 if (self._inference_scheduler and self._inference_scheduler.config.slots > 1
-                        and not self._ollama_mode and not turn.llm_input.get("_native_audio")
+                        and not self._ollama_mode and not self._remote_backend
+                        and not turn.llm_input.get("_native_audio")
                         and (not self._before_reply or self.context_builder)):
                     draft_turn = ProcessorTurn(llm_input=turn.llm_input, llm_message=turn.llm_message,
                                                route={"action": "reply"})
@@ -1202,6 +1241,22 @@ class LanguageModelProcessor:
             "stream": True,
             # Add other parameters like temperature, max_tokens if needed from config
         }
+        if self._ollama_mode:
+            ollama_param_keys = {
+                "num_ctx", "num_predict", "num_thread", "temperature", "top_k", "top_p",
+                "min_p", "repeat_penalty", "repeat_last_n", "seed", "tfs_z", "mirostat",
+                "mirostat_tau", "mirostat_eta", "stop"
+            }
+            opts = dict(turn.data.get("options") or {})
+            for key in ollama_param_keys:
+                if key in turn.data:
+                    opts[key] = turn.data.pop(key)
+            if opts:
+                if self._hardware_controller:
+                    mult = self._hardware_controller.adaptive_context_multiplier()
+                    if mult < 1.0 and "num_ctx" in opts:
+                        opts["num_ctx"] = max(2048, int(opts["num_ctx"] * mult))
+                turn.data["options"] = opts
         if turn.autonomy_mode:
             limit = 512 if self._autonomy_thinking else 256
             turn.data["max_tokens"] = limit
@@ -1259,12 +1314,18 @@ class LanguageModelProcessor:
                     if chunk:
                         if first_token:
                             first_token = False
+                            ttft = time.perf_counter() - stream_started
                             if self._observability_bus:
                                 self._observability_bus.emit("llm", "first_token", "First response token",
                                     level="debug", meta={"generation": self._reply_generation,
                                         "autonomy": self._autonomy_response,
                                         "lane": self._lane,
-                                        "elapsed_ms": round((time.perf_counter() - stream_started) * 1000, 1)})
+                                        "elapsed_ms": round(ttft * 1000, 1)})
+                            if (self._lane == "priority" and not self._autonomy_response and not self._remote_backend
+                                    and (nexus := self._nexus())):
+                                nexus.observe_first_token(ttft)
+                            if self._hardware_controller:
+                                self._hardware_controller.record_latency(ttft)
                         if isinstance(chunk, list):
                             if not turn.autonomy_mode:
                                 self._process_tool_chunks(state.tool_calls_buffer, chunk)
@@ -1357,6 +1418,16 @@ class LanguageModelProcessor:
                             "name": "autonomy_decision", "strict": False, "schema": schema}}
                 if request_url.endswith("/v1/chat/completions"):
                     turn.data["messages"] = self._sanitize_messages_for_openai(turn.base_messages)
+                    if "tools" in turn.data and isinstance(turn.data["tools"], list):
+                        sanitized_tools = []
+                        for tool in turn.data["tools"]:
+                            t = copy.deepcopy(tool)
+                            func = t.get("function", {})
+                            name = func.get("name", "")
+                            if name:
+                                func["name"] = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+                            sanitized_tools.append(t)
+                        turn.data["tools"] = sanitized_tools
                 elif self._ollama_mode:
                     turn.data["messages"] = self._sanitize_messages_for_ollama(turn.base_messages)
                 else:
@@ -1440,6 +1511,8 @@ class LanguageModelProcessor:
             logger.exception(f"LLM Processor: Unexpected error during LLM request/streaming: {e}")
             self._process_sentence_for_tts(["I'm having a little trouble thinking right now."])
         finally:
+            if self._autonomy_error and self._remote_backend and (nexus := self._nexus()):
+                nexus.observe_failure(True, self._autonomy_error)  # The next request returns to the local base.
             if not turn.autonomy_mode and self.processing_active_event.is_set():
                 logger.debug("LLM Processor: Sending EOS token to TTS queue.")
                 if self._autonomy_response and self._response_has_text and not self._autonomy_error:

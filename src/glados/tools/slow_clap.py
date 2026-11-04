@@ -7,7 +7,7 @@ import soundfile as sf
 tool_definition = {
     "type": "function",
     "function": {
-        "name": "slow clap",
+        "name": "slow_clap",
         "description": "Performs a slow clap.",
         "parameters": {
             "type": "object",

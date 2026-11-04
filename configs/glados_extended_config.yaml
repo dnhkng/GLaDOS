@@ -59,6 +59,23 @@ Glados:
         temp_change_c: 4
         wind_alert_kmh: 40
 
+  # --- Nexus Core: external advisor AIs and an API base (docs/nexus.md) ----
+  # Needs OPENAI_API_KEY in the environment; without it Nexus stays inactive.
+  # Say "activate the Nexus Core" to let GLaDOS consult advisors.
+  nexus:
+    enabled: true
+    daily_budget_usd: 0.50
+    dispatcher: "gpt-5-nano"
+    base:
+      mode: "auto"               # auto | local | api
+      latency_threshold_s: 8     # Move Central to the API when local replies are slower
+    # models:                    # Free catalog; the dispatcher picks among these
+    #   - id: "gpt-5-mini"
+    #     strengths: "explanations, everyday maths and code"
+    #     price_in: 0.25         # USD per million tokens
+    #     price_out: 2.00
+    #     reasoning: ["minimal", "low", "medium", "high"]
+
   mcp_servers:
     - name: "internet_search"
       description: "Search the public internet for current facts, news and source links."

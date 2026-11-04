@@ -6,6 +6,7 @@ from .get_time import GetTime
 from .get_time import tool_definition as get_time_def
 from .manage_slot import ManageSlot
 from .manage_slot import tool_definition as manage_slot_def
+from .nexus import NexusConsult, NexusControl, consult_definition as nexus_consult_def, control_definition as nexus_control_def
 from .safe_command import RunSafeCommand
 from .safe_command import tool_definition as safe_command_def
 from .preferences import (
@@ -30,6 +31,8 @@ tool_definitions = [
     vision_look_def,
     get_preferences_definition,
     set_preference_definition,
+    nexus_control_def,
+    nexus_consult_def,
 ]
 
 # Export all tool classes
@@ -38,11 +41,14 @@ tool_classes = {
     "run_safe_command": RunSafeCommand,
     "get_time": GetTime,
     "get_report": GetReport,
+    "slow_clap": SlowClap,
     "slow clap": SlowClap,
     "vision_look": VisionLook,
     "get_preferences": GetPreferences,
     "set_preference": SetPreference,
     "manage_slot": ManageSlot,
+    "nexus_control": NexusControl,
+    "nexus_consult": NexusConsult,
 }
 
 # Export all tool names

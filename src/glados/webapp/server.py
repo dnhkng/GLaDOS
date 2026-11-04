@@ -179,7 +179,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path in (
             "/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js",
             "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
-            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js",
+            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js", "/glados-favicon.js",
             "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
         ):
             return self._file(path[1:])
@@ -256,6 +256,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/api/control", "/api/instructions", "/api/input", "/api/slots", "/api/minds/control",
             "/api/tools/command", "/api/decisions", "/api/decisions/test",
             "/api/devices", "/api/vision/settings", "/api/search/settings", "/api/memory/edit", "/api/tasks/cancel",
+            "/api/nexus/settings",
         }:
             return self._operate()
         self._json(404, {"error": "not found"})
@@ -283,6 +284,11 @@ class _Handler(BaseHTTPRequestHandler):
                 if agent is None:
                     return self._json(404, {"error": "Search Core is unavailable in this profile"})
                 return self._json(200, agent.preferences.update(body))
+            if path == "/api/nexus/settings":
+                agent = getattr(engine, "nexus_agent", None)
+                if agent is None:
+                    return self._json(404, {"error": "Nexus Core is unavailable in this profile"})
+                return self._json(200, agent.update_settings(body))
             if path == "/api/memory/edit":
                 core = getattr(engine, "compaction_agent", None)
                 if core is None:

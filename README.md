@@ -15,6 +15,7 @@ spoken response.
 [Discord](https://discord.com/invite/ERTDKwpjNB) ·
 [Sponsor](https://ko-fi.com/dnhkng) ·
 [Web console guide](docs/webapp.md) ·
+[Nexus Core](docs/nexus.md) ·
 [Architecture](#how-the-cores-work)
 
 https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
@@ -35,8 +36,46 @@ https://github.com/user-attachments/assets/c22049e4-7fba-4e84-8667-2c6657a656a0
   retrieve relevant memories, and perform requested internet research.
 - **Tools:** connect MCP services, including Home Assistant, and use native
   controls for preferences, memory, tasks and allowlisted system commands.
+- **Nexus Core:** consult external advisor models in the background for complex
+  or slow questions, and automatically migrate Central Core to an API model when
+  the local server is lagging or unreachable (governed by a daily budget ceiling).
+  See [Nexus Core](docs/nexus.md).
 - **Proactive responses:** independent cores publish evidence for the Autonomy
   Core to review. User interactions take priority over new background inference.
+
+## System requirements
+
+> *"Due to mandatory scheduled maintenance, the appropriate chambers for this testing track may temporarily lack air or gravity."* — GLaDOS
+
+### Hardware configurations
+
+| Component | Minimum (Local Gemma 4 E4B) | Recommended (Multi-slot local E4B) | Cloud / API Fallback (Extended profile) |
+| --- | --- | --- | --- |
+| **GPU (VRAM)** | NVIDIA GPU with **8 GB VRAM** (or supported AMD ROCm) | NVIDIA GPU with **10–12+ GB VRAM** (e.g. RTX 3080, 4070+) | No dedicated GPU required (CPU-only synthesis) |
+| **System RAM** | 16 GB RAM | 32 GB RAM (accommodates KV cache & RAM prompt cache) | 8 GB RAM |
+| **CPU** | Modern x86_64 multi-core (Intel i5 / AMD Ryzen 5) | High-performance multi-core CPU (8+ cores) | Standard dual/quad-core x86_64 CPU |
+| **Storage** | ~12 GB free space (SSD recommended) | 20+ GB free SSD space | ~3 GB free space (ONNX speech models only) |
+| **Audio I/O** | Functional microphone and speakers | Dedicated low-latency microphone and headphones | Microphone and speakers (host or browser) |
+
+*Memory note:* Gemma 4 E4B Q4_0 and its multimodal projector occupy ~5.15 GB on disk and 4.9 GB to 8.9 GB VRAM depending on context length and active inference slots. Machines without a dedicated GPU can run the **Extended profile** or use **Nexus Core** to connect to an external model server or cloud API.
+
+### Dynamic Hardware Adaptation Engine
+
+GLaDOS features an intelligent, multi-platform adaptation engine ([`hardware.py`](file:///home/tsuki/Documents/perso/Projects/GLaDOS/src/glados/core/hardware.py)) that automatically benchmarks the host environment at startup and dynamically tunes inference parameters:
+
+- **Cross-Platform Auto-Detection:** Automatically senses NVIDIA CUDA, Apple Silicon (M-series unified memory via Metal), AMD ROCm / AMDGPU sysfs, Intel Arc / Lunar Lake (iGPU/dGPU via DRM), and CPU-only architectures across Linux, macOS, and Windows.
+- **Mathematical KV-Cache Sizing:** Probes the loaded language model's architecture (layers, KV heads, dimension) via Ollama `/api/show` to calculate exact bytes per token ($2 \times \text{layers} \times \text{kv\_heads} \times (\text{key\_len} + \text{val\_len}) \times 2$). It dynamically dimensions the context window (`num_ctx`: 2048, 4096, 8192, 16384, 32768) so KV cache never exhausts VRAM.
+- **Automatic Concurrency Rightsizing:** Allocates 1 autonomy worker on single-stream local setups (preventing inference starvation) and scales to multi-worker lanes on High/Ultra workstations.
+- **Closed-Loop Latency Feedback:** Real-time TTFT (Time-to-First-Token) tracking dynamically steps down context if host hardware experiences unexpected thermal throttling or memory pressure.
+- **Live Diagnostics:** Visible in the web console (`Diagnostics -> Hardware & Model Adaptation`) displaying host tier, GPU memory, active context, and model recommendations.
+
+### Software prerequisites
+
+- **Operating System:** Linux (Ubuntu 22.04+, Debian 12+, Fedora, Arch Linux) or Windows 10/11 (with the [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)). macOS support is experimental.
+- **Python:** Python 3.12 or newer (`>=3.12`, installer creates a Python 3.12.8 environment).
+- **Package Manager:** Git and [uv](https://github.com/astral-sh/uv).
+- **Linux Audio Libraries:** `libportaudio2` (`sudo apt install libportaudio2`).
+- **GPU Drivers:** CUDA 12+ or ROCm 7.1/7.2/7.2.1 installed if using GPU acceleration.
 
 ## Quick start
 
@@ -377,7 +416,8 @@ More detail: [autonomy](docs/autonomy.md), [vision](docs/vision.md),
 ## Tools and integrations
 
 Native tools include memory management, user preferences, task cancellation,
-slot management, reports, camera look requests and a fixed set of safe system
+slot management, reports, camera look requests, Nexus Core controls and background
+consultations (`nexus_control`, `nexus_consult`), and a fixed set of safe system
 commands. They are not a general-purpose shell interface.
 
 MCP adds external capabilities through stdio, HTTP or SSE. For example, an

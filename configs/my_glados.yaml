@@ -1,0 +1,3 @@
+Glados:
+  llm_model: "qwen3:4b-instruct"
+

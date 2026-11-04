@@ -1,0 +1,7 @@
+# Edit this file and restart GLaDOS, or save changes through the console.
+consult_active: true
+preferences: []
+base_mode: auto
+daily_budget_usd: 0.5
+spend:
+  '2026-11-04': 0.004088

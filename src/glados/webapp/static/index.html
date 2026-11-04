@@ -404,6 +404,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <section class="view" id="view-settings">
       <div class="card" style="margin-bottom:16px"><h3>Interface appearance</h3><label>Theme<select class="console-field" id="theme-settings"></select></label><p class="console-note">Dark, Clinical, Terminal and PotatOS share the same live controls. This browser remembers your theme. Open the Presence screen from the top bar for the tablet view.</p></div>
       <div class="card" style="margin-bottom:16px"><h3>Internet search sources</h3><p class="console-note">News requests read these sites’ pages directly, then search if needed. Other categories guide web searches. Enter one domain or site path per line, up to eight per category. Console changes apply to the next request and save to data/search_settings.yaml. File edits apply after restart.</p><form id="search-settings-form"><div class="grid cols-2"><label>Weather<textarea class="console-field" id="search-sources-weather" rows="4" placeholder="dwd.de&#10;meteoblue.com" disabled></textarea></label><label>News<textarea class="console-field" id="search-sources-news" rows="4" placeholder="reuters.com&#10;bbc.com/news" disabled></textarea></label><label>Reddit communities<textarea class="console-field" id="search-sources-reddit" rows="4" placeholder="reddit.com/r/LocalLLaMA&#10;reddit.com/r/Munich" disabled></textarea></label><label>General sources<textarea class="console-field" id="search-sources-general" rows="4" placeholder="A favorite domain or site path" disabled></textarea></label></div><button type="submit" class="btn-secondary" id="search-settings-save" style="margin-top:12px" disabled>Save favorite sources</button></form><p id="search-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>Nexus Core</h3><p class="console-note">Consultation lets GLaDOS ask external advisor AIs in the background. The base decides where Central Core runs: auto moves it to the API when this machine is too slow, local and api force it. Needs the API key named in the configuration. Changes apply immediately and save to data/nexus_settings.yaml.</p><p id="nexus-status" class="console-note">Nexus Core unavailable.</p><form id="nexus-settings-form"><div class="grid cols-3"><label>Consultation<select class="console-field" id="nexus-consultation" disabled><option value="on">On</option><option value="off">Off</option></select></label><label>Base model<select class="console-field" id="nexus-base-mode" disabled><option value="auto">Auto</option><option value="local">Local only</option><option value="api">API only</option></select></label><label>Daily budget (USD)<input class="console-field" id="nexus-budget" type="number" min="0" max="1000" step="0.05" disabled></label></div><button type="submit" class="btn-secondary" id="nexus-settings-save" style="margin-top:12px" disabled>Save Nexus settings</button></form><p id="nexus-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="view-head"><h1>Facility Settings</h1><span class="sub">autonomy, voice input and routing.</span><button class="btn-secondary" id="decision-new">Create decision list</button></div>
       <div class="card" style="margin-bottom:16px"><h3>Facility Sensors &amp; Audio</h3><p class="console-note">Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.</p><div class="grid cols-3">
         <label>Webcam input<select class="console-field" id="device-camera" disabled><option>Connecting…</option></select></label>
@@ -429,6 +430,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <section class="view" id="view-vitals">
       <div class="view-head"><h1>Diagnostics</h1><span class="sub">engine infrastructure, inference capacity, and device health.</span></div>
       <div class="grid cols-2">
+        <div class="card"><h3>Hardware &amp; Model Adaptation</h3><div id="v-hardware"></div></div>
         <div class="card"><h3>Engine components</h3><div id="components"></div></div>
         <div class="card"><h3>Audio</h3><div id="v-audio"></div></div>
         <div class="card"><h3>Interaction</h3><div id="v-interaction"></div></div>
@@ -463,6 +465,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script src="glados-vision.js"></script>
 <script src="glados-vision-themes.js"></script>
 <script src="glados-avatar.js"></script>
+<script src="glados-favicon.js"></script>
 <script src="glados-overview.js"></script>
 <script src="glados-routing.js"></script>
 <script src="glados-context.js"></script>
@@ -492,13 +495,14 @@ const S = {
   sinceUser:null, sinceAsst:null,
   audio:{rms:-40, vad:false, updated_at:0}, speaking:false,
   mcpServers:[],
-  vision:"no visual feed", visionMind:null, searchSettings:null,
-  autonomyCore:null,
+  vision:"no visual feed", visionMind:null, searchSettings:null, nexus:null,
+  autonomyCore:null, hardware:null,
   lanes:{prioQ:0, autoQ:0, autoInflight:0, workers:0, enabled:false},
   inference:null, commandSlot:null, routing:null, decisions:null, agents:[], minds:[], agentMinds:null, tools:[], slots:[], commands:[], controls:{}, operator:null,
   seq:100,
 };
 const avatar = window.GladosAvatar.mount(document);
+const favicon = window.GladosFavicon?.mount(document) || {update(){}};
 const overview = window.GladosOverview.mount(document, {escape:esc, coreOwner, cores:allMinds, identity:coreIdentity, activity:coreActivity, describe:routingDescription});
 window.GladosThemes.mount(document, () => { avatar.update(S); overview.update(S); });
 const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
@@ -598,8 +602,10 @@ function syncLane(id, count, lcls){
 }
 function renderWorkers(){
   const n=S.lanes.workers;
-  $("worker-count").textContent=n+" configured";
-  $("workers").innerHTML=n ? kv("In-flight requests",S.lanes.autoInflight)+kv("Available capacity",Math.max(0,n-S.lanes.autoInflight))+kv("Queued requests",S.lanes.autoQ) : '<div class="msum">Background processing is unavailable. The Central Core and test assignments remain available.</div>';
+  const countText = n+" configured";
+  if($("worker-count").textContent !== countText) $("worker-count").textContent = countText;
+  const html = n ? kv("In-flight requests",S.lanes.autoInflight)+kv("Available capacity",Math.max(0,n-S.lanes.autoInflight))+kv("Queued requests",S.lanes.autoQ) : '<div class="msum">Background processing is unavailable. The Central Core and test assignments remain available.</div>';
+  if($("workers").innerHTML !== html) $("workers").innerHTML = html;
 }
 
 /* ============ brainstem + interaction ============ */
@@ -609,10 +615,17 @@ function renderBrainstem(){
   ["p","a","d"].forEach((axis,i) => {
     if(S.emo) setRing("g-"+axis, S.emo[i]);
     else { $("g-"+axis).style.strokeDasharray=CIRC; $("g-"+axis).style.strokeDashoffset=CIRC; }
-    $("g-"+axis+"v").textContent = S.emo ? fmtNum(S.emo[i]) : "Off";
+    const txt = S.emo ? fmtNum(S.emo[i]) : "Off";
+    if($("g-"+axis+"v").textContent !== txt) $("g-"+axis+"v").textContent = txt;
   });
-  $("mc-lastuser").textContent=S.sinceUser==null ? "never" : ago(S.sinceUser)+" ago"; $("mc-sinceuser").textContent=ago(S.sinceUser);
-  $("mc-lastasst").textContent=S.sinceAsst==null ? "never" : ago(S.sinceAsst)+" ago"; $("mc-sinceasst").textContent=ago(S.sinceAsst);
+  const uText = S.sinceUser==null ? "never" : ago(S.sinceUser)+" ago";
+  if($("mc-lastuser").textContent !== uText) $("mc-lastuser").textContent = uText;
+  const suText = ago(S.sinceUser);
+  if($("mc-sinceuser").textContent !== suText) $("mc-sinceuser").textContent = suText;
+  const aText = S.sinceAsst==null ? "never" : ago(S.sinceAsst)+" ago";
+  if($("mc-lastasst").textContent !== aText) $("mc-lastasst").textContent = aText;
+  const saText = ago(S.sinceAsst);
+  if($("mc-sinceasst").textContent !== saText) $("mc-sinceasst").textContent = saText;
 }
 
 /* ============ minds / slots / vitals ============ */
@@ -624,7 +637,8 @@ const CORE_IDENTITIES={
   health:{title:'Health Core',color:'#8bd3ad'},
   search:{title:'Search Core',color:'#7db9fa'},
   router:{title:'Routing Core',color:'#ffd166'},
-  autonomy:{title:'Autonomy Core',color:'#ad9aef'}
+  autonomy:{title:'Autonomy Core',color:'#ad9aef'},
+  nexus:{title:'Nexus Core',color:'#a78bfa'}
 };
 function coreIdentity(core){
   const id=core.id||core.agent_id;
@@ -633,7 +647,7 @@ function coreIdentity(core){
 }
 function coreOwner(owner){
   const id=String(owner||'').toLowerCase();
-  return CORE_IDENTITIES[id]?.title || (/^routing/.test(id)?'Routing Core':/^vision/.test(id)?'Vision Core':/^glados/.test(id)||id==='draft'?'Central Core · GLaDOS':/^emotion/.test(id)?'Emotion Core':/^memory|^compaction/.test(id)?'Memory Core':owner);
+  return CORE_IDENTITIES[id]?.title || (/^nexus/.test(id)?'Nexus Core':/^routing/.test(id)?'Routing Core':/^vision/.test(id)?'Vision Core':/^glados/.test(id)||id==='draft'?'Central Core · GLaDOS':/^emotion/.test(id)?'Emotion Core':/^memory|^compaction/.test(id)?'Memory Core':owner);
 }
 function coreActivity(core){
   const id=core.id||core.agent_id, owner=CORE_IDENTITIES[id]?.title;
@@ -648,39 +662,77 @@ function coreActivity(core){
   if(core.running===false || core.status==='stopped')return {label:'Offline',className:'s-idle',detail:'Function disabled',active,waiting};
   return {label:'Standby',className:'s-idle',detail:core.research?'Ready for requested research':core.kind==='background'?core.interval_min_s!=null?'Motion-aware delay '+core.interval_min_s+'–'+core.interval_max_s+' s':core.interval_s==null?'On demand':'Delay '+core.interval_s+' s after completion':'Ready for requests',active,waiting};
 }
+function renderMindCardHtml(a, identity, activity){
+  const id = a.agent_id||a.id;
+  return '<div class="mtop"><span class="core-eye" style="--core-color:'+identity.color+'" aria-hidden="true"></span>'+
+    '<span><div class="mtitle">'+esc(identity.title)+'</div><div class="mrole">'+esc((a.role||id||'core').replace(/_/g,' '))+'</div></span>'+
+    '<span class="mstat"><span class="status-pill '+activity.className+'">'+activity.label+'</span></span></div>'+
+    '<div class="msum">'+esc(a.summary||'Awaiting first report.')+'</div>'+
+    '<div class="core-activity">'+esc(activity.detail)+'</div>'+
+    '<div class="mfoot"><span>'+(a.kind==='background'?(a.tick_count||0)+' runs':'On demand')+'</span><span>'+(a.last_tick?'last run '+new Date(a.last_tick*1000).toLocaleTimeString():'')+'</span>'+
+    '<span style="margin-left:auto;color:var(--teal)">inspect core &rarr;</span></div>';
+}
 function renderMinds(){
-  if(!$("minds")) return;
+  const host = $("minds");
+  if(!host) return;
   const list = allMinds();
-  const key=JSON.stringify([list,S.inference,S.controls.quiet_mode]);if(key===mindsRenderKey)return;mindsRenderKey=key;
-  if(!list.length){ $("minds").innerHTML="<div class=\"msum\">No cores connected.</div>"; return; }
-  $("minds").innerHTML="";
-  list.forEach(a => {
-    const id = a.agent_id||a.id;
-    const identity=coreIdentity(a),activity=coreActivity(a);
-    const c = el("mind",
-      '<div class="mtop"><span class="core-eye" style="--core-color:'+identity.color+'" aria-hidden="true"></span>'+
-      '<span><div class="mtitle">'+esc(identity.title)+'</div><div class="mrole">'+esc((a.role||id||'core').replace(/_/g,' '))+'</div></span>'+
-      '<span class="mstat"><span class="status-pill '+activity.className+'">'+activity.label+'</span></span></div>'+
-      '<div class="msum">'+esc(a.summary||'Awaiting first report.')+'</div>'+
-      '<div class="core-activity">'+esc(activity.detail)+'</div>'+
-      '<div class="mfoot"><span>'+(a.kind==='background'?(a.tick_count||0)+' runs':'On demand')+'</span><span>'+(a.last_tick?'last run '+new Date(a.last_tick*1000).toLocaleTimeString():'')+'</span>'+
-      '<span style="margin-left:auto;color:var(--teal)">inspect core &rarr;</span></div>');
-    c.onclick = () => openMind(id);
-    c.setAttribute("role","button");c.setAttribute("tabindex","0");
-    c.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openMind(id);}});
-    $("minds").appendChild(c);
+  if(!list.length){
+    mindsRenderKey = "";
+    if(host.innerHTML !== '<div class="msum">No cores connected.</div>') {
+      host.innerHTML = '<div class="msum">No cores connected.</div>';
+    }
+    return;
+  }
+  const existingMap = new Map();
+  Array.from(host.children || []).forEach(child => {
+    if(child.dataset && child.dataset.mindId) existingMap.set(child.dataset.mindId, child);
   });
+  const sameKeys = host.children?.length === list.length && list.every(a => existingMap.has(a.agent_id || a.id));
+  if(!sameKeys){
+    host.innerHTML = "";
+    list.forEach(a => {
+      const id = a.agent_id || a.id;
+      const identity = coreIdentity(a), activity = coreActivity(a);
+      const c = el("mind", renderMindCardHtml(a, identity, activity));
+      c.dataset.mindId = id;
+      c.onclick = () => openMind(id);
+      c.setAttribute("role","button"); c.setAttribute("tabindex","0");
+      c.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openMind(id);}});
+      host.appendChild(c);
+    });
+  } else {
+    list.forEach(a => {
+      const id = a.agent_id || a.id;
+      const child = existingMap.get(id);
+      if(!child) return;
+      const identity = coreIdentity(a), activity = coreActivity(a);
+      const html = renderMindCardHtml(a, identity, activity);
+      if(child.innerHTML !== html) {
+        child.innerHTML = html;
+      }
+    });
+  }
 }
 function meter(label, val, color){ if(val==null) return '<div class="meter"><div class="m-label"><span>'+label+'</span><span>Not rated</span></div></div>'; const v=Math.round(clamp(val,0,100));
   return '<div class="meter"><div class="m-label"><span>'+label+'</span><span>'+v+'%</span></div>'+
   '<div class="bar"><i style="width:'+v+'%;background:'+color+'"></i></div></div>'; }
 function maybeFetch(url){ return fetch(url).then(r=>{ if(!r.ok) throw new Error(url); return r.json(); }); }
 function renderSlots(){
-  if(!$("slots")) return;
-  const key=JSON.stringify(taskSlots());if(key===slotsRenderKey)return;slotsRenderKey=key;
-  if(!taskSlots().length){ $("slots").innerHTML="<div class=\"msum\">No assignments.</div>"; return; }
-  $("slots").innerHTML="";
-  taskSlots().forEach(s => {
+  const host = $("slots");
+  if(!host) return;
+  const list = taskSlots();
+  if(!list.length){
+    slotsRenderKey = "";
+    if(host.innerHTML !== '<div class="msum">No assignments.</div>') {
+      host.innerHTML = '<div class="msum">No assignments.</div>';
+    }
+    return;
+  }
+  const key = JSON.stringify(list.map(s => [s.slot_id, s.title, s.status, s.summary, s.importance, s.confidence, s.next_run, s.update_priority, s.notify_user, s.owner_id]));
+  if(key === slotsRenderKey) return;
+  slotsRenderKey = key;
+  host.innerHTML = "";
+  list.forEach(s => {
     const c = el("slot");
     c.style.borderTopColor = barColor[s.status]||"var(--orange)";
     const next = s.next_run
@@ -702,7 +754,7 @@ function renderSlots(){
       };
       c.appendChild(cancel);
     }
-    $("slots").appendChild(c);
+    host.appendChild(c);
   });
   $$("[data-slot]").forEach(b => b.addEventListener("click", () => openSlot(b.dataset.slot)));
 }
@@ -732,6 +784,27 @@ function openCommand(){
   $('run-command').onclick=()=>perform(async()=>commandResult(await apiPost('/api/tools/command',{task:$('command-task').value})),'command-result');
 }
 function renderVitals(){
+  if($("v-hardware")){
+    const h = S.hardware;
+    if(h){
+      const tierChip = h.tier === 'ultra' ? '<span class="chip teal">ULTRA</span>' :
+                       h.tier === 'high' ? '<span class="chip green">HIGH</span>' :
+                       h.tier === 'medium' ? '<span class="chip orange">MEDIUM</span>' :
+                       '<span class="chip red">LOW / CPU</span>';
+      const fb = h.feedback;
+      const feedbackStr = fb && fb.recent_avg_ttft_s != null ? ' · TTFT '+fb.recent_avg_ttft_s+'s (scale '+(fb.context_multiplier*100)+'%)' : '';
+      $("v-hardware").innerHTML = kv("Host Tier", tierChip) +
+        kv("Device", esc(h.gpu_name || h.gpu_type || 'Unknown') + (h.vram_total_gb ? ' (' + h.vram_total_gb + ' GB VRAM' + (h.unified_memory ? ', shared' : '') + ')' : '')) +
+        kv("System RAM", (h.ram_total_gb ? h.ram_total_gb.toFixed(1) + ' GB total' : '—') + (h.ram_available_gb ? ' · ' + h.ram_available_gb.toFixed(1) + ' GB free' : '')) +
+        kv("Adaptive Context", (h.num_ctx || 4096) + ' tokens' + feedbackStr) +
+        kv("Max Output", (h.num_predict || 512) + ' tokens') +
+        kv("CPU Cores / Threads", (h.cpu_count || 4) + ' cores · ' + (h.num_thread || 4) + ' threads') +
+        kv("Inference Timeout", (h.llm_timeout || 60) + 's') +
+        '<div class="mem-row" style="margin-top:8px;font-size:11px;color:var(--text-sub)">' + esc(h.recommendation || '') + '</div>';
+    } else {
+      $("v-hardware").innerHTML = '<span class="chip">Hardware telemetry standby</span>';
+    }
+  }
   $("components").innerHTML=S.minds.filter(m=>!S.agents.some(a=>a.agent_id===m.mind_id)).map(m=>kv(esc(m.title),esc(m.status)+" · "+esc(m.summary||""))).join("")||"No engine components reported.";
   if(!$("v-audio")) return;
   const a = S.audio;
@@ -773,6 +846,7 @@ function renderLaneMeta(){
 function paint(){
   deviceSelector.updateConnection();
   avatar.update(S);
+  favicon.update(S);
   overview.update(S);
   renderLaneMeta();
   syncLane("priotrack", S.prioInflight, "priority");
@@ -784,9 +858,21 @@ function paint(){
 
 /* ============ drawer ============ */
 let inspectedSlot=null,inspectedMind=null;
-function openDrawer(title, html){ inspectedSlot=null;inspectedMind=null; if(!$("drawer"))return; $("drawer-title").textContent=title; $("drawer-body").innerHTML=html; $("drawer").classList.add("open"); }
+let drawerHtml=null;
+// A live refresh keeps the scroll position and skips unchanged content, so reports stay readable.
+function openDrawer(title, html, refresh=false){
+  inspectedSlot=null;inspectedMind=null; if(!$("drawer"))return;
+  const drawer=$("drawer"),body=$("drawer-body");
+  $("drawer-title").textContent=title;
+  if(!refresh || html!==drawerHtml){
+    const top=body.scrollTop,outer=drawer.scrollTop;
+    body.innerHTML=html; drawerHtml=html;
+    body.scrollTop=refresh?top:0; drawer.scrollTop=refresh?outer:0;
+  }
+  drawer.classList.add("open");
+}
 let drawerRequest=0;
-async function openMind(id){
+async function openMind(id, refresh=false){
   const token=++drawerRequest, mind=allMinds().find(a=>(a.agent_id||a.id)===id);
   if(!mind) return;
   const title=coreIdentity(mind).title;
@@ -801,16 +887,16 @@ async function openMind(id){
     return;
   }
   if(mind.kind==='router'){
-    openDrawer(title,details+'<p class="console-note">One output token selects an option from your active decision list. Runs on completed turns, before speech or tools.</p><button class="btn-secondary" id="router-settings">Edit decision lists</button>');
+    openDrawer(title,details+'<p class="console-note">One output token selects an option from your active decision list. Runs on completed turns, before speech or tools.</p><button class="btn-secondary" id="router-settings">Edit decision lists</button>',refresh);
     $('router-settings').onclick=()=>{$('drawer-close').click();go('settings');};return;
   }
   if(mind.kind==='autonomy'){
-    openDrawer(title,details+'<p class="console-note">Reviews independent core slots and conversation evidence, then asks Central Core to deliver useful new notifications.</p><button class="btn-secondary" id="mind-autonomy-settings">Facility settings</button>');
+    openDrawer(title,details+'<p class="console-note">Reviews independent core slots and conversation evidence, then asks Central Core to deliver useful new notifications.</p><button class="btn-secondary" id="mind-autonomy-settings">Facility settings</button>',refresh);
     $('mind-autonomy-settings').onclick=()=>{$('drawer-close').click();go('settings');};return;
   }
   if(mind.kind==='primary'){
     details+='<p class="console-note">Uses the tools listed in Facility Tools. Your response instructions apply to this core.</p><div class="console-actions"><button class="btn-secondary" id="mind-chat">Talk to GLaDOS</button><button class="btn-secondary" id="mind-tools">Facility tools</button><button class="btn-secondary" id="mind-instructions">Edit instructions</button></div>';
-    openDrawer(title,details);
+    openDrawer(title,details,refresh);
     $('mind-chat').onclick=()=>{$('drawer-close').click();go('home');$('message-text').focus();};
     $('mind-tools').onclick=()=>{$('drawer-close').click();go('tools');};
     $('mind-instructions').onclick=editInstructions;
@@ -823,7 +909,7 @@ async function openMind(id){
     details+='<p class="console-note">Recalls relevant saved facts into its slot for the current topic. Keeps recent messages intact and merges older context into progressively coarser summaries. Runs quietly; it never initiates speech.</p>'+kv('Recent messages kept',c.preserve_recent)+kv('Raw messages',c.raw_messages??0)+kv('Estimated context',(c.tokens??0)+' tokens · threshold '+c.threshold)+(c.bands||[]).map(b=>kv(esc(b.label),b.summaries+' summaries · ~'+b.tokens+' tokens')).join('');
     if(c.recall) details+=kv('Recall',c.recall.enabled?(c.recall.recalled_facts+' relevant facts · '+c.recall.indexed_facts+' indexed'):'Disabled')+kv('Recall topic',esc(c.recall.query||'Waiting for a topic'))+(c.recall.unavailable?'<p class="console-note">Some saved memory could not be read.</p>':'');
   }
-  openDrawer(title,details+'<p>Loading latest report and memory…</p>');
+  if(!refresh) openDrawer(title,details+'<p>Loading latest report and memory…</p>');
   try {
     const memory=S.live?await maybeFetch('/api/minds/'+encodeURIComponent(id)+'/memory'):{memory:[]};
     const slot=S.slots.find(s=>s.slot_id===id);
@@ -831,11 +917,11 @@ async function openMind(id){
     if(token!==drawerRequest) return;
     const rows=(memory.memory||[]).map(m=>'<div class="mem-row"><span class="mk">'+esc(m.key)+'</span>'+esc(typeof m.value==='string'?m.value:JSON.stringify(m.value,null,2))+'</div>').join('');
     const runControl=mind.research?'</div><p class="console-note">Ask GLaDOS to research a topic to start a search. Suspending this core cancels its current research.</p>':'<button class="btn-secondary" id="mind-run">Run once now</button></div><p class="console-note">Run once queues work on this core’s worker, including while paused. A current run is allowed to finish.</p>';
-    openDrawer(title,details+'<div class="console-actions"><button class="btn-secondary" id="mind-toggle">'+(mind.paused?'Resume core':'Suspend core')+'</button>'+runControl+'<p class="console-feedback" id="mind-feedback" role="status"></p><div class="slice">Latest output</div><div class="mem-row">'+esc(output?.report||output?.summary||'No output yet.')+'</div><div class="slice">Core memory</div>'+(rows||'<p>No memory entries yet.</p>'));
+    openDrawer(title,details+'<div class="console-actions"><button class="btn-secondary" id="mind-toggle">'+(mind.paused?'Resume core':'Suspend core')+'</button>'+runControl+'<p class="console-feedback" id="mind-feedback" role="status"></p><div class="slice">Latest output</div><div class="mem-row">'+esc(output?.report||output?.summary||'No output yet.')+'</div><div class="slice">Core memory</div>'+(rows||'<p>No memory entries yet.</p>'),refresh);
     inspectedMind={id,key:JSON.stringify(mind)};
     $('mind-toggle').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:mind.paused?'resume':'pause'});await refreshSnapshot();await openMind(id);return 'Schedule updated.';},'mind-feedback');
     if(!mind.research)$('mind-run').onclick=()=>perform(async()=>{await apiPost('/api/minds/control',{agent_id:id,action:'run'});return 'One run queued. The result will refresh when it finishes.';},'mind-feedback');
-  } catch(error){if(token===drawerRequest) openDrawer(title,details+'<p>'+esc(error.message)+'</p>');}
+  } catch(error){if(token===drawerRequest) openDrawer(title,details+'<p>'+esc(error.message)+'</p>',refresh);}
 }
 function renderVisionInspector(){
   if(inspectedMind?.id!=='vision' || !$('vision-scene')) return;
@@ -873,9 +959,9 @@ function renderVisionInspector(){
     kv('Frame selection',v?.selected_age_ms!==undefined?v.selected_age_ms+' ms old · '+v.candidates+' candidates':'—')+
     kv('Focus score',v?.sharpness!==undefined?v.sharpness+' · scoring '+v.scoring_ms+' ms':'—');
 }
-async function openSlot(id){
+async function openSlot(id, refresh=false){
   const token=++drawerRequest;
-  openDrawer("Task",'<p>Loading task…</p>');
+  if(!refresh) openDrawer("Task",'<p>Loading task…</p>');
   try {
     const s=S.live?await maybeFetch("/api/slots/"+encodeURIComponent(id)):S.slots.find(x=>x.slot_id===id);
     if(token!==drawerRequest) return;
@@ -883,7 +969,7 @@ async function openSlot(id){
     openDrawer(s.title||id,kv("ID",esc(id))+kv("Status",esc(s.status))+kv("Summary",esc(s.summary||"No summary"))+
       '<div class="slice">Report</div><div class="mem-row">'+esc(s.report||"No report yet.")+'</div>'+
       (editable?'<div class="console-actions"><button class="btn-secondary" id="task-ask">Ask GLaDOS to work on this</button><button class="btn-secondary" id="task-edit">Edit assignment</button><button class="btn-secondary" id="task-status">'+(s.status==='done'?'Reopen':'Mark done')+'</button></div>':'')+
-      '<p class="console-feedback" id="task-feedback" role="status"></p>');
+      '<p class="console-feedback" id="task-feedback" role="status"></p>',refresh);
     inspectedSlot={id,updated_at:s.updated_at};
     if(editable){
       $("task-edit").onclick=()=>editTask(s);
@@ -926,6 +1012,16 @@ $('search-settings-form').addEventListener('submit',event=>{event.preventDefault
   searchSourcesDirty=false;await refreshSnapshot();
   return 'Favorite search sources saved. They apply to the next search.';
 },'search-settings-feedback');});
+let nexusDirty=false;
+['nexus-consultation','nexus-base-mode','nexus-budget'].forEach(id=>$(id).oninput=()=>{nexusDirty=true;});
+$('nexus-settings-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
+  const budget=Number($('nexus-budget').value);
+  if(!Number.isFinite(budget)||budget<0||budget>1000) throw new Error('Choose a daily budget from 0 to 1000 USD.');
+  S.nexus=await apiPost('/api/nexus/settings',{consultation:$('nexus-consultation').value==='on',
+    base_mode:$('nexus-base-mode').value,daily_budget_usd:budget});
+  nexusDirty=false;await refreshSnapshot();
+  return 'Nexus settings saved.'+(S.nexus.api_key?'':' No API key is set, so Nexus stays inactive.');
+},'nexus-settings-feedback');});
 ['vision-interval-min','vision-interval-max'].forEach(id=>$(id).oninput=()=>{visionIntervalDirty=true;});
 $('vision-settings-form').addEventListener('submit',event=>{event.preventDefault();perform(async()=>{
   const minimum=Number($('vision-interval-min').value), maximum=Number($('vision-interval-max').value);
@@ -941,6 +1037,22 @@ function renderConsoleControls(){
     if(!searchSourcesDirty&&!operationPending) field.value=(S.searchSettings?.[category]||[]).join('\n');
   });
   $('search-settings-save').disabled=!ready||!S.searchSettings;
+  const n=S.nexus, nexusReady=ready&&!!n&&n.available;
+  ['nexus-consultation','nexus-base-mode','nexus-budget','nexus-settings-save'].forEach(id=>{
+    const el=$(id);
+    if(el && el.disabled !== !nexusReady) el.disabled = !nexusReady;
+  });
+  if(n&&!nexusDirty&&!operationPending){
+    if($('nexus-consultation').value !== n.consultation) $('nexus-consultation').value=n.consultation;
+    if($('nexus-base-mode').value !== n.base_mode) $('nexus-base-mode').value=n.base_mode;
+    if(String($('nexus-budget').value) !== String(n.daily_budget_usd)) $('nexus-budget').value=n.daily_budget_usd;
+  }
+  const statusText=!n?'Nexus Core unavailable.':
+    (n.api_key?'':'No API key set. ')+'Central runs on '+n.base+' ('+n.base_model+'): '+n.base_reason+'.'+
+    (n.local_first_reply_estimate_s!=null?' Local first reply ≈ '+n.local_first_reply_estimate_s+' s.':'')+
+    ' Spent today: $'+n.spent_today_usd.toFixed(3)+' / $'+n.daily_budget_usd.toFixed(2)+'.'+
+    (n.running_consultations?' '+n.running_consultations+' consultation(s) running.':'');
+  if($('nexus-status').textContent !== statusText) $('nexus-status').textContent = statusText;
   $('runtime-model').textContent=(c.model||'Engine unavailable')+' · '+(c.audio_mode||'');
   for(const [id,label,on] of [['microphone','Microphone',!c.microphone_muted],['voice','Voice',!c.voice_muted],['transcripts','Transcripts',c.user_transcripts]]){
     const b=$('control-'+id);b.textContent=label+': '+(on?'on':'off');b.setAttribute('aria-pressed',String(!!on));
@@ -992,10 +1104,19 @@ function editTask(task={}){
 }
 $('new-task').onclick=()=>editTask();$('home-new-task').onclick=()=>editTask();
 function renderHomeTasks(){
-  const key=JSON.stringify(taskSlots());if(key===homeTasksRenderKey)return;homeTasksRenderKey=key;
-  const host=$('home-tasks');host.innerHTML='';
+  const host=$('home-tasks');
+  if(!host) return;
   const list=[...taskSlots()].sort((a,b)=>(a.status==='done')-(b.status==='done')||b.updated_at-a.updated_at).slice(0,5);
-  if(!list.length){host.innerHTML='<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>';return;}
+  const key=JSON.stringify(list.map(s => [s.slot_id, s.title, s.status, s.summary]));
+  if(key===homeTasksRenderKey) return;
+  homeTasksRenderKey=key;
+  if(!list.length){
+    if(host.innerHTML !== '<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>') {
+      host.innerHTML = '<p class="console-note">No assignments yet. Create one here, or ask GLaDOS to save a task.</p>';
+    }
+    return;
+  }
+  host.innerHTML='';
   list.forEach(s=>{const row=el('task-row','<span><strong>'+esc(s.title)+'</strong><br><span class="console-note">'+esc(s.status)+' · '+esc(s.summary||'No summary')+'</span></span>');const b=document.createElement('button');b.className='btn-secondary';b.textContent='Inspect';b.onclick=()=>openSlot(s.slot_id);row.appendChild(b);host.appendChild(row);});
 }
 
@@ -1007,11 +1128,11 @@ function applySnapshot(j){
   S.agents=j.agents||[]; S.minds=j.minds||[]; S.slots=j.slots||[]; S.vision=j.vision;
   if(inspectedSlot && !operationPending){
     const latest=S.slots.find(s=>s.slot_id===inspectedSlot.id);
-    if(latest && latest.updated_at!==inspectedSlot.updated_at) openSlot(inspectedSlot.id);
+    if(latest && latest.updated_at!==inspectedSlot.updated_at) openSlot(inspectedSlot.id,true);
   }
   if(inspectedMind && inspectedMind.id!=="vision" && !operationPending){
     const latest=allMinds().find(m=>m.id===inspectedMind.id);
-    if(latest && JSON.stringify(latest)!==inspectedMind.key) openMind(inspectedMind.id);
+    if(latest && JSON.stringify(latest)!==inspectedMind.key) openMind(inspectedMind.id,true);
   }
   applyState(j);
 }
@@ -1024,6 +1145,7 @@ function applyAudio(audio){
 }
 function applyState(st){
   if('search_settings' in st) S.searchSettings=st.search_settings;
+  if('nexus' in st) S.nexus=st.nexus;
   if('autonomy_core' in st) S.autonomyCore=st.autonomy_core;
   if("vision_mind" in st){
     const incoming=st.vision_mind, current=S.visionMind;
@@ -1047,6 +1169,7 @@ function applyState(st){
   if(st.audio) applyAudio(st.audio);
   if(st.interaction){ S.sinceUser=st.interaction.seconds_since_user; S.sinceAsst=st.interaction.seconds_since_assistant; }
   if(st.speaking!==undefined) S.speaking=!!st.speaking;
+  if(st.hardware) S.hardware=st.hardware;
   if(st.mcp) S.mcpServers=st.mcp.servers||[];
 }
 function entryEvent(ev){ entry({t:(ev.timestamp||0)*1000, src:ev.source||"", kind:ev.kind||"", level:ev.level||"info", msg:ev.message||"", meta:ev.meta||{}}); }

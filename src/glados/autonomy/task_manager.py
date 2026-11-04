@@ -38,12 +38,15 @@ class TaskHandle:
 
 class TaskManager:
     def __init__(
-        self, slot_store: TaskSlotStore, event_bus: EventBus, max_workers: int = 2, progress_interval_s: float = 5.0
+        self, slot_store: TaskSlotStore, event_bus: EventBus, max_workers: int = 2, progress_interval_s: float = 5.0,
+        nexus_workers: int = 3,
     ) -> None:
         self._slot_store = slot_store
         slot_store.bind_events(event_bus)
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._search_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SearchQueue")
+        # Consultations wait on remote models, so they run side by side without using inference slots.
+        self._nexus_executor = ThreadPoolExecutor(max_workers=nexus_workers, thread_name_prefix="NexusQueue")
         self._lock = threading.RLock()
         self._jobs: dict[str, TaskHandle] = {}
         self._stopped = False
@@ -67,13 +70,15 @@ class TaskManager:
             active = [h for h in self._jobs.values() if h.group == group and not h.future.done()]
             if group == "search" and len(active) >= 9:
                 raise ValueError("Search queue is full (one running and eight waiting)")
+            if group == "nexus" and len(active) >= 8:
+                raise ValueError("Nexus queue is full")
             handle = TaskHandle(slot_id, title, group, cancelled=cancelled or threading.Event())
             self._jobs[slot_id] = handle
             self._slot_store.update_slot(
                 slot_id, title, "queued", "Waiting to start", update_priority="regular", owner_id=group
             )
             self._publish_group(group)
-            executor = self._search_executor if group == "search" else self._executor
+            executor = {"search": self._search_executor, "nexus": self._nexus_executor}.get(group, self._executor)
             handle.execution = executor.submit(self._run_task, handle, runner, notify_user, progress)
             return handle
 
@@ -194,6 +199,7 @@ class TaskManager:
         def close():
             self._executor.shutdown(wait=wait, cancel_futures=True)
             self._search_executor.shutdown(wait=wait, cancel_futures=True)
+            self._nexus_executor.shutdown(wait=wait, cancel_futures=True)
 
         if wait and timeout is not None:
             thread = threading.Thread(target=close, daemon=True)

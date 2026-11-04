@@ -19,6 +19,18 @@ from .events import TaskUpdateEvent, TimeTickEvent
 from .interaction_state import InteractionState
 from .slots import TaskSlotStore
 
+# Results the user is already waiting for go straight to Central Core, without an attention review.
+NEXUS_INSTRUCTION = (
+    "Your Nexus Core consultation has finished. The quoted slot holds the need and question you sent and the "
+    "external advisor's answer, or why it failed. Now answer the user's original question yourself: interpret "
+    "the advice for what you needed, check it against what you know, keep only what is useful and say plainly "
+    "if it seems wrong or the consultation failed. Do not read it out verbatim or present the advisor as yourself."
+)
+DIRECT_SLOT_HANDLERS: dict[str, tuple[str, str]] = {
+    "task_nexus_": (NEXUS_INSTRUCTION, "Requested Nexus consultation finished"),
+}
+DIRECT_SLOT_PREFIXES: tuple[str, ...] = tuple(DIRECT_SLOT_HANDLERS.keys())
+
 
 class AutonomyLoop:
 
@@ -40,8 +52,10 @@ class AutonomyLoop:
         user_busy: Callable[[], bool] = lambda: False,
         quiet_generation: Callable[[], int] = lambda: 0,
         autonomy_generation: Callable[[], int] = lambda: 0,
+        central_queue: queue.Queue[dict[str, Any]] | None = None,
     ) -> None:
         self._config = config
+        self._central_queue = central_queue
         self._event_bus = event_bus
         self._interaction_state = interaction_state
         self._vision_state = vision_state
@@ -93,9 +107,9 @@ class AutonomyLoop:
                         self._remember(self._event_bus.get(timeout=0))
                     except queue.Empty:
                         break
-                if self._should_skip():
+                if self._deliver_direct() or self._should_skip():
                     continue
-                updates = list(self._pending_updates.values())
+                updates = [u for u in self._pending_updates.values() if not u.slot_id.startswith(DIRECT_SLOT_PREFIXES)]
                 if not updates and (self._tick is None or time.monotonic() < self._next_check):
                     continue
                 current = updates[-1] if updates else self._tick
@@ -107,15 +121,15 @@ class AutonomyLoop:
                     )
                     prompt += (
                         "\nNotification review: these updates have not yet been considered. "
-                        "Prompt the Central Core about a fresh important alert, useful recalled fact or completed requested result "
-                        "if it has not already been discussed. This does not require new user input. "
+                        "Prompt the Central Core about a fresh important alert, useful recalled fact or completed "
+                        "requested result if it has not already been discussed. This does not require new user input. "
                         "Stay silent for routine progress or results already discussed."
                     )
                 if self._dispatch(prompt):
-                    self._active_updates = dict(self._pending_updates)
+                    self._active_updates = {u.slot_id: u for u in updates}
                     for update in updates:
                         self._seen_updates[update.slot_id] = self._signature(update)
-                    self._pending_updates.clear()
+                        self._pending_updates.pop(update.slot_id, None)
                     self._tick = None
         logger.info("AutonomyLoop thread finished.")
 
@@ -178,6 +192,39 @@ class AutonomyLoop:
         if self._config.cooldown_s <= 0:
             return False
         return (time.monotonic() - self._last_prompt_ts) < self._config.cooldown_s
+
+    def _deliver_direct(self) -> bool:
+        if self._central_queue is None or not self._config.enabled or self._quiet_mode():
+            return False
+        update = next((u for u in self._pending_updates.values() if u.slot_id.startswith(DIRECT_SLOT_PREFIXES)), None)
+        if update is None or self._currently_speaking_event.is_set() or self._user_busy() or self._pending_autonomy():
+            return False
+        since_user = self._interaction_state.seconds_since_user()
+        if since_user is not None and since_user < 2:
+            return False
+        slot = self._slot_store.get_slot(update.slot_id)
+        if slot is None or slot.handled:
+            self._pending_updates.pop(update.slot_id, None)
+            return False
+        matching_prefix = next((p for p in DIRECT_SLOT_PREFIXES if update.slot_id.startswith(p)), "")
+        instruction, reason = DIRECT_SLOT_HANDLERS.get(
+            matching_prefix, (NEXUS_INSTRUCTION, "Requested task finished")
+        )
+        cycle = uuid.uuid4().hex
+        self._active_cycle, self._stage = cycle, "reviewing"
+        self._active_payload = {"_quiet_generation": self._quiet_generation(),
+                                "_autonomy_generation": self._autonomy_generation()}
+        self._active_slot_versions = {slot.slot_id: self._slot_version(slot)}
+        self._active_updates = {update.slot_id: update}
+        self._processing_active_event.set()
+        decision = {"slot_ids": [slot.slot_id], "instruction": instruction, "reason": reason}
+        if not self.prompt_main(cycle, decision, self._central_queue):
+            self._active_cycle, self._stage, self._active_updates = None, "idle", {}
+            return False
+        self._seen_updates[update.slot_id] = self._signature(update)
+        self._pending_updates.pop(update.slot_id, None)
+        self._last_prompt_ts = time.monotonic()
+        return True
 
     def _dispatch(self, prompt: str) -> bool:
         if not self._config.enabled or self._quiet_mode():
