@@ -205,3 +205,4 @@ data/operator_settings.yaml.tmp
 /glados_config.yaml
 ._*
 data/webapp_tls/
+data/webapp_token

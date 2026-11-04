@@ -41,6 +41,7 @@ from loguru import logger
 import numpy as np
 
 from ..tools.manage_slot import save_task
+from . import auth
 from .config import AUTO_HOST, console_hosts, local_addresses
 from .devices import device_snapshot, select_device
 from .serializers import (
@@ -104,8 +105,11 @@ class _EngineHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str],
-                 tls: ssl.SSLContext | None = None):
+                 tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True):
         self.engine = engine
+        self.token = token
+        self.trust_loopback = trust_loopback
+        self.secure = tls is not None
         self.allowed_hosts = console_hosts(address[0], allowed_hosts)
         super().__init__(address, _Handler)
         if tls is not None:
@@ -160,6 +164,31 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return False
 
+    def _authorized(self) -> bool:
+        token = self.server.token
+        if token is None or (self.server.trust_loopback and auth.is_loopback(self.client_address[0])):
+            return True
+        return auth.matches(token, auth.cookie_token(self.headers.get("Cookie")))
+
+    def _refuse_unpaired(self) -> None:
+        self.close_connection = True
+        if self._path().startswith("/api/"):
+            return self._json(401, {"error": "Open the pairing link shown in GLaDOS's terminal first"})
+        return self._text(401, "This console is locked. Open the pairing link shown in GLaDOS's terminal.")
+
+    def _pair(self, candidate: str) -> None:
+        """Exchange a pairing-link token for a session cookie, then drop it from the URL."""
+        if not auth.matches(self.server.token, candidate):
+            self.close_connection = True
+            return self._text(403, "Invalid pairing link.")
+        self.send_response(303)
+        self.send_header("Set-Cookie", auth.session_cookie(self.server.token, self.server.secure))
+        self.send_header("Location", self._path())
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _json(self, code: int, payload: Any) -> None:
         body = dumps(payload).encode("utf-8")
         self.send_response(code)
@@ -199,6 +228,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             return self._json(421, {"error": "Unexpected Host header"})
         path = self._path()
+        if self.server.token is not None and "token" in self._query():
+            return self._pair(self._query()["token"])
+        if not self._authorized():
+            return self._refuse_unpaired()
         if path in ("/", "/index.html"):
             return self._file("index.html")
         # Sibling URLs keep index.html usable as a local-file demo too.
@@ -257,7 +290,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         sequence = -1
         try:
-            while True:
+            while not self.server.engine.shutdown_event.is_set():
                 frame = agent.live_preview(overlay=overlay)
                 if frame is None:
                     break
@@ -279,6 +312,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._host_allowed():
             self.close_connection = True
             return self._json(421, {"error": "Unexpected Host header"})
+        if not self._authorized():
+            return self._refuse_unpaired()
         if self._path() == "/api/command":
             return self._command()
         if self._path() in {
@@ -652,10 +687,11 @@ class _Handler(BaseHTTPRequestHandler):
             fin, frame_op, masked, length = head[0] & 0x80, head[0] & 0x0F, head[1] & 0x80, head[1] & 0x7F
             if not masked:
                 return None
-            if length == 126:
-                length = struct.unpack(">H", self.rfile.read(2))[0]
-            elif length == 127:
-                length = struct.unpack(">Q", self.rfile.read(8))[0]
+            if length in (126, 127):
+                extended = self.rfile.read(2 if length == 126 else 8)
+                if len(extended) != (2 if length == 126 else 8):
+                    return None
+                length = struct.unpack(">H" if length == 126 else ">Q", extended)[0]
             size += length
             if size > self._WS_MAX_MESSAGE:
                 return None
@@ -761,13 +797,15 @@ class WebappServer:
 
     def __init__(
         self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None,
-        tls: ssl.SSLContext | None = None,
+        tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True,
     ) -> None:
         self.engine = engine
         self.host = host
         self.port = port
         self.allowed_hosts = list(allowed_hosts or [])
         self.tls = tls
+        self.token = token
+        self.trust_loopback = trust_loopback
         self._server: _EngineHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.bound_port: int | None = None
@@ -776,7 +814,8 @@ class WebappServer:
         if self._server is not None:
             return
         try:
-            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts, self.tls)
+            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts, self.tls,
+                                             self.token, self.trust_loopback)
             self.bound_port = self._server.server_address[1]
         except (OSError, ValueError) as exc:
             logger.error("webapp: failed to bind {}:{} - {}", self.host, self.port, exc)

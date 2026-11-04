@@ -186,6 +186,45 @@ def test_performance_recovers_current_state_without_replaying_history() -> None:
 # --------------------------------------------------------------------------- HTTP server
 
 
+def test_network_clients_must_pair_before_reaching_the_console() -> None:
+    token = "t" * 43
+    # Loopback is trusted in production; disable that so this local client stands in for a phone.
+    server = WebappServer(_FakeEngine(), host="127.0.0.1", port=0, token=token, trust_loopback=False)
+    server.start()
+    try:
+        def request(method: str, path: str, headers: dict[str, str] | None = None) -> http.client.HTTPResponse:
+            conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+            conn.request(method, path, body=b"{}" if method == "POST" else None,
+                         headers={"Content-Type": "application/json", **(headers or {})})
+            return conn.getresponse()
+
+        assert request("GET", "/api/snapshot").status == 401
+        assert request("GET", "/").status == 401
+        assert request("POST", "/api/command").status == 401
+        assert request("GET", "/api/snapshot", {"Cookie": "glados_console=" + "x" * 43}).status == 401
+        assert request("GET", "/?token=wrong").status == 403
+
+        paired = request("GET", "/?token=" + token)
+        assert paired.status == 303 and paired.getheader("Location") == "/"
+        cookie = paired.getheader("Set-Cookie")
+        assert "HttpOnly" in cookie and "SameSite=Strict" in cookie and "Secure" not in cookie
+        assert request("GET", "/api/snapshot", {"Cookie": cookie.split(";", 1)[0]}).status == 200
+    finally:
+        server.shutdown()
+
+
+def test_console_token_is_private_and_stable(tmp_path: Path) -> None:
+    from glados.webapp.auth import ensure_token, is_loopback, is_loopback_bind
+
+    path = tmp_path / "token"
+    token = ensure_token(path)
+    assert len(token) >= 32 and ensure_token(path) == token
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert is_loopback("127.0.0.1") and is_loopback("::1") and is_loopback("::ffff:127.0.0.1")
+    assert not is_loopback("192.168.1.20")
+    assert is_loopback_bind("localhost") and not is_loopback_bind("0.0.0.0")
+
+
 def test_webapp_server_serves_snapshot_and_stream() -> None:
     engine = _FakeEngine()
     engine.observability_bus.emit("autonomy", "tick", "hello stream", meta={"x": 1})
@@ -341,7 +380,7 @@ class _LauncherEngine:
 class _FakeServer:
     """Stub WebappServer that records start/stop without binding a socket."""
 
-    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None) -> None:
+    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None, token=None) -> None:
         self.engine = engine
         self.host = host
         self.port = port

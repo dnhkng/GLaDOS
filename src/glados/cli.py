@@ -315,19 +315,25 @@ def run_webapp(
             cert, key = ensure_certificate(hosts)
         tls = server_context(cert, key)
 
+    from .webapp.auth import ensure_token, is_loopback_bind
+
+    # Other devices on the network must pair; the console exposes the camera, memory and microphone.
+    token = webapp_config.access_token or (None if is_loopback_bind(webapp_config.host) else ensure_token())
     glados = Glados.from_config(glados_config)
     server = WebappServer(
         glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts,
-        tls=tls,
+        tls=tls, token=token,
     )
     server.start()
-    if server.is_running and webapp_config.host in ("0.0.0.0", "::", ""):
+    if server.is_running and token is not None:
         from .webapp.config import local_addresses
 
         scheme = "https" if tls else "http"
-        for address in sorted(local_addresses()):
+        wildcard = webapp_config.host in ("0.0.0.0", "::", "")
+        for address in sorted(local_addresses()) if wildcard else [webapp_config.host]:
             shown = f"[{address}]" if ":" in address else address
-            logger.success("Open from a phone on this network: {}://{}:{}/", scheme, shown, server.bound_port)
+            logger.success("Pair a device on this network (keep this link private): {}://{}:{}/?token={}",
+                           scheme, shown, server.bound_port, token)
     if not server.is_running:
         logger.error(
             "Webapp console could not bind {}:{} - aborting.",

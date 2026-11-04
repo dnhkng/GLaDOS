@@ -57,6 +57,9 @@ class WebappConfig(BaseModel):
     tls_cert: str | None = Field(default=None, description="PEM certificate; a self-signed one is generated if unset.")
     tls_key: str | None = Field(default=None, description="PEM private key matching tls_cert.")
     remote_audio: bool = Field(default=True, description="Let a connected browser take over microphone and speaker.")
+    access_token: str | None = Field(default=None, min_length=32, description=(
+        "Secret other devices must pair with. Generated in data/webapp_token when the console listens beyond "
+        "localhost; requests from this machine never need it."))
 
     @model_validator(mode="after")
     def validate_hosts(self) -> WebappConfig:

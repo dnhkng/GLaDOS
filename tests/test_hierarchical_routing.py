@@ -347,18 +347,18 @@ def test_slow_clap_prefers_mcp_and_retains_offline_or_explicit_local_binding(rou
     router.store.tools = lambda: tools
     decision = router.store.get()
     tree = router.tree(decision)
-    assert "slow clap" not in tree.tools and "other" not in tree.nodes
+    assert "slow_clap" not in tree.tools and "other" not in tree.nodes
     mcp_choice = identity("choose_", "slow_clap_demo")
     assert tree.nodes["mcp"].scopes[mcp_choice] == ["mcp.slow_clap_demo.slow_clap"]
     assert tree.server_choices[mcp_choice] == "slow_clap_demo"
     explicit = decision.model_copy(update={"options": [*decision.options, DecisionOption(
-        id="local_clap", action="tool", tool="slow clap", arguments={"claps": 2},
+        id="local_clap", action="tool", tool="slow_clap", arguments={"claps": 2},
         description="Play the local slow-clap audio twice",
     )]})
     assert "local_clap" in router.tree(explicit).nodes["other"].bindings
     router.store.tools = lambda: local_tools
     offline = router.tree(decision)
-    assert offline.nodes["area"].scopes["area_other"] == ["slow clap"]
+    assert offline.nodes["area"].scopes["area_other"] == ["slow_clap"]
     assert all(name not in offline.tools for name in ("speak", "do_nothing"))
 
 

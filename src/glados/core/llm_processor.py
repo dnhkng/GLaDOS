@@ -388,7 +388,8 @@ class LanguageModelProcessor:
         for candidate in known_names:
             if candidate.casefold() == name.casefold():
                 return candidate
-        if name.startswith("mcp."):
+        # OpenAI-compatible requests carry MCP tools as "mcp_server_tool" (no dots allowed).
+        if name.startswith(("mcp.", "mcp_")):
             candidates = [candidate for candidate in known_names if candidate.startswith("mcp.")]
         else:
             candidates = [candidate for candidate in known_names if not candidate.startswith("mcp.")]
@@ -443,7 +444,7 @@ class LanguageModelProcessor:
         filtered: list[dict[str, Any]] = []
         for tool in tools:
             name = tool.get("function", {}).get("name", "")
-            if name == "slow clap" and not wants_clap:
+            if name in ("slow_clap", "slow clap") and not wants_clap:
                 continue
             if name.startswith("mcp.") and name != INTERNET_SEARCH_TOOL and not wants_system:
                 continue

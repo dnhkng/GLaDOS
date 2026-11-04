@@ -13,6 +13,11 @@ from glados.core.inference import InferenceScheduler
 from glados.core.llm_processor import INTERNET_SEARCH_TOOL, LanguageModelProcessor
 from glados.core.tool_executor import _ToolResultQueue
 from glados.vision.vision_state import VisionState
+
+
+def _wire(name: str) -> str:
+    """OpenAI-compatible endpoints reject dots, so MCP tools are offered as mcp_server_tool."""
+    return name.replace(".", "_")
 from tests.test_speech_markup import make_processor
 
 
@@ -74,7 +79,7 @@ def test_full_assistant_receives_original_audio_and_limited_tools(
             "run_safe_command",
             "get_report",
             "get_preferences",
-        } | ({INTERNET_SEARCH_TOOL} if search_enabled else set())
+        } | ({_wire(INTERNET_SEARCH_TOOL)} if search_enabled else set())
     )
 
 
@@ -229,7 +234,7 @@ def test_hierarchical_plan_offers_only_selected_mcp_and_carries_scope_permit(
                                         "index": 0,
                                         "id": "light",
                                         "type": "function",
-                                        "function": {"name": selected_tool, "arguments": '{"target":"kitchen"}'},
+                                        "function": {"name": _wire(selected_tool), "arguments": '{"target":"kitchen"}'},
                                     }
                                 ]
                             }
@@ -250,8 +255,9 @@ def test_hierarchical_plan_offers_only_selected_mcp_and_carries_scope_permit(
     finally:
         processor.shutdown_event.set()
         thread.join(2)
-    assert {t["function"]["name"] for t in captured[0]["tools"]} == {selected_tool}
+    assert {t["function"]["name"] for t in captured[0]["tools"]} == {_wire(selected_tool)}
     assert captured[0].get("tool_choice") == ("required" if selected_tool == INTERNET_SEARCH_TOOL else None)
+    assert call["function"]["name"] == selected_tool
     assert json.loads(call["function"]["arguments"]) == {"target": "kitchen"}
     assert call["_routing_permit"]["tool_scope"] == [selected_tool]
     assert call["_routing_permit"]["settings_revision"] == 2

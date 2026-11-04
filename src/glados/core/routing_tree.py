@@ -19,6 +19,8 @@ CATEGORIES = {
     "nexus": ("Nexus", "Turn the Nexus Core on or off, or consult an external advisor AI for slow, hard or out-of-reach questions"),
     "other": ("Other tools", "Use another local tool, such as a requested slow clap"),
 }
+# "slow clap" is the pre-rename spelling still found in saved decision lists.
+LOCAL_CLAP_TOOLS = ("slow_clap", "slow clap")
 LOCAL_CATEGORIES = {
     "manage_memory": "memory",
     "cancel_task": "tasks",
@@ -80,8 +82,9 @@ class RoutingTree:
         # Prefer the connected demo over a second slow-clap entry. Explicit
         # operator bindings to local audio playback still retain their meaning.
         if any(name.startswith("mcp.") and name.endswith(".slow_clap") for name in self.tools):
-            if not any(o.enabled and o.action == "tool" and o.tool == "slow clap" for o in decision.options):
-                self.tools.pop("slow clap", None)
+            if not any(o.enabled and o.action == "tool" and o.tool in LOCAL_CLAP_TOOLS for o in decision.options):
+                for name in LOCAL_CLAP_TOOLS:
+                    self.tools.pop(name, None)
         self.catalog = []
         for server in catalog:
             live = [t for t in server.get("tools", []) if t.get("name") in self.tools]

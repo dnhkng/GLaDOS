@@ -919,7 +919,7 @@ class Glados:
             url=str(self.completion_url),
             api_key=self.api_key,
             model=self.llm_model,
-            timeout=self.llm_timeout,
+            timeout=getattr(self, 'llm_timeout', None) or LLMConfig.timeout,
             request_options=self.llm_request_options,
             scheduler=self.inference_scheduler,
             shutdown_event=self.shutdown_event,
