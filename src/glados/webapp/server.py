@@ -24,18 +24,24 @@ Endpoints
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import socket
+import ssl
+import struct
 import threading
 import time
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from loguru import logger
+import numpy as np
 
 from ..tools.manage_slot import save_task
-from .config import console_hosts
+from .config import AUTO_HOST, console_hosts, local_addresses
 from .devices import device_snapshot, select_device
 from .serializers import (
     build_audio_state,
@@ -97,16 +103,34 @@ class _EngineHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str]):
+    def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str],
+                 tls: ssl.SSLContext | None = None):
         self.engine = engine
         self.allowed_hosts = console_hosts(address[0], allowed_hosts)
         super().__init__(address, _Handler)
+        if tls is not None:
+            # The handshake runs in each handler thread, so one slow client cannot stall accept().
+            self.socket = tls.wrap_socket(self.socket, server_side=True, do_handshake_on_connect=False)
+
+    def handle_error(self, request: socket.socket | tuple[bytes, socket.socket], client_address: tuple[str, int],
+                     ) -> None:
+        if isinstance(request, ssl.SSLSocket):
+            logger.debug("webapp: TLS connection from {} failed", client_address)
+            return
+        super().handle_error(request, client_address)
 
 
 class _Handler(BaseHTTPRequestHandler):
     """Stateless handler; reads the engine reference from ``self.server.engine``."""
 
     protocol_version = "HTTP/1.1"
+
+    def setup(self) -> None:
+        if isinstance(self.request, ssl.SSLSocket):
+            self.request.settimeout(10)
+            self.request.do_handshake()
+            self.request.settimeout(None)
+        super().setup()
 
     # ------------------------------------------------------------ utilities
     def _path(self) -> str:
@@ -124,9 +148,11 @@ class _Handler(BaseHTTPRequestHandler):
             parsed = urlparse("//" + hosts[0])
             # Accessing port validates it, even though the allowlist uses hostnames.
             _ = parsed.port
+            hostname = (parsed.hostname or "").lower()
+            allowed = self.server.allowed_hosts
             return bool(
-                parsed.hostname
-                and parsed.hostname.lower() in self.server.allowed_hosts
+                hostname
+                and (hostname in allowed or (AUTO_HOST in allowed and hostname in local_addresses()))
                 and parsed.username is None
                 and parsed.password is None
                 and not (parsed.path or parsed.query or parsed.fragment)
@@ -179,12 +205,15 @@ class _Handler(BaseHTTPRequestHandler):
         if path in (
             "/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js",
             "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
-            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js", "/glados-favicon.js", "/glados-dom.js",
+            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js", "/glados-favicon.js",
+            "/glados-dom.js", "/glados-remote-audio.js",
             "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
         ):
             return self._file(path[1:])
         if path.startswith("/static/"):
             return self._file(path[len("/static/"):])
+        if path == "/api/audio/remote":
+            return self._remote_audio()
         if path in ("/api/vision/frame", "/api/vision/live"):
             origin = self.headers.get("Origin")
             if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get(
@@ -549,6 +578,102 @@ class _Handler(BaseHTTPRequestHandler):
         finally:
             bus.unsubscribe(sub)
 
+    # ------------------------------------------------------- remote audio
+    _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    _WS_MAX_MESSAGE = 1 << 20
+
+    def _remote_audio(self) -> None:
+        """WebSocket: a browser's microphone and speaker replace the local ones while connected."""
+        audio = getattr(self.server.engine, "audio_io", None)
+        if not hasattr(audio, "attach"):
+            return self._json(404, {"error": "Remote audio is disabled"})
+        origin = self.headers.get("Origin")
+        # Browsers always send Origin on WebSockets; requiring it blocks cross-site hijacking.
+        if not origin or urlparse(origin).netloc != self.headers.get("Host"):
+            return self._json(403, {"error": "Cross-origin audio is not allowed"})
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        try:
+            valid_key = len(base64.b64decode(key, validate=True)) == 16
+        except ValueError:
+            valid_key = False
+        if self.headers.get("Upgrade", "").lower() != "websocket" or not valid_key:
+            return self._json(400, {"error": "WebSocket upgrade required"})
+        accept = base64.b64encode(hashlib.sha1((key + self._WS_GUID).encode()).digest()).decode()
+        self.send_response(101)
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.close_connection = True
+        lock = threading.Lock()
+
+        def send(opcode: int, payload: bytes) -> None:
+            size = len(payload)
+            head = bytes([0x80 | opcode]) + (bytes([size]) if size < 126 else
+                    struct.pack(">BH", 126, size) if size < 1 << 16 else struct.pack(">BQ", 127, size))
+            with lock:
+                self.wfile.write(head + payload)
+
+        agent = self.headers.get("User-Agent", "")
+        label = "Phone" if any(word in agent for word in ("Mobile", "Android", "iPhone")) else "Browser"
+        label += " · " + self.client_address[0]
+        # The page pings every 2 s; a vanished phone hands audio back to the PC.
+        self.connection.settimeout(10)
+        client = audio.attach(label, lambda text: send(0x1, text.encode()), lambda data: send(0x2, data))
+        try:
+            while True:
+                message = self._ws_receive()
+                if message is None:
+                    break
+                opcode, payload = message
+                if opcode == 0x2:
+                    audio.feed(client, payload)
+                elif opcode == 0x1:
+                    text = payload.decode("utf-8", "replace")
+                    if text.startswith("played:") and text[7:].isdigit():
+                        audio.played(client, int(text[7:]))
+                elif opcode == 0x9:
+                    send(0xA, payload)
+                elif opcode == 0x8:
+                    send(0x8, payload[:2])
+                    break
+        except OSError:  # Includes the keepalive timeout.
+            pass
+        finally:
+            audio.detach(client)
+
+    def _ws_receive(self) -> tuple[int, bytes] | None:
+        """Read one (possibly fragmented) client message; None when the socket closes or misbehaves."""
+        opcode, parts, size = None, [], 0
+        while True:
+            head = self.rfile.read(2)
+            if len(head) < 2:
+                return None
+            fin, frame_op, masked, length = head[0] & 0x80, head[0] & 0x0F, head[1] & 0x80, head[1] & 0x7F
+            if not masked:
+                return None
+            if length == 126:
+                length = struct.unpack(">H", self.rfile.read(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", self.rfile.read(8))[0]
+            size += length
+            if size > self._WS_MAX_MESSAGE:
+                return None
+            mask = np.frombuffer(self.rfile.read(4), dtype=np.uint8)
+            data = np.frombuffer(self.rfile.read(length), dtype=np.uint8)
+            if len(mask) < 4 or len(data) < length:
+                return None
+            payload = (data ^ np.resize(mask, length)).tobytes()
+            if frame_op >= 0x8:  # Control frames may interleave with fragments.
+                if not fin:
+                    return None
+                return frame_op, payload
+            if frame_op:
+                opcode = frame_op
+            parts.append(payload)
+            if fin and opcode is not None:
+                return opcode, b"".join(parts)
+
     def _send_sse(self, event_type: str, payload: Any) -> None:
         data = dumps(payload)
         frame = (f"event: {event_type}\ndata: {data}\n\n").encode()
@@ -635,12 +760,14 @@ class WebappServer:
     """Lifecycle wrapper: start/stop the console server on a background thread."""
 
     def __init__(
-        self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None
+        self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None,
+        tls: ssl.SSLContext | None = None,
     ) -> None:
         self.engine = engine
         self.host = host
         self.port = port
         self.allowed_hosts = list(allowed_hosts or [])
+        self.tls = tls
         self._server: _EngineHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.bound_port: int | None = None
@@ -649,7 +776,7 @@ class WebappServer:
         if self._server is not None:
             return
         try:
-            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts)
+            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts, self.tls)
             self.bound_port = self._server.server_address[1]
         except (OSError, ValueError) as exc:
             logger.error("webapp: failed to bind {}:{} - {}", self.host, self.port, exc)
@@ -661,7 +788,7 @@ class WebappServer:
             daemon=True,
         )
         self._thread.start()
-        logger.success("Webapp console live: http://{}:{}/", self.host, self.port)
+        logger.success("Webapp console live: {}", self.url)
 
     def shutdown(self) -> None:
         server = self._server
@@ -677,7 +804,7 @@ class WebappServer:
     @property
     def url(self) -> str:
         port = self.bound_port or self.port
-        return f"http://{self.host}:{port}/"
+        return f"{'https' if self.tls else 'http'}://{self.host}:{port}/"
 
     @property
     def is_running(self) -> bool:

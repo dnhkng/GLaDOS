@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
+import socket
+import time
+
 from pydantic import BaseModel, Field, model_validator
+
+# allowed_hosts entry meaning "whatever address this machine currently has", e.g. after changing Wi-Fi.
+AUTO_HOST = "auto"
+_local_cache: tuple[float, frozenset[str]] = (0.0, frozenset())
+
+
+def local_addresses(max_age_s: float = 10.0) -> frozenset[str]:
+    """This machine's current LAN address (the one its default route uses)."""
+    global _local_cache
+    checked, addresses = _local_cache
+    if time.monotonic() - checked < max_age_s:
+        return addresses
+    found = set()
+    for family, target in ((socket.AF_INET, "192.0.2.1"), (socket.AF_INET6, "2001:db8::1")):
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as probe:
+                probe.connect((target, 9))  # UDP connect only picks a route; nothing is sent.
+                found.add(probe.getsockname()[0].lower())
+        except OSError:
+            continue
+    _local_cache = (time.monotonic(), frozenset(found))
+    return _local_cache[1]
 
 
 def console_hosts(host: str, allowed_hosts: list[str]) -> frozenset[str]:
@@ -26,10 +51,17 @@ class WebappConfig(BaseModel):
     )
     host: str = Field(default="127.0.0.1", description="Listen address.")
     port: int = Field(default=8050, description="Listen port.")
-    allowed_hosts: list[str] = Field(default_factory=list, description="Additional HTTP Host names, without ports.")
+    allowed_hosts: list[str] = Field(default_factory=list, description=(
+        "Additional HTTP Host names, without ports. \"auto\" accepts this machine's current LAN address."))
+    tls: bool = Field(default=False, description="Serve over HTTPS; phones need it for microphone access.")
+    tls_cert: str | None = Field(default=None, description="PEM certificate; a self-signed one is generated if unset.")
+    tls_key: str | None = Field(default=None, description="PEM private key matching tls_cert.")
+    remote_audio: bool = Field(default=True, description="Let a connected browser take over microphone and speaker.")
 
     @model_validator(mode="after")
     def validate_hosts(self) -> WebappConfig:
         if self.enabled:
             console_hosts(self.host, self.allowed_hosts)
+        if (self.tls_cert is None) != (self.tls_key is None):
+            raise ValueError("tls_cert and tls_key must be set together")
         return self

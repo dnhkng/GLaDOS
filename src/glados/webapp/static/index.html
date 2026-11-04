@@ -238,6 +238,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   </nav>
 
   <main class="main">
+    <div class="card" id="remote-audio-banner" hidden style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center"><span class="console-note" id="remote-audio-banner-text" style="flex:1 1 16em;margin:0"></span><button type="button" class="btn-secondary" id="remote-audio-banner-toggle">Use this device’s microphone</button></div>
 
     <!-- MISSION CONTROL -->
     <section class="view active" id="view-home">
@@ -405,6 +406,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <section class="view" id="view-settings">
       <div class="card" style="margin-bottom:16px"><h3>Interface appearance</h3><label>Theme<select class="console-field" id="theme-settings"></select></label><p class="console-note">Dark, Clinical, Terminal and PotatOS share the same live controls. This browser remembers your theme. Open the Presence screen from the top bar for the tablet view.</p></div>
       <div class="card" style="margin-bottom:16px"><h3>Internet search sources</h3><p class="console-note">News requests read these sites’ pages directly, then search if needed. Other categories guide web searches. Enter one domain or site path per line, up to eight per category. Console changes apply to the next request and save to data/search_settings.yaml. File edits apply after restart.</p><form id="search-settings-form"><div class="grid cols-2"><label>Weather<textarea class="console-field" id="search-sources-weather" rows="4" placeholder="dwd.de&#10;meteoblue.com" disabled></textarea></label><label>News<textarea class="console-field" id="search-sources-news" rows="4" placeholder="reuters.com&#10;bbc.com/news" disabled></textarea></label><label>Reddit communities<textarea class="console-field" id="search-sources-reddit" rows="4" placeholder="reddit.com/r/LocalLLaMA&#10;reddit.com/r/Munich" disabled></textarea></label><label>General sources<textarea class="console-field" id="search-sources-general" rows="4" placeholder="A favorite domain or site path" disabled></textarea></label></div><button type="submit" class="btn-secondary" id="search-settings-save" style="margin-top:12px" disabled>Save favorite sources</button></form><p id="search-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
+      <div class="card" style="margin-bottom:16px"><h3>This device as microphone</h3><p class="console-note">Talk to GLaDOS through this browser, for example a phone: its microphone replaces the PC microphone and GLaDOS speaks through it. The PC takes over again when you stop or close the page. While GLaDOS speaks here, this microphone is muted so she does not hear herself. Browsers allow the microphone only over HTTPS.</p><p id="remote-audio-status" class="console-note"></p><p id="remote-audio-host" class="console-note"></p><button type="button" class="btn-secondary" id="remote-audio-toggle">Use this device’s microphone</button></div>
       <div class="card" style="margin-bottom:16px"><h3>Nexus Core</h3><p class="console-note">Consultation lets GLaDOS ask external advisor AIs in the background. The base decides where Central Core runs: auto moves it to the API when this machine is too slow, local and api force it. Needs the API key named in the configuration. Changes apply immediately and save to data/nexus_settings.yaml.</p><p id="nexus-status" class="console-note">Nexus Core unavailable.</p><form id="nexus-settings-form"><div class="grid cols-3"><label>Consultation<select class="console-field" id="nexus-consultation" disabled><option value="on">On</option><option value="off">Off</option></select></label><label>Base model<select class="console-field" id="nexus-base-mode" disabled><option value="auto">Auto</option><option value="local">Local only</option><option value="api">API only</option></select></label><label>Daily budget (USD)<input class="console-field" id="nexus-budget" type="number" min="0" max="1000" step="0.05" disabled></label></div><button type="submit" class="btn-secondary" id="nexus-settings-save" style="margin-top:12px" disabled>Save Nexus settings</button></form><p id="nexus-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="view-head"><h1>Facility Settings</h1><span class="sub">autonomy, voice input and routing.</span><button class="btn-secondary" id="decision-new">Create decision list</button></div>
       <div class="card" style="margin-bottom:16px"><h3>Facility Sensors &amp; Audio</h3><p class="console-note">Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.</p><div class="grid cols-3">
@@ -467,6 +469,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script src="glados-vision-themes.js"></script>
 <script src="glados-avatar.js"></script>
 <script src="glados-favicon.js"></script>
+<script src="glados-remote-audio.js"></script>
 <script src="glados-overview.js"></script>
 <script src="glados-routing.js"></script>
 <script src="glados-context.js"></script>
@@ -506,6 +509,7 @@ const S = {
 };
 const avatar = window.GladosAvatar.mount(document);
 const favicon = window.GladosFavicon?.mount(document) || {update(){}};
+const remoteAudio = window.GladosRemoteAudio?.mount(document) || {render(){}};
 const overview = window.GladosOverview.mount(document, {escape:esc, coreOwner, cores:allMinds, identity:coreIdentity, activity:coreActivity, describe:routingDescription});
 window.GladosThemes.mount(document, () => { avatar.update(S); overview.update(S); });
 const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
@@ -1037,6 +1041,9 @@ function renderConsoleControls(){
     if(!searchSourcesDirty&&!operationPending) field.value=(S.searchSettings?.[category]||[]).join('\n');
   });
   $('search-settings-save').disabled=!ready||!S.searchSettings;
+  const r=S.remoteAudio;
+  $('remote-audio-host').textContent=!r?'Remote audio is not available with this audio backend.':
+    r.active?'Microphone in use: '+r.label+' since '+timeStr(r.since*1000)+'.':'Microphone in use: PC.';
   const n=S.nexus, nexusReady=ready&&!!n&&n.available;
   ['nexus-consultation','nexus-base-mode','nexus-budget','nexus-settings-save'].forEach(id=>{
     const el=$(id);
@@ -1144,6 +1151,7 @@ function applyAudio(audio){
 function applyState(st){
   if('search_settings' in st) S.searchSettings=st.search_settings;
   if('nexus' in st) S.nexus=st.nexus;
+  if('remote_audio' in st) S.remoteAudio=st.remote_audio;
   if('autonomy_core' in st) S.autonomyCore=st.autonomy_core;
   if("vision_mind" in st){
     const incoming=st.vision_mind, current=S.visionMind;

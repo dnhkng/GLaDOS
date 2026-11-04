@@ -136,6 +136,11 @@ def build_audio_state(engine: Any) -> dict[str, Any]:
     }
 
 
+def _remote_audio(engine: Any) -> dict[str, Any] | None:
+    status = getattr(getattr(engine, "audio_io", None), "remote_status", None)
+    return status() if callable(status) else None
+
+
 def _emotion_state(engine: Any) -> dict[str, Any] | None:
     agent = getattr(engine, "_emotion_agent", None)
     if agent is None:
@@ -194,6 +199,7 @@ def build_state(engine: Any) -> dict[str, Any]:
         "search_settings": (engine.search_agent.preferences.snapshot()
                             if getattr(engine, "search_agent", None) else None),
         "nexus": engine.nexus_agent.status() if getattr(engine, "nexus_agent", None) else None,
+        "remote_audio": _remote_audio(engine),
         "vision": engine.vision_state.snapshot() if getattr(engine, "vision_state", None) else None,
         "audio": build_audio_state(engine),
         "emotion": _emotion_state(engine),

@@ -227,6 +227,7 @@ def test_webapp_server_serves_snapshot_and_stream() -> None:
             ("glados-vision-themes.js", "application/javascript"),
             ("glados-favicon.js", "application/javascript"),
             ("glados-dom.js", "application/javascript"),
+            ("glados-remote-audio.js", "application/javascript"),
             ("glados-themes.css", "text/css"),
             ("glados-console.css", "text/css"),
             ("potato-skin.svg", "image/svg+xml"),
@@ -340,10 +341,11 @@ class _LauncherEngine:
 class _FakeServer:
     """Stub WebappServer that records start/stop without binding a socket."""
 
-    def __init__(self, engine, host: str, port: int, allowed_hosts=None) -> None:
+    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None) -> None:
         self.engine = engine
         self.host = host
         self.port = port
+        self.tls = tls
         self.allowed_hosts = allowed_hosts
         self.is_running = False
         self.shutdown_called = False

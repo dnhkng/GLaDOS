@@ -204,3 +204,4 @@ data/operator_settings.yaml.tmp
 # Local profile and macOS resource forks
 /glados_config.yaml
 ._*
+data/webapp_tls/

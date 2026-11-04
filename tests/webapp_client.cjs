@@ -152,7 +152,7 @@ class Element {
     EventSource, setInterval() {}, clearInterval() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-dom.js", "glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-dom.js", "glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-remote-audio.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
@@ -282,6 +282,13 @@ class Element {
     assert.equal(writes,1,'Unchanged live content is left alone');
     dom='edited elsewhere';context.GladosDom.setHTML(box,'a &rarr; b');
     assert.equal(writes,2,'Content changed by other code is restored');
+  }
+  {
+    // Phones capture at 44.1/48 kHz; the console sends 16 kHz int16 to GLaDOS, continuous across chunks.
+    const shrink=context.GladosRemoteAudio.downsampler(48000);
+    const first=shrink(new Float32Array(4000).fill(0.5)),second=shrink(new Float32Array(800).fill(0.5));
+    assert.equal(first.length+second.length,1600);
+    assert.ok(Math.abs(first[0]-0.5*0x7fff)<2);
   }
   assert.ok(stream, "Client should establish the live stream, not fall back to demo data");
   stream.onopen();

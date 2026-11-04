@@ -1,3 +1,9 @@
 Glados:
   llm_model: "qwen3:4b-instruct"
 
+  webapp:
+    enabled: true
+    host: "0.0.0.0"                  # Reachable from the phone on the same Wi-Fi
+    port: 8050
+    allowed_hosts: ["auto"]          # Accept this PC's current address, whichever Wi-Fi it is on
+    tls: true                        # Phones allow the microphone only over HTTPS

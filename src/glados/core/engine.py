@@ -1161,6 +1161,13 @@ class Glados:
             backend_type=config.audio_io,
             backend_options=config.audio_io_options,
         )
+        webapp = config.webapp
+        if (webapp and webapp.enabled and webapp.remote_audio and config.audio_io == "sounddevice"
+                and not config.native_audio.enabled and config.input_mode != "text"):
+            # A browser on the console (e.g. a phone) can take over microphone and speaker.
+            from ..audio_io.remote_io import RemoteSwitchAudioIO
+
+            audio_io = RemoteSwitchAudioIO(audio_io)
 
         try:
             return cls(

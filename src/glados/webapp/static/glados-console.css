@@ -121,3 +121,4 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
   *,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}
   :root[data-theme="terminal"] body::after {display:none}
 }
+#remote-audio-banner[hidden] {display:none}

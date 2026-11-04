@@ -301,11 +301,33 @@ def run_webapp(
         )
         sys.exit(1)
 
+    tls = None
+    if webapp_config.tls:
+        from .webapp.config import AUTO_HOST, console_hosts, local_addresses
+        from .webapp.tls import ensure_certificate, server_context
+
+        if webapp_config.tls_cert and webapp_config.tls_key:
+            cert, key = Path(webapp_config.tls_cert), Path(webapp_config.tls_key)
+        else:
+            hosts = console_hosts(webapp_config.host, webapp_config.allowed_hosts)
+            # Covers today's address; a new network regenerates the certificate on the next start.
+            hosts = (hosts - {AUTO_HOST}) | (local_addresses() if AUTO_HOST in hosts else frozenset())
+            cert, key = ensure_certificate(hosts)
+        tls = server_context(cert, key)
+
     glados = Glados.from_config(glados_config)
     server = WebappServer(
-        glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts
+        glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts,
+        tls=tls,
     )
     server.start()
+    if server.is_running and webapp_config.host in ("0.0.0.0", "::", ""):
+        from .webapp.config import local_addresses
+
+        scheme = "https" if tls else "http"
+        for address in sorted(local_addresses()):
+            shown = f"[{address}]" if ":" in address else address
+            logger.success("Open from a phone on this network: {}://{}:{}/", scheme, shown, server.bound_port)
     if not server.is_running:
         logger.error(
             "Webapp console could not bind {}:{} - aborting.",
