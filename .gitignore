@@ -207,3 +207,4 @@ data/operator_settings.yaml.tmp
 data/webapp_tls/
 data/webapp_token
 data/logs/
+data/webapp_sessions.json

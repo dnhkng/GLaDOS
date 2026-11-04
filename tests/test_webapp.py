@@ -2,6 +2,7 @@
 
 import http.client
 import json
+import ssl
 from pathlib import Path
 import shutil
 import subprocess
@@ -669,3 +670,26 @@ def test_the_pcs_own_lan_address_counts_as_this_machine(monkeypatch) -> None:
     for address, local in (("10.0.0.7", True), ("127.0.0.1", True), ("10.0.0.8", False)):
         handler.client_address = (address, 0)
         assert server_module._Handler._from_this_machine(handler) is local
+
+
+def test_plain_http_on_tls_port_redirects_to_the_same_host(tmp_path: Path) -> None:
+    from glados.webapp.tls import ensure_certificate, server_context
+
+    cert, key = ensure_certificate(frozenset({"127.0.0.1"}), tmp_path)
+    server = WebappServer(_FakeEngine(), host="127.0.0.1", port=0, tls=server_context(cert, key))
+    server.start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request("GET", "/")
+        response = conn.getresponse()
+        assert response.status == 301
+        assert response.getheader("Location") == f"https://127.0.0.1:{server.bound_port}/"
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request("GET", "/", headers={"Host": "evil.example"})
+        assert conn.getresponse().status == 400, "Never redirect to a host that is not this console"
+        context = ssl.create_default_context(cafile=str(tmp_path / "ca.pem"))
+        conn = http.client.HTTPSConnection("127.0.0.1", server.bound_port, timeout=5, context=context)
+        conn.request("GET", "/api/snapshot")
+        assert conn.getresponse().status == 200, "TLS clients are unaffected"
+    finally:
+        server.shutdown()

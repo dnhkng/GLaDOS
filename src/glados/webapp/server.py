@@ -32,6 +32,7 @@ from pathlib import Path
 import socket
 import ssl
 import struct
+import sys
 import threading
 import time
 from typing import Any
@@ -148,7 +149,30 @@ class _EngineHTTPServer(ThreadingHTTPServer):
         if isinstance(request, ssl.SSLSocket):
             logger.debug("webapp: TLS connection from {} failed", client_address)
             return
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            logger.debug("webapp: {} dropped the connection", client_address)
+            return  # A closed tab or a phone leaving Wi-Fi is not a server error.
         super().handle_error(request, client_address)
+
+
+def _host_ok(host: str, allowed: list[str]) -> bool:
+    """Whether a Host header names this console (DNS-rebinding guard, also used for redirects)."""
+    if not host or any(char.isspace() for char in host):
+        return False
+    try:
+        parsed = urlparse("//" + host)
+        # Accessing port validates it, even though the allowlist uses hostnames.
+        _ = parsed.port
+        hostname = (parsed.hostname or "").lower()
+        return bool(
+            hostname
+            and (hostname in allowed or (AUTO_HOST in allowed and hostname in local_addresses()))
+            and parsed.username is None
+            and parsed.password is None
+            and not (parsed.path or parsed.query or parsed.fragment)
+        )
+    except ValueError:
+        return False
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -159,9 +183,30 @@ class _Handler(BaseHTTPRequestHandler):
     def setup(self) -> None:
         if isinstance(self.request, ssl.SSLSocket):
             self.request.settimeout(10)
+            self._redirect_plain_http()
             self.request.do_handshake()
             self.request.settimeout(None)
         super().setup()
+
+    def _redirect_plain_http(self) -> None:
+        """Answer ``http://`` on the TLS port with a redirect to the same host over HTTPS.
+
+        A TLS client always opens with a handshake record (0x16). Anything else is read raw,
+        before OpenSSL would swallow it, so the redirect can reuse the Host the browser asked for.
+        """
+        raw = socket.socket  # Bypass SSLSocket's methods: no TLS session exists yet.
+        if raw.recv(self.request, 1, socket.MSG_PEEK) in (b"", b"\x16"):
+            return
+        head = raw.recv(self.request, 8192)
+        host = next((line.split(":", 1)[1].strip() for line in head.decode("latin-1").split("\r\n")[1:]
+                     if line.lower().startswith("host:")), "")
+        if _host_ok(host, self.server.allowed_hosts):
+            target = f"https://{host}/".encode()
+            raw.sendall(self.request, b"HTTP/1.1 301 Moved Permanently\r\nLocation: " + target
+                        + b"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        else:
+            raw.sendall(self.request, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        raise ConnectionAbortedError("plain HTTP on the TLS port")
 
     # ------------------------------------------------------------ utilities
     def _path(self) -> str:
@@ -173,23 +218,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _host_allowed(self) -> bool:
         hosts = self.headers.get_all("Host", [])
-        if len(hosts) != 1 or any(char.isspace() for char in hosts[0]):
-            return False
-        try:
-            parsed = urlparse("//" + hosts[0])
-            # Accessing port validates it, even though the allowlist uses hostnames.
-            _ = parsed.port
-            hostname = (parsed.hostname or "").lower()
-            allowed = self.server.allowed_hosts
-            return bool(
-                hostname
-                and (hostname in allowed or (AUTO_HOST in allowed and hostname in local_addresses()))
-                and parsed.username is None
-                and parsed.password is None
-                and not (parsed.path or parsed.query or parsed.fragment)
-            )
-        except ValueError:
-            return False
+        return len(hosts) == 1 and _host_ok(hosts[0], self.server.allowed_hosts)
 
     def _device(self) -> str | None:
         """This request's paired-device id, if it carries a live session."""
