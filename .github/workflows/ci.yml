@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, myGLaDOS]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries (PortAudio, espeak-ng)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libportaudio2 espeak-ng
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --extra cpu --extra dev --locked
+
+      # The ONNX models are release assets, not tracked in git; cache them between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            models/ASR/*.onnx
+            models/TTS/*.onnx
+            models/TTS/*.bin
+          key: models-${{ hashFiles('src/glados/cli.py') }}
+
+      - name: Download models
+        run: uv run --no-sync glados download
+
+      # Bug-class rules only; the full rule set (annotations, style) is not yet clean.
+      - name: Lint
+        run: uv run --no-sync ruff check src tests --select F,E9,B,PLE
+
+      - name: Test
+        run: uv run --no-sync pytest -q

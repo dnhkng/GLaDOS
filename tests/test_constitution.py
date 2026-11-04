@@ -2,7 +2,6 @@
 
 import time
 
-import pytest
 
 from glados.autonomy.constitution import (
     Constitution,

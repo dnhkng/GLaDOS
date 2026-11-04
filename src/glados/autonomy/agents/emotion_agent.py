@@ -188,7 +188,7 @@ class EmotionAgent(Subagent):
                 data = option_request(config.model, [{"role": "system", "content": system},
                                                     {"role": "user", "content": content}], ids)
                 probabilities = request_scores(config.url, config.headers, data, ids, max(.001, deadline-time.monotonic()))
-                return sum(value * probability for value, probability in zip([-1, -.5, 0, .5, 1], probabilities))
+                return sum(value * probability for value, probability in zip([-1, -.5, 0, .5, 1], probabilities, strict=True))
         try:
             futures = [self._scores.submit(score, axis) for axis in axes]
             values = [future.result() for future in futures]

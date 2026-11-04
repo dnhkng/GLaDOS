@@ -65,6 +65,7 @@ def _serialize_or(serializer: Any, item: Any) -> dict[str, Any]:
     try:
         return serializer(item)
     except Exception:  # pragma: no cover
+        logger.opt(exception=True).debug("webapp: {} failed", getattr(serializer, "__name__", serializer))
         return {}
 
 
@@ -110,11 +111,22 @@ class _EngineHTTPServer(ThreadingHTTPServer):
         self.token = token
         self.trust_loopback = trust_loopback
         self.secure = tls is not None
+        self._shared: dict[str, tuple[float, Any]] = {}
+        self._shared_lock = threading.Lock()
         self.allowed_hosts = console_hosts(address[0], allowed_hosts)
         super().__init__(address, _Handler)
         if tls is not None:
             # The handshake runs in each handler thread, so one slow client cannot stall accept().
             self.socket = tls.wrap_socket(self.socket, server_side=True, do_handshake_on_connect=False)
+
+    def shared(self, name: str, max_age_s: float, build: Any) -> Any:
+        """Build a stream payload once for every connected tab instead of once per tab."""
+        with self._shared_lock:
+            built_at, payload = self._shared.get(name, (0.0, None))
+            if time.monotonic() - built_at >= max_age_s:
+                payload = build(self.engine)
+                self._shared[name] = (time.monotonic(), payload)
+            return payload
 
     def handle_error(self, request: socket.socket | tuple[bytes, socket.socket], client_address: tuple[str, int],
                      ) -> None:
@@ -578,10 +590,10 @@ class _Handler(BaseHTTPRequestHandler):
             while not self.server.engine.shutdown_event.is_set():
                 now = time.monotonic()
                 if now >= next_state:
-                    self._send_sse("state", build_state(engine))
+                    self._send_sse("state", self.server.shared("state", 0.4, build_state))
                     next_state = now + 0.5
                 if now >= next_snapshot:
-                    self._send_sse("snapshot", build_snapshot(engine))
+                    self._send_sse("snapshot", self.server.shared("snapshot", 1.5, build_snapshot))
                     next_snapshot = now + 2.0
                 if now >= next_camera:
                     audio = build_audio_state(engine)

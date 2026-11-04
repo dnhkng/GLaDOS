@@ -1,0 +1,15 @@
+# GLaDOS with the web console, started at login. Logs: journalctl --user -u glados, or data/logs/glados.log.
+# Adjust WorkingDirectory if the repository lives elsewhere.
+[Unit]
+Description=GLaDOS voice assistant (web console)
+Wants=ollama-igpu.service
+After=ollama-igpu.service pipewire.service
+
+[Service]
+WorkingDirectory=%h/Documents/perso/Projects/GLaDOS
+ExecStart=%h/.local/bin/uv run --no-sync glados webapp --config configs/glados_extended_config.yaml --config configs/my_glados.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

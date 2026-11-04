@@ -5,3 +5,10 @@ __pycache__
 *.pyc
 dist/
 tmp/
+.git
+.github
+data/
+tests/
+# Model weights are fetched by `glados download` inside the build; only the tracked configs are sent.
+models/**/*.onnx
+models/**/*.bin

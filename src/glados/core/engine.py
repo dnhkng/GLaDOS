@@ -278,9 +278,9 @@ class GladosConfig(BaseModel):
                 try:
                     data = yaml.safe_load(path.read_text(encoding=encoding))
                     break
-                except UnicodeDecodeError:
+                except UnicodeDecodeError as exc:
                     if encoding == "utf-8-sig":
-                        raise ValueError(f"Could not decode YAML file {path} with any supported encoding")
+                        raise ValueError(f"Could not decode YAML file {path} with any supported encoding") from exc
 
             data = data or dict()
 

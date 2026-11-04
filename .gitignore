@@ -206,3 +206,4 @@ data/operator_settings.yaml.tmp
 ._*
 data/webapp_tls/
 data/webapp_token
+data/logs/

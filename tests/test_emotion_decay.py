@@ -5,7 +5,6 @@ from unittest.mock import Mock
 import pytest
 
 from glados.autonomy.agents.emotion_agent import EmotionAgent
-from glados.autonomy.emotion_state import EmotionEvent
 from tests.test_quiet_emotion import emotion_agent
 
 
@@ -116,7 +115,7 @@ def test_parallel_axis_scores_and_superseded_results(monkeypatch):
             lanes.append(lane)
             yield
     agent._llm_config.scheduler = Scheduler()
-    monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5))))
+    monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5), strict=True)))
     def scores(url, headers, data, ids, timeout):
         requests.append(data)
         barrier.wait(timeout=2)
@@ -142,7 +141,7 @@ def test_parallel_axis_scores_and_superseded_results(monkeypatch):
 def test_probability_weighted_axes_and_pause_rejects_inflight(monkeypatch):
     module = "glados.autonomy.agents.emotion_agent."
     agent = emotion_agent(monkeypatch)
-    monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5))))
+    monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5), strict=True)))
     monkeypatch.setattr(module + "request_scores", lambda *a: [.5, .2, .1, .1, .1])
     agent.react("An event")
     agent.run(agent.runtime)

@@ -51,7 +51,7 @@ from typing import Any, Literal
 from numba import jit  # type: ignore
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from threadpoolctl import threadpool_limits
 import yaml  # PyYAML for YAML loading
 
@@ -161,8 +161,8 @@ class MelSpectrogramConfig(BaseModel):
         description="Optional cap for native threadpools during mel computation. None leaves defaults.",
     )
 
-    class Config:
-        populate_by_name = True  # Enables use of YAML field names like 'pad_value', 'lowfreq', 'highfreq'
+    # Enables use of YAML field names like 'pad_value', 'lowfreq', 'highfreq'
+    model_config = ConfigDict(populate_by_name=True)
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> "MelSpectrogramConfig":

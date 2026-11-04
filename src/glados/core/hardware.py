@@ -17,11 +17,9 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 from typing import Any
 import urllib.request
 
-from loguru import logger
 
 
 @dataclass

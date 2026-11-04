@@ -145,8 +145,10 @@ class RemoteSwitchAudioIO(AudioIO):
             self.local.start_speaking(audio_data, sample_rate, text, **kwargs)
             return
         try:
-            client.send_text(f"play:{track}:{rate}")
-            client.send_binary(np.ascontiguousarray(audio_data, dtype="<f4").tobytes())
+            # int16 halves the Wi-Fi traffic of float32; the new verb keeps stale pages from misreading it.
+            client.send_text(f"play16:{track}:{rate}")
+            pcm = np.clip(np.asarray(audio_data, dtype=np.float32), -1.0, 1.0) * 32767.0
+            client.send_binary(pcm.astype("<i2").tobytes())
         except OSError:
             self.detach(client)
 

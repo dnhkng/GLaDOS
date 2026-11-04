@@ -100,6 +100,7 @@ class KnowledgeStore:
                     )
                 )
             except Exception:
+                logger.warning("Knowledge store: skipping malformed entry {!r}", item)
                 continue
         return entries
 

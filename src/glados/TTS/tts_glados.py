@@ -2,7 +2,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from pickle import load
 from typing import Any
 
 import numpy as np
@@ -11,6 +10,7 @@ import onnxruntime as ort  # type: ignore
 
 from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
+from ..utils.safe_pickle import load_data_pickle
 from .phonemizer import Phonemizer
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
@@ -180,8 +180,7 @@ class SpeechSynthesizer:
             FileNotFoundError: If the specified pickle file does not exist.
             PickleError: If there are issues during pickle deserialization.
         """
-        with path.open("rb") as f:
-            return dict(load(f))
+        return load_data_pickle(path)
 
     def generate_speech_audio(self, text: str) -> NDArray[np.float32]:
         """

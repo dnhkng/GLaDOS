@@ -1040,6 +1040,10 @@ class GladosUI(App[None]):
         # Log to TUI via print (captured by Printer widget)
         fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}"
         logger.add(print, format=fmt, level="SUCCESS")
+        # logger.remove() above also dropped the session log file.
+        from .observability.log_file import enable_file_log
+
+        enable_file_log()
 
     def on_mount(self) -> None:
         """

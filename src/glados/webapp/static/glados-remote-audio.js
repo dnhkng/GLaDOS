@@ -82,7 +82,7 @@
       };
       ws.onmessage = event => {
         if (typeof event.data === 'string') {
-          if (event.data.startsWith('play:')) {
+          if (event.data.startsWith('play16:')) {
             const [, track, rate] = event.data.split(':');
             current.pending = {track, rate: Number(rate)};
           } else if (event.data === 'stop') stopVoice();
@@ -91,7 +91,8 @@
         }
         const pending = current.pending; current.pending = null;
         if (!pending) return;
-        const samples = new Float32Array(event.data);
+        const pcm = new Int16Array(event.data), samples = new Float32Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) samples[i] = pcm[i] / 32768;
         if (!samples.length) { ws.send('played:' + pending.track); return; }
         stopVoice();
         const buffer = context.createBuffer(1, samples.length, pending.rate);

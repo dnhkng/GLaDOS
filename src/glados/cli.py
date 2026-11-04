@@ -488,6 +488,9 @@ def main() -> int:
         if not models_valid():
             print("Some model files are invalid or missing. Please run 'uv run glados download'")
             return 1
+        from .observability.log_file import enable_file_log
+
+        enable_file_log()
         if args.command == "say":
             say(args.text, args.config)
         elif args.command == "start":

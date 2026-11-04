@@ -29,7 +29,6 @@ from ..autonomy.llm_client import LLMConfig
 from typing import Any, TypeVar
 
 import httpx
-from loguru import logger
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)

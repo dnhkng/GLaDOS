@@ -91,7 +91,7 @@ def test_remote_client_replaces_local_microphone_and_speaker() -> None:
 
     speech = np.full(1600, 0.1, np.float32)
     audio.start_speaking(speech, 16000)
-    assert sink.text[-1] == "play:1:16000" and len(sink.binary[-1]) == 1600 * 4
+    assert sink.text[-1] == "play16:1:16000" and len(sink.binary[-1]) == 1600 * 2
     assert audio.check_if_speaking() and not local.spoken
     audio.played(client, 1)
     assert audio.measure_percentage_spoken(1600, 16000) == (False, 100)
@@ -171,8 +171,9 @@ def test_phone_attaches_over_https_websocket_and_detaches_on_close(https_console
         ws.send(b"\0\0" * VAD_WINDOW)
         assert len(audio.get_sample_queue().get(timeout=2)[0]) == VAD_WINDOW
         audio.start_speaking(np.full(320, 0.2, np.float32), 16000)
-        assert ws.recv(timeout=2) == "play:1:16000"
-        assert len(ws.recv(timeout=2)) == 320 * 4
+        assert ws.recv(timeout=2) == "play16:1:16000"
+        pcm = np.frombuffer(ws.recv(timeout=2), "<i2")
+        assert len(pcm) == 320 and abs(pcm[0] / 32768 - 0.2) < 1e-3
         ws.send("played:1")
         assert audio.measure_percentage_spoken(320, 16000) == (False, 100)
     deadline = time.monotonic() + 3

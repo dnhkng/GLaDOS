@@ -419,7 +419,7 @@ class MCPManager:
         future = asyncio.run_coroutine_threadsafe(self._fetch_resource_async(server_name, uri), self._loop)
         try:
             return future.result(timeout=timeout)
-        except FuturesTimeoutError as exc:
+        except FuturesTimeoutError:
             future.cancel()
             logger.warning(f"MCP: resource '{uri}' from {server_name} timed out.")
             return None

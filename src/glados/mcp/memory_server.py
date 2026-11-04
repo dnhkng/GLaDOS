@@ -179,7 +179,7 @@ def search_memory(query: str, limit: int = 5) -> str:
     scored.sort(key=lambda x: x[0], reverse=True)
 
     results = []
-    for score, fact in scored[:limit]:
+    for _score, fact in scored[:limit]:
         results.append({
             "id": fact.id,
             "content": fact.content,

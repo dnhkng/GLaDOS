@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 import threading
 import time
 
+from loguru import logger
+
 from .event_bus import EventBus
 from .slots import TaskSlotStore
 
@@ -171,7 +173,7 @@ class TaskManager:
                         )
                         self._publish_group(handle.group)
                 except Exception:
-                    pass
+                    logger.opt(exception=True).debug("Task heartbeat for {} failed", handle.id)
 
         thread = threading.Thread(target=heartbeat, daemon=True, name="TaskProgress")
         thread.start()

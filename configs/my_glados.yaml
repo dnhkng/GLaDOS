@@ -1,5 +1,7 @@
 Glados:
   llm_model: "qwen3:4b-instruct"
+  llm_request_options:
+    keep_alive: -1                  # Ollama unloads after 5 min idle by default; reloading + prefill costs ~14 s
 
   webapp:
     enabled: true

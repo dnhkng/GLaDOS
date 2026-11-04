@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import threading
 from typing import Any
 
+from loguru import logger
+
 ContextSource = Callable[[], str | None]
 
 
@@ -94,8 +96,8 @@ class ContextBuilder:
                     messages.append({"source": entry.name, "volatile": entry.volatile,
                                      "message": {"role": "system", "content": content}})
             except Exception:
-                # Skip failed sources silently
-                pass
+                # One broken source must not block the turn, but it should not vanish unnoticed.
+                logger.opt(exception=True).warning("Context source {} failed; omitting it", entry.name)
         return messages
 
 

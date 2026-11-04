@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cache
 from pathlib import Path
-from pickle import load
 import re
 from typing import Any
 
@@ -14,6 +13,7 @@ import onnxruntime as ort  # type: ignore
 
 from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
+from ..utils.safe_pickle import load_data_pickle
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
 ort.set_default_logger_severity(4)
@@ -268,8 +268,7 @@ class Phonemizer:
             FileNotFoundError: If the specified file path does not exist.
             pickle.UnpicklingError: If there are issues unpickling the file.
         """
-        with path.open("rb") as f:
-            return load(f)  # type: ignore
+        return load_data_pickle(path)
 
     @staticmethod
     def _unique_consecutive(arr: list[NDArray[np.int64]]) -> list[NDArray[np.int64]]:
