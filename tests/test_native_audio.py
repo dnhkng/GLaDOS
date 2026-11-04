@@ -139,9 +139,12 @@ def test_profile_loads_only_required_asr_model(monkeypatch: pytest.MonkeyPatch, 
 
     monkeypatch.setattr("glados.core.engine.get_audio_transcriber", asr)
     monkeypatch.setattr("glados.core.engine.get_speech_synthesizer", MagicMock())
-    monkeypatch.setattr("glados.core.engine.get_audio_system", MagicMock())
+    audio = MagicMock()
+    audio.get_sample_queue.return_value = queue.Queue()  # Profiles with a phone console wrap it in a pump thread.
+    monkeypatch.setattr("glados.core.engine.get_audio_system", MagicMock(return_value=audio))
     monkeypatch.setattr(Glados, "__init__", initialize)
     Glados.from_config(config)
+    captured["audio_io"].close()
     assert asr.called is loads_asr
     if not loads_asr:
         assert captured["asr_model"] is None

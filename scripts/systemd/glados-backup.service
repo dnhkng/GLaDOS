@@ -1,0 +1,7 @@
+# Runs scripts/backup-data.sh; scheduled by glados-backup.timer.
+[Unit]
+Description=Back up GLaDOS data and memory
+
+[Service]
+Type=oneshot
+ExecStart=%h/Documents/perso/Projects/GLaDOS/scripts/backup-data.sh

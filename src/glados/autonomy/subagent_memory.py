@@ -155,7 +155,7 @@ class SubagentMemory:
 
         for entry in by_age[:to_remove]:
             del self._entries[entry.key]
-            logger.debug("Memory %s: evicted %s", self.agent_id, entry.key)
+            logger.debug("Memory {}: evicted {}", self.agent_id, entry.key)
 
     def _load(self) -> None:
         """Load entries from disk."""
@@ -178,7 +178,7 @@ class SubagentMemory:
                         )
                         self._entries[entry.key] = entry
         except Exception as exc:
-            logger.warning("Failed to load memory for %s: %s", self.agent_id, exc)
+            logger.warning("Failed to load memory for {}: {}", self.agent_id, exc)
 
     def _save(self) -> None:
         """Save entries to disk."""
@@ -196,7 +196,7 @@ class SubagentMemory:
                             f.write(line + "\n")
                         f.flush()
             except Exception as exc:
-                logger.warning("Failed to save memory for %s: %s", self.agent_id, exc)
+                logger.warning("Failed to save memory for {}: {}", self.agent_id, exc)
 
     def __len__(self) -> int:
         with self._lock:

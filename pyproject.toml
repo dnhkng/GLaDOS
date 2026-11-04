@@ -114,3 +114,8 @@ line-ending = "auto"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+# Mixins of Glados / LanguageModelProcessor: their methods use state the host class's __init__ sets up.
+module = ["glados.core.commands", "glados.core.llm_wire"]
+disable_error_code = ["attr-defined"]

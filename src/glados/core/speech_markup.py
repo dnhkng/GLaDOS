@@ -41,26 +41,65 @@ class SpeechMarkupParser:
 
     Ordinary bracketed text is preserved. Unknown directions are discarded and
     retain the previous expression. An unfinished direction is dropped at EOS.
+    Small models also write ``[emotion]smug`` or ``[emotion]smug]``; those are
+    recognised too, so the expression name is never spoken.
     """
 
-    PREFIX = "[emotion:"
+    PREFIX = "[emotion"
+    _LONGEST = max(map(len, EMOTIONS))
 
     def __init__(self) -> None:
         self.emotion: str | None = None
         self._pending = ""
         self._marker: str | None = None
+        # "?": just after "[emotion"; ":" inside "[emotion:...]"; "]": reading a name after "[emotion]".
+        self._mode = "?"
+
+    def _set(self, name: str) -> bool:
+        name = name.strip().lower()
+        if name in EMOTIONS:
+            self.emotion = name
+            return True
+        return False
+
+    def _close_bare(self, char: str | None) -> str:
+        """End a ``[emotion]name`` marker; return text that must still be spoken."""
+        marker, self._marker = self._marker or "", None
+        if self._set(marker):
+            return "" if char in (None, "]") else char
+        return marker + (char or "")  # not a known expression: it was ordinary speech
 
     def feed(self, chunk: str, *, final: bool = False) -> list[SpeechText]:
         segments: list[SpeechText] = []
         text = ""
         for char in chunk:
             if self._marker is not None:
-                if char == "]":
-                    name = self._marker.strip().lower()
-                    if name in EMOTIONS:
-                        self.emotion = name
+                if self._mode == "?":
+                    if char == ":":
+                        self._mode = ":"
+                        continue
+                    if char == "]":
+                        self._mode = "]"
+                        continue
+                    # "[emotion" followed by anything else was ordinary text.
                     self._marker = None
-                elif len(self._marker) < 64:
+                    text += self.PREFIX + char
+                    continue
+                if self._mode == ":":
+                    if char == "]":
+                        self._set(self._marker)
+                        self._marker = None
+                    elif len(self._marker) < 64:
+                        self._marker += char
+                    continue
+                # Bare form: the name ends at "]", or at the first non-letter once it is complete.
+                name = (self._marker + char).lstrip().lower()
+                if char == "]" or (not (char.isalpha() or char == " ")
+                                   or not any(e.startswith(name) for e in EMOTIONS)) and self._marker.strip():
+                    text += self._close_bare(char)
+                elif len(self._marker) > self._LONGEST + 1:
+                    text += self._close_bare(char)
+                else:
                     self._marker += char
                 continue
             self._pending += char
@@ -73,10 +112,13 @@ class SpeechMarkupParser:
                     text = ""
                 self._pending = ""
                 self._marker = ""
+                self._mode = "?"
         if final:
             # Preserve an ordinary trailing bracket, but suppress a partial tag.
             if self._pending and not self._pending.startswith("[e"):
                 text += self._pending
+            if self._marker is not None and self._mode == "]":
+                text += self._close_bare(None)
             self._pending = ""
             self._marker = None
         if text:

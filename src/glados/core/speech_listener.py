@@ -291,6 +291,13 @@ class SpeechListener:
         else:
             self._gap_counter = 0
 
+    # Seconds after GLaDOS last spoke during which a reply needs no wake word (0 disables it).
+    WAKE_FOLLOW_UP_S: float = 0.0
+
+    def _in_follow_up(self) -> bool:
+        since = self._interaction_state.seconds_since_assistant() if self._interaction_state else None
+        return self.WAKE_FOLLOW_UP_S > 0 and since is not None and since <= self.WAKE_FOLLOW_UP_S
+
     def _wakeword_detected(self, text: str) -> bool:
         """
         Checks if the transcribed text contains a sufficiently similar match to the configured wake word.
@@ -312,7 +319,8 @@ class SpeechListener:
         if self.wake_word is None:
             raise ValueError("Wake word should not be None")
 
-        words = text.split()
+        words = [word.strip(".,;:!?¿¡«»\"'()…").lower() for word in text.split()]
+        words = [word for word in words if word]
         if not words:
             return False
         closest_distance = min(distance(word.lower(), self.wake_word) for word in words)
@@ -409,12 +417,14 @@ class SpeechListener:
                 self.reset(preserve_pending=True)
             return
 
+        asr_started = time.perf_counter()
         detected_text = self.asr(self._samples)
+        asr_ms = round((time.perf_counter() - asr_started) * 1000, 1)
 
         if detected_text:
             logger.success(f"ASR text: '{detected_text}'")
 
-            if self.wake_word and not self._wakeword_detected(detected_text):
+            if self.wake_word and not self._wakeword_detected(detected_text) and not self._in_follow_up():
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
                 if self._observability_bus:
@@ -422,7 +432,7 @@ class SpeechListener:
                         source="asr",
                         kind="user_input",
                         message=trim_message(detected_text),
-                        meta={"generation": self._turn_generation},
+                        meta={"generation": self._turn_generation, "asr_ms": asr_ms},
                     )
                 self.processing_active_event.set()
                 self.llm_queue.put(

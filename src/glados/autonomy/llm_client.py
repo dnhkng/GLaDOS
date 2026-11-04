@@ -131,11 +131,15 @@ def llm_call(
     except InferenceCancelledError:
         return None
     except requests.Timeout:
-        logger.warning("LLM call timed out")
+        if config.deadline is not None and time.monotonic() >= config.deadline - 0.1:
+            # The scheduler gave this background call a budget and it ran out: expected under load.
+            logger.debug("LLM call for {} reached its deadline", config.owner)
+        else:
+            logger.warning("LLM call for {} timed out after {:.0f} s", config.owner, config.timeout)
         return None
     except requests.RequestException as e:
-        logger.warning("LLM call failed: %s", e)
+        logger.warning("LLM call failed: {}", e)
         return None
     except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("LLM call: failed to parse response: %s", e)
+        logger.warning("LLM call: failed to parse response: {}", e)
         return None

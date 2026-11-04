@@ -1,5 +1,9 @@
 Glados:
   llm_model: "qwen3:4b-instruct"
+  language: "fr"                     # French replies, native French voice (Piper siwis) with a GLaDOS effect
+  announcement: "Tous les modules de réseau neuronal sont chargés. Système opérationnel."
+  wake_word: "glados"                # Ollama cannot tell who is being addressed: only answer speech that names her
+  wake_word_follow_up_s: 15          # ...or that follows one of her replies within 15 s
   llm_request_options:
     keep_alive: -1                  # Ollama unloads after 5 min idle by default; reloading + prefill costs ~14 s
 

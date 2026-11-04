@@ -1,6 +1,6 @@
 # Ollama on the Intel iGPU (Vulkan) for GLaDOS.
-# Install: cp scripts/systemd/*.service ~/.config/systemd/user/ && systemctl --user daemon-reload
-#          systemctl --user enable --now glados.service
+# Install: cp scripts/systemd/*.service scripts/systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
+#          systemctl --user enable glados.service glados-backup.timer
 [Unit]
 Description=Ollama (Vulkan iGPU) for GLaDOS
 

@@ -86,7 +86,7 @@ class HackerNewsSubagent(Subagent):
                         unshown.append(story)
                     self.memory.set(entry.key, story)
                 except LLMDecisionError as e:
-                    logger.warning("HN: LLM decision failed, using fallback: %s", e)
+                    logger.warning("HN: LLM decision failed, using fallback: {}", e)
                     if story.get("score", 0) >= self._min_score:
                         unshown.append(story)
             else:
@@ -138,7 +138,7 @@ class HackerNewsSubagent(Subagent):
             resp.raise_for_status()
             top_ids = resp.json()[: self._top_n * 2]  # Fetch extra in case some fail
         except Exception as exc:
-            logger.warning("HN: failed to fetch top stories: %s", exc)
+            logger.warning("HN: failed to fetch top stories: {}", exc)
             return []
 
         stories = []
@@ -169,5 +169,5 @@ class HackerNewsSubagent(Subagent):
                 "url": data.get("url", ""),
             }
         except Exception as exc:
-            logger.debug("HN: failed to fetch story %d: %s", story_id, exc)
+            logger.debug("HN: failed to fetch story {}: {}", story_id, exc)
             return None

@@ -240,3 +240,41 @@ def test_device_api_validates_inventory_and_preserves_microphone_mute(audio, mon
     finally:
         engine.shutdown_event.set()
         server.shutdown()
+
+
+def test_concurrent_stream_restarts_never_overlap(audio, monkeypatch):
+    """A stall recovery racing the engine's own start once let PortAudio call a freed callback (SIGSEGV)."""
+    import threading
+    import time
+
+    busy, overlaps = threading.Lock(), []
+
+    class Stream:
+        def __init__(self, **kwargs):
+            self._lifecycle("open")
+            self.active = True
+
+        def _lifecycle(self, step):
+            if not busy.acquire(blocking=False):
+                overlaps.append(step)
+                return
+            time.sleep(0.002)  # widen the window a real PortAudio call would have
+            busy.release()
+
+        def start(self):
+            self._lifecycle("start")
+
+        def stop(self):
+            self._lifecycle("stop")
+
+        def close(self):
+            self._lifecycle("close")
+
+    monkeypatch.setattr(sd, "InputStream", Stream)
+    workers = [threading.Thread(target=lambda: [audio.start_listening() for _ in range(15)]) for _ in range(4)]
+    workers.append(threading.Thread(target=lambda: [audio.stop_listening() for _ in range(15)]))
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(10)
+    assert overlaps == []

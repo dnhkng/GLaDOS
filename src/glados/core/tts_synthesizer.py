@@ -5,6 +5,7 @@ import time
 
 from loguru import logger
 import numpy as np
+import regex
 
 from ..observability import ObservabilityBus, trim_message
 from ..TTS import SpeechSynthesizerProtocol
@@ -12,6 +13,8 @@ from ..utils import spoken_text_converter as stc
 from .audio_data import AudioMessage
 from .speech_markup import SpeechMarkupParser, SpeechText
 
+
+_EMOJI = regex.compile(r"[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]+")
 
 class TextToSpeechSynthesizer:
     """
@@ -48,6 +51,14 @@ class TextToSpeechSynthesizer:
         self._on_response_ready = on_response_ready
         self._quiet_mode, self._quiet_generation = quiet_mode, quiet_generation
         self._autonomy_generation, self._autonomy_enabled = autonomy_generation, autonomy_enabled
+
+    def _spoken(self, text: str) -> str:
+        # Emoji have no sound; voices either skip them or spell out their names.
+        text = _EMOJI.sub("", text)
+        # The converter spells numbers and units out in English; espeak voices read them natively.
+        if getattr(self.tts_model, "language", "en") != "en":
+            return text
+        return self.stc.text_to_spoken(text)
 
     def _autonomy_current(self, generation: int | None) -> bool:
         return generation is None or (self._autonomy_enabled() and generation == self._autonomy_generation())
@@ -108,7 +119,7 @@ class TextToSpeechSynthesizer:
                             )
 
                         start_time = time.time()
-                        spoken_text_variant = self.stc.text_to_spoken(segment.text)
+                        spoken_text_variant = self._spoken(segment.text)
                         if self._tts_muted_event and self._tts_muted_event.is_set():
                             audio_data = np.array([], dtype=np.float32)
                         else:

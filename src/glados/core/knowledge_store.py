@@ -80,7 +80,7 @@ class KnowledgeStore:
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except Exception as exc:
-            logger.warning("KnowledgeStore: failed to read %s: %s", self._path, exc)
+            logger.warning("KnowledgeStore: failed to read {}: {}", self._path, exc)
             return []
 
         if isinstance(data, dict):

@@ -195,6 +195,12 @@ class SoundDeviceAudioIO(AudioIO):
         raise ValueError("This microphone does not support a usable mono or stereo capture format")
 
     def start_listening(self) -> None:
+        # The listener thread may reopen a stalled stream while the engine starts or stops it; two
+        # threads swapping streams let PortAudio call a freed callback and crash the process.
+        with self._device_lock:
+            self._start_listening()
+
+    def _start_listening(self) -> None:
         """Start capturing audio from the system microphone.
 
         Creates and starts a sounddevice InputStream that continuously captures
@@ -215,7 +221,7 @@ class SoundDeviceAudioIO(AudioIO):
         def audio_callback(
             indata: NDArray[np.float32],
             frames: int,
-            time_info: Any,
+            time_info: object,
             status: sd.CallbackFlags,
         ) -> None:
             """Process incoming audio data and put it in the queue with VAD confidence.
@@ -262,6 +268,12 @@ class SoundDeviceAudioIO(AudioIO):
             raise RuntimeError(f"Failed to start audio input stream: {e}") from e
 
     def stop_listening(self) -> None:
+        # The listener thread may reopen a stalled stream while the engine starts or stops it; two
+        # threads swapping streams let PortAudio call a freed callback and crash the process.
+        with self._device_lock:
+            self._stop_listening()
+
+    def _stop_listening(self) -> None:
         """Stop capturing audio and clean up resources.
 
         Stops the input stream if it's active and releases associated resources.
@@ -273,7 +285,7 @@ class SoundDeviceAudioIO(AudioIO):
             try:
                 self.input_stream.stop()
                 self.input_stream.close()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - teardown must continue whatever PortAudio raises
                 logger.error(f"Error stopping input stream: {e}")
             finally:
                 self.input_stream = None
@@ -316,7 +328,7 @@ class SoundDeviceAudioIO(AudioIO):
         try:
             output_device = self._resolve_device(self.output_device, "output")
             device_rate = int(sd.query_devices(device=output_device, kind="output")["default_samplerate"])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an unknown rate falls back to resampling
             device_rate = 0
             logger.debug(f"Could not query output device sample rate: {e}")
 
@@ -355,9 +367,7 @@ class SoundDeviceAudioIO(AudioIO):
         # Prefer the sample rate stored by start_speaking() -- that reflects any
         # device-rate resampling that happened, so the stream opens at the true
         # playback rate and the timeout arithmetic stays correct.
-        if self._pending_sample_rate and self._pending_sample_rate > 0:
-            sample_rate = self._pending_sample_rate
-        elif sample_rate is None:
+        if (self._pending_sample_rate and self._pending_sample_rate > 0) or sample_rate is None:
             sample_rate = self._pending_sample_rate
 
         if sample_rate is None or sample_rate <= 0:

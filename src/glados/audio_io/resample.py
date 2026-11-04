@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dependency-free high-quality audio resampling.
 
 The TTS model produces audio at a fixed sample rate (``glados.onnx`` outputs at
@@ -71,7 +70,7 @@ def resample(
     cutoff = min(1.0, 1.0 / ratio)
 
     n_in = audio.size
-    n_out = max(1, int(math.ceil(n_in / ratio)))
+    n_out = max(1, math.ceil(n_in / ratio))
 
     offsets_i = np.arange(-zero_crossings, zero_crossings + 1, dtype=np.int64)
     offsets = offsets_i.astype(np.float64)

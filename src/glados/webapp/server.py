@@ -59,6 +59,17 @@ from .serializers import (
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+_LOCKED_PAGE = """<!doctype html><html lang="fr"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>GLaDOS · appareil non appairé</title>
+<body style="font:16px system-ui,sans-serif;background:#14161a;color:#e6e6e6;max-width:36em;margin:3em auto;padding:0 1em">
+<h1 style="color:#ffa020">Appareil non appairé</h1>
+<p>Cet appareil n'est pas encore autorisé à utiliser la console GLaDOS.</p>
+<p>Sur le PC, lancez <code>glados pair</code> (ou regardez la ligne « Pair a device » dans le terminal de GLaDOS),
+puis ouvrez ce lien sur cet appareil. Ce n'est à faire qu'une fois.</p>
+<p><a style="color:#40a0ff" href="/glados-ca.crt">Télécharger le certificat GLaDOS</a> pour supprimer l'alerte de sécurité.</p>
+<hr style="border-color:#333"><p lang="en" style="color:#999">This device is not paired. Run <code>glados pair</code> on the PC
+and open the link it prints on this device.</p></body></html>
+"""
 
 
 def _serialize_or(serializer: Any, item: Any) -> dict[str, Any]:
@@ -82,6 +93,7 @@ def _content_type(name: str) -> str:
         ".png": "image/png",
         ".ico": "image/x-icon",
         ".wasm": "application/wasm",
+        ".webmanifest": "application/manifest+json",
     }.get(Path(name).suffix.lower(), "application/octet-stream")
 
 
@@ -106,9 +118,12 @@ class _EngineHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str],
-                 tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True):
+                 tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True,
+                 sessions: auth.SessionStore | None = None, authority: Path | None = None):
         self.engine = engine
+        self.authority = authority
         self.token = token
+        self.sessions = sessions or auth.SessionStore(path=None)
         self.trust_loopback = trust_loopback
         self.secure = tls is not None
         self._shared: dict[str, tuple[float, Any]] = {}
@@ -176,30 +191,57 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return False
 
+    def _device(self) -> str | None:
+        """This request's paired-device id, if it carries a live session."""
+        return self.server.sessions.lookup(auth.cookie_token(self.headers.get("Cookie")), self.client_address[0])
+
+    def _from_this_machine(self) -> bool:
+        # Opening the PC's own LAN address from the PC arrives from that address, not from loopback.
+        address = self.client_address[0].split("%", 1)[0].lower()
+        return self.server.trust_loopback and (auth.is_loopback(address) or address in local_addresses())
+
     def _authorized(self) -> bool:
-        token = self.server.token
-        if token is None or (self.server.trust_loopback and auth.is_loopback(self.client_address[0])):
+        if self.server.token is None or self._from_this_machine():
             return True
-        return auth.matches(token, auth.cookie_token(self.headers.get("Cookie")))
+        return self._device() is not None
 
     def _refuse_unpaired(self) -> None:
         self.close_connection = True
         if self._path().startswith("/api/"):
             return self._json(401, {"error": "Open the pairing link shown in GLaDOS's terminal first"})
-        return self._text(401, "This console is locked. Open the pairing link shown in GLaDOS's terminal.")
+        body = _LOCKED_PAGE.encode("utf-8")
+        self.send_response(401)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _pair(self, candidate: str) -> None:
         """Exchange a pairing-link token for a session cookie, then drop it from the URL."""
         if not auth.matches(self.server.token, candidate):
             self.close_connection = True
             return self._text(403, "Invalid pairing link.")
+        session = self.server.sessions.create(auth.device_label(self.headers.get("User-Agent", "")),
+                                              self.client_address[0])
         self.send_response(303)
-        self.send_header("Set-Cookie", auth.session_cookie(self.server.token, self.server.secure))
+        self.send_header("Set-Cookie", auth.session_cookie(session, self.server.secure))
         self.send_header("Location", self._path())
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def _authority(self) -> None:
+        if self.server.authority is None or not self.server.authority.is_file():
+            return self._text(404, "This console does not use the local certificate authority.")
+        body = self.server.authority.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-x509-ca-cert")
+        self.send_header("Content-Disposition", 'attachment; filename="glados-ca.crt"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _json(self, code: int, payload: Any) -> None:
         body = dumps(payload).encode("utf-8")
@@ -240,6 +282,9 @@ class _Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             return self._json(421, {"error": "Unexpected Host header"})
         path = self._path()
+        if path == "/glados-ca.crt":
+            # Public by nature, and needed before a phone can trust the console at all.
+            return self._authority()
         if self.server.token is not None and "token" in self._query():
             return self._pair(self._query()["token"])
         if not self._authorized():
@@ -251,7 +296,8 @@ class _Handler(BaseHTTPRequestHandler):
             "/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js",
             "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
             "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js", "/glados-favicon.js",
-            "/glados-dom.js", "/glados-remote-audio.js",
+            "/glados-dom.js", "/glados-remote-audio.js", "/glados-i18n.js",
+            "/manifest.webmanifest", "/glados-icon-192.png", "/glados-icon-512.png",
             "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
         ):
             return self._file(path[1:])
@@ -259,6 +305,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._file(path[len("/static/"):])
         if path == "/api/audio/remote":
             return self._remote_audio()
+        if path == "/api/pairing":
+            return self._json(200, {"enabled": self.server.token is not None, "current": self._device(),
+                                    "authority": self.server.authority is not None,
+                                    "devices": self.server.sessions.devices()})
         if path in ("/api/vision/frame", "/api/vision/live"):
             origin = self.headers.get("Origin")
             if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get(
@@ -332,7 +382,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/api/control", "/api/instructions", "/api/input", "/api/slots", "/api/minds/control",
             "/api/tools/command", "/api/decisions", "/api/decisions/test",
             "/api/devices", "/api/vision/settings", "/api/search/settings", "/api/memory/edit", "/api/tasks/cancel",
-            "/api/nexus/settings",
+            "/api/nexus/settings", "/api/pairing",
         }:
             return self._operate()
         self._json(404, {"error": "not found"})
@@ -355,6 +405,14 @@ class _Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError("Expected a JSON object")
             path = self._path()
+            if path == "/api/pairing":
+                if body.get("action") == "revoke" and isinstance(body.get("id"), str):
+                    revoked = self.server.sessions.revoke(body["id"])
+                elif body.get("action") == "revoke_all":
+                    revoked = self.server.sessions.revoke()
+                else:
+                    raise ValueError("Use action revoke (with id) or revoke_all")
+                return self._json(200, {"revoked": revoked, "devices": self.server.sessions.devices()})
             if path == "/api/search/settings":
                 agent = getattr(engine, "search_agent", None)
                 if agent is None:
@@ -810,6 +868,7 @@ class WebappServer:
     def __init__(
         self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None,
         tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True,
+        sessions: auth.SessionStore | None = None, authority: Path | None = None,
     ) -> None:
         self.engine = engine
         self.host = host
@@ -818,6 +877,8 @@ class WebappServer:
         self.tls = tls
         self.token = token
         self.trust_loopback = trust_loopback
+        self.sessions = sessions
+        self.authority = authority
         self._server: _EngineHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.bound_port: int | None = None
@@ -827,7 +888,7 @@ class WebappServer:
             return
         try:
             self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts, self.tls,
-                                             self.token, self.trust_loopback)
+                                             self.token, self.trust_loopback, self.sessions, self.authority)
             self.bound_port = self._server.server_address[1]
         except (OSError, ValueError) as exc:
             logger.error("webapp: failed to bind {}:{} - {}", self.host, self.port, exc)

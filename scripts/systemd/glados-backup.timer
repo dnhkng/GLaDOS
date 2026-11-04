@@ -1,0 +1,11 @@
+# Daily backup; Persistent catches up after the PC was off at the scheduled time.
+[Unit]
+Description=Daily GLaDOS backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

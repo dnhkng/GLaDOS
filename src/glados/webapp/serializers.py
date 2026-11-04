@@ -228,6 +228,8 @@ def build_snapshot(engine: Any) -> dict[str, Any]:
                             if getattr(engine, "search_agent", None) else None),
         "nexus": engine.nexus_agent.status() if getattr(engine, "nexus_agent", None) else None,
         "audio": build_audio_state(engine),
+        "latency": engine.latency_tracker.snapshot() if getattr(engine, "latency_tracker", None) else [],
+        "end_of_speech_ms": getattr(getattr(engine, "speech_listener", None), "PAUSE_LIMIT", None),
         "emotion": _emotion_state(engine),
         "mcp": _mcp_summary(engine),
         "interaction": {

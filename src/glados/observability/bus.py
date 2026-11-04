@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 import queue
 import threading
 import time
 from typing import Any
+
+from loguru import logger
 
 from .events import ObservabilityEvent
 
@@ -31,6 +34,7 @@ class ObservabilityBus:
         # bus; turned over (oldest dropped) if it falls too far behind.
         self._subscriber_max = subscriber_max
         self._subscribers: list[queue.Queue[ObservabilityEvent]] = []
+        self._listeners: list[Callable[[ObservabilityEvent], None]] = []
 
     def emit(
         self,
@@ -58,6 +62,18 @@ class ObservabilityBus:
             self._enqueue(self._queue, event)
             for sub in self._subscribers:
                 self._enqueue(sub, event)
+            listeners = list(self._listeners)
+        # Outside the lock, so a listener may emit derived events of its own.
+        for listener in listeners:
+            try:
+                listener(event)
+            except Exception:  # noqa: BLE001 - a broken listener must not break publishing
+                logger.opt(exception=True).warning("Observability listener failed")
+
+    def add_listener(self, listener: Callable[[ObservabilityEvent], None]) -> None:
+        """Call ``listener`` synchronously, on the producer's thread, for every future event."""
+        with self._lock:
+            self._listeners.append(listener)
 
     @staticmethod
     def _enqueue(target: queue.Queue[ObservabilityEvent], event: ObservabilityEvent) -> None:

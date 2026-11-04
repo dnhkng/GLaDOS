@@ -1,4 +1,4 @@
-# ruff: noqa: RUF001, RUF002
+# ruff: noqa: RUF001
 """Deterministic English normalization for the TTS phonemizer.
 
 Numeric expressions are consumed whole, before word/acronym normalization. Decimal
@@ -263,7 +263,7 @@ class SpokenTextConverter:
                 except InvalidOperation as exc:
                     raise ValueError(f"Invalid number format: {num}") from exc
         else:
-            raise ValueError(f"Invalid number format: {num}")
+            raise ValueError(f"Invalid number format: {num}")  # noqa: TRY004 - callers catch ValueError
         match = _VALID_NUMBER.fullmatch(text)
         if not match or not (match[2] or match[3]):
             raise ValueError(f"Invalid number format: {num}")
@@ -569,7 +569,7 @@ class SpokenTextConverter:
         if "\\u" in text:
             # Some model replies contain literal JSON escapes. Decode only known
             # temperature symbols, leaving paths and other backslashes alone.
-            text = _ESCAPED_TEMPERATURE.sub(lambda m: chr(int(m[0][2:], 16)), text)
+            text = _ESCAPED_TEMPERATURE.sub(lambda m: chr(int(m[0].removeprefix("\\u"), 16)), text)
         if not text.isascii() or "(" in text or ")" in text:
             text = text.translate(_PUNCTUATION)
         text = _ELLIPSES.sub("", text)

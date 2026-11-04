@@ -196,7 +196,7 @@ class MelSpectrogramConfig(BaseModel):
 
         preprocessor_config_dict = full_config["preprocessor"]
         if not isinstance(preprocessor_config_dict, dict):
-            raise ValueError(f"'preprocessor' key in {file_path} must contain a dictionary.")
+            raise ValueError(f"'preprocessor' key in {file_path} must contain a dictionary.")  # noqa: TRY004 - callers catch ValueError for bad config
 
         if "_target_" in preprocessor_config_dict:
             del preprocessor_config_dict["_target_"]
@@ -566,7 +566,7 @@ class MelSpectrogramCalculator:
         if self.frame_splicing == 1:
             return mel_spec
 
-        num_features_orig, num_frames = mel_spec.shape
+        _num_features, num_frames = mel_spec.shape
 
         # Create a list of frames to be stacked, starting with the original
         spliced_parts = [mel_spec]

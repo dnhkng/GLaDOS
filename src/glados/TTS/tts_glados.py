@@ -11,7 +11,9 @@ import onnxruntime as ort  # type: ignore
 from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
 from ..utils.safe_pickle import load_data_pickle
+from .espeak import EspeakPhonemizer
 from .phonemizer import Phonemizer
+from .voice_effect import GladosEffect
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
 ort.set_default_logger_severity(4)
@@ -123,7 +125,8 @@ class SpeechSynthesizer:
     EOS = "$"  # end of sentence
 
     def __init__(
-        self, model_path: Path = MODEL_PATH, phoneme_path: Path = PHONEME_TO_ID_PATH, speaker_id: int | None = None
+        self, model_path: Path = MODEL_PATH, phoneme_path: Path = PHONEME_TO_ID_PATH, speaker_id: int | None = None,
+        language: str = "en", effect: GladosEffect | None = None,
     ) -> None:
         """
         Initialize the text-to-speech synthesizer with a specified model and optional speaker configuration.
@@ -134,6 +137,10 @@ class SpeechSynthesizer:
             speaker_id (int | None): Optional speaker ID for multi-speaker models. Defaults to None.
         """
         providers = audio_providers()
+        # English uses the bundled ONNX phonemizer; other languages need espeak-ng (the voice uses its IPA set).
+        self.language = language
+        self._espeak = None if language == "en" else EspeakPhonemizer(language)
+        self.effect = effect
 
         self.ort_sess = ort.InferenceSession(
             model_path,
@@ -142,11 +149,12 @@ class SpeechSynthesizer:
         )
         report_session_providers(self.ort_sess, "tts_glados")
         self.phonemizer = Phonemizer()
-        self.id_map = self._load_pickle(phoneme_path)
 
         try:
-            # Load the configuration file
+            # Load the configuration file (Piper ships it as <model>.onnx.json)
             config_file_path = model_path.with_suffix(".json")
+            if not config_file_path.exists():
+                config_file_path = model_path.with_name(model_path.name + ".json")
             with open(config_file_path, encoding="utf-8") as config_file:
                 config_dict = json.load(config_file)
         except FileNotFoundError:
@@ -158,6 +166,9 @@ class SpeechSynthesizer:
                 f"An unexpected error occurred while reading the configuration at path: {config_file_path}. Error: {e}"
             ) from e
         self.config = PiperConfig.from_dict(config_dict)
+        # The GLaDOS voice keeps its table in a pickle; stock Piper voices carry theirs in the config.
+        self.id_map = (self._load_pickle(phoneme_path) if model_path == self.MODEL_PATH
+                       else {k: list(v) for k, v in self.config.phoneme_id_map.items()})
         self.sample_rate = self.config.sample_rate
         self.speaker_id = (
             self.config.speaker_id_map.get(str(speaker_id), 0)
@@ -197,11 +208,13 @@ class SpeechSynthesizer:
         """
         phonemes = self._phonemizer(text)
         phoneme_ids_list = [self._phonemes_to_ids(sentence) for sentence in phonemes]
-        audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids) for phoneme_ids in phoneme_ids_list]
+        length_scale = self.config.length_scale * (self.effect.pitch if self.effect else 1.0)
+        audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids, length_scale=length_scale)
+                        for phoneme_ids in phoneme_ids_list]
 
         if audio_chunks:
             audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T
-            return audio
+            return self.effect.apply(audio, self.sample_rate) if self.effect else audio
         return np.array([], dtype=np.float32)
 
     def _phonemizer(self, input_text: str) -> list[str]:
@@ -222,6 +235,8 @@ class SpeechSynthesizer:
             phonemes = synthesizer._phonemizer("Hello world")
             # Might return something like ['hh', 'AH0', 'l', 'oW1', 'r', 'AO1', 'l', 'd']
         """
+        if self._espeak is not None:
+            return self._espeak(input_text)
         phonemes = self.phonemizer.convert_to_phonemes([input_text], "en_us")
 
         return phonemes

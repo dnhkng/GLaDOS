@@ -23,8 +23,12 @@ class SpeechSynthesizerProtocol(Protocol):
 
 
 # Factory function
+FRENCH_VOICE = "models/TTS/fr_FR-siwis-medium.onnx"
+
+
 def get_speech_synthesizer(
     voice: str = "glados",
+    language: str = "en",
 ) -> SpeechSynthesizerProtocol:  # Return type is now a Union of concrete types
     """
     Factory function to get an instance of an audio synthesizer based on the specified voice type.
@@ -40,7 +44,15 @@ def get_speech_synthesizer(
     if voice.lower() == "glados":
         from ..TTS import tts_glados
 
-        return tts_glados.SpeechSynthesizer()
+        if language == "fr":
+            # The GLaDOS model only knows English and gives French a strong accent: use a native
+            # French Piper voice, shaped towards GLaDOS.
+            from ..utils.resources import resource_path
+            from .voice_effect import GladosEffect
+
+            return tts_glados.SpeechSynthesizer(model_path=resource_path(FRENCH_VOICE), language="fr",
+                                                effect=GladosEffect())
+        return tts_glados.SpeechSynthesizer(language=language)
 
     from ..TTS import tts_kokoro
 

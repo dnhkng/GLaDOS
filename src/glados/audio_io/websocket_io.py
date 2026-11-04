@@ -123,12 +123,12 @@ class WebsocketAudioIO(AudioIO):
                         if isinstance(val, bool):
                             self._rooms = val
                         else:
-                            raise ValueError("rooms must be a boolean value")
+                            raise ValueError("rooms must be a boolean value")  # noqa: TRY004 - callers catch ValueError for bad config
                     case "segregate_speakers":
                         if isinstance(val, bool):
                             self._segregate_speakers = val
                         else:
-                            raise ValueError("segregate_speakers must be a boolean value")
+                            raise ValueError("segregate_speakers must be a boolean value")  # noqa: TRY004 - callers catch ValueError for bad config
                     case _:
                         raise ValueError(f"Websocket backend: unsupported option '{key}'")
 
@@ -181,7 +181,7 @@ class WebsocketAudioIO(AudioIO):
         """Run the asynchronous server and report startup errors to the caller."""
         try:
             asyncio.run(self._run_server(server, port, result_future))
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001 - handed to the waiting starter via the future
             if not result_future.done():
                 result_future.set_exception(ex)
             else:

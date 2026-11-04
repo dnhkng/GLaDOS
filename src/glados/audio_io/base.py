@@ -59,4 +59,4 @@ class AudioIO(ABC):
         compatible. Backends that own streams, sockets, or threads should
         override this method.
         """
-        return None
+        return

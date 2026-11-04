@@ -154,7 +154,7 @@ def https_console(tmp_path: Path) -> Iterator[tuple[RemoteSwitchAudioIO, str, ss
     server = WebappServer(_Engine(audio), host="127.0.0.1", port=0, tls=server_context(cert, key))
     server.start()
     assert server.url.startswith("https://")
-    client_tls = ssl.create_default_context(cafile=cert)
+    client_tls = ssl.create_default_context(cafile=tmp_path / "ca.pem")  # Signed by the local authority.
     yield audio, f"wss://127.0.0.1:{server.bound_port}/api/audio/remote", client_tls, server.bound_port
     server.shutdown()
     audio.close()

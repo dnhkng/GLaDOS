@@ -208,7 +208,36 @@ def test_network_clients_must_pair_before_reaching_the_console() -> None:
         assert paired.status == 303 and paired.getheader("Location") == "/"
         cookie = paired.getheader("Set-Cookie")
         assert "HttpOnly" in cookie and "SameSite=Strict" in cookie and "Secure" not in cookie
-        assert request("GET", "/api/snapshot", {"Cookie": cookie.split(";", 1)[0]}).status == 200
+        session = {"Cookie": cookie.split(";", 1)[0]}
+        assert request("GET", "/api/snapshot", session).status == 200
+        assert token not in cookie, "Each device gets its own session, never the pairing token"
+
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request("GET", "/api/pairing", headers=session)
+        listing = json.loads(conn.getresponse().read())
+        [device] = listing["devices"]
+        assert listing["current"] == device["id"] and device["address"] == "127.0.0.1"
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request("POST", "/api/pairing", body=json.dumps({"action": "revoke", "id": device["id"]}),
+                     headers={"Content-Type": "application/json", **session})
+        assert json.loads(conn.getresponse().read())["revoked"] == 1
+        assert request("GET", "/api/snapshot", session).status == 401
+    finally:
+        server.shutdown()
+
+
+def test_certificate_authority_is_downloadable_before_pairing(tmp_path: Path) -> None:
+    authority = tmp_path / "ca.pem"
+    authority.write_text("-----BEGIN CERTIFICATE-----\n")
+    server = WebappServer(_FakeEngine(), host="127.0.0.1", port=0, token="t" * 43, trust_loopback=False,
+                          authority=authority)
+    server.start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request("GET", "/glados-ca.crt")
+        response = conn.getresponse()
+        assert response.status == 200 and response.getheader("Content-Type") == "application/x-x509-ca-cert"
+        assert response.read().startswith(b"-----BEGIN CERTIFICATE")
     finally:
         server.shutdown()
 
@@ -223,6 +252,19 @@ def test_console_token_is_private_and_stable(tmp_path: Path) -> None:
     assert is_loopback("127.0.0.1") and is_loopback("::1") and is_loopback("::ffff:127.0.0.1")
     assert not is_loopback("192.168.1.20")
     assert is_loopback_bind("localhost") and not is_loopback_bind("0.0.0.0")
+    assert ensure_token(path, reset=True) != token and path.stat().st_mode & 0o777 == 0o600
+
+
+def test_paired_devices_persist_hashed(tmp_path: Path) -> None:
+    from glados.webapp.auth import SessionStore
+
+    path = tmp_path / "sessions.json"
+    session = SessionStore(path).create("Android · Chrome", "10.0.0.5")
+    assert session not in path.read_text(), "Only a hash of the cookie is stored"
+    reloaded = SessionStore(path)
+    assert reloaded.lookup(session, "10.0.0.5") == reloaded.devices()[0]["id"]
+    assert reloaded.lookup("forged", "10.0.0.5") is None
+    assert reloaded.revoke() == 1 and SessionStore(path).devices() == []
 
 
 def test_webapp_server_serves_snapshot_and_stream() -> None:
@@ -380,7 +422,8 @@ class _LauncherEngine:
 class _FakeServer:
     """Stub WebappServer that records start/stop without binding a socket."""
 
-    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None, token=None) -> None:
+    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None, token=None, sessions=None,
+                 authority=None) -> None:
         self.engine = engine
         self.host = host
         self.port = port
@@ -616,3 +659,13 @@ def test_stream_pushes_vad_between_dashboard_refreshes() -> None:
         engine.shutdown_event.set()
         conn.close()
         server.shutdown()
+
+
+def test_the_pcs_own_lan_address_counts_as_this_machine(monkeypatch) -> None:
+    from glados.webapp import server as server_module
+
+    monkeypatch.setattr(server_module, "local_addresses", lambda: frozenset({"10.0.0.7"}))
+    handler = SimpleNamespace(server=SimpleNamespace(trust_loopback=True))
+    for address, local in (("10.0.0.7", True), ("127.0.0.1", True), ("10.0.0.8", False)):
+        handler.client_address = (address, 0)
+        assert server_module._Handler._from_this_machine(handler) is local

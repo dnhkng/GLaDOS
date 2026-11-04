@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14161a">
+<link rel="apple-touch-icon" href="glados-icon-192.png">
 <title>GLaDOS · Aperture Science</title>
 <style>
   :root{
@@ -209,6 +212,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <link rel="stylesheet" href="glados-console.css">
 <script src="glados-dom.js"></script>
 <script src="glados-themes.js"></script>
+<script src="glados-i18n.js"></script>
 </head>
 <body>
 <div id="app">
@@ -407,6 +411,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <div class="card" style="margin-bottom:16px"><h3>Interface appearance</h3><label>Theme<select class="console-field" id="theme-settings"></select></label><p class="console-note">Dark, Clinical, Terminal and PotatOS share the same live controls. This browser remembers your theme. Open the Presence screen from the top bar for the tablet view.</p></div>
       <div class="card" style="margin-bottom:16px"><h3>Internet search sources</h3><p class="console-note">News requests read these sites’ pages directly, then search if needed. Other categories guide web searches. Enter one domain or site path per line, up to eight per category. Console changes apply to the next request and save to data/search_settings.yaml. File edits apply after restart.</p><form id="search-settings-form"><div class="grid cols-2"><label>Weather<textarea class="console-field" id="search-sources-weather" rows="4" placeholder="dwd.de&#10;meteoblue.com" disabled></textarea></label><label>News<textarea class="console-field" id="search-sources-news" rows="4" placeholder="reuters.com&#10;bbc.com/news" disabled></textarea></label><label>Reddit communities<textarea class="console-field" id="search-sources-reddit" rows="4" placeholder="reddit.com/r/LocalLLaMA&#10;reddit.com/r/Munich" disabled></textarea></label><label>General sources<textarea class="console-field" id="search-sources-general" rows="4" placeholder="A favorite domain or site path" disabled></textarea></label></div><button type="submit" class="btn-secondary" id="search-settings-save" style="margin-top:12px" disabled>Save favorite sources</button></form><p id="search-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="card" style="margin-bottom:16px"><h3>This device as microphone</h3><p class="console-note">Talk to GLaDOS through this browser, for example a phone: its microphone replaces the PC microphone and GLaDOS speaks through it. The PC takes over again when you stop or close the page. While GLaDOS speaks here, this microphone is muted so she does not hear herself. Browsers allow the microphone only over HTTPS.</p><p id="remote-audio-status" class="console-note"></p><p id="remote-audio-host" class="console-note"></p><button type="button" class="btn-secondary" id="remote-audio-toggle">Use this device’s microphone</button></div>
+      <div class="card" style="margin-bottom:16px"><h3>Paired devices</h3><p class="console-note">Phones and other computers that opened the pairing link. Revoke one to sign it out; this PC never needs pairing. Run “glados pair” on the PC to show the link again.</p><div id="pairing-devices"></div><p id="pairing-authority" class="console-note" hidden><a href="/glados-ca.crt">Download the GLaDOS certificate</a> and install it once on a phone to remove the security warning for good. Android: Settings › Security › Encryption &amp; credentials › Install a certificate › CA certificate. iPhone: open the file, install the profile, then enable it under Settings › General › About › Certificate Trust Settings. It only covers local addresses, never public websites.</p><div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button type="button" class="btn-secondary" id="pairing-refresh">Refresh</button><button type="button" class="btn-secondary" id="pairing-revoke-all">Sign out every device</button></div><p id="pairing-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="card" style="margin-bottom:16px"><h3>Nexus Core</h3><p class="console-note">Consultation lets GLaDOS ask external advisor AIs in the background. The base decides where Central Core runs: auto moves it to the API when this machine is too slow, local and api force it. Needs the API key named in the configuration. Changes apply immediately and save to data/nexus_settings.yaml.</p><p id="nexus-status" class="console-note">Nexus Core unavailable.</p><form id="nexus-settings-form"><div class="grid cols-3"><label>Consultation<select class="console-field" id="nexus-consultation" disabled><option value="on">On</option><option value="off">Off</option></select></label><label>Base model<select class="console-field" id="nexus-base-mode" disabled><option value="auto">Auto</option><option value="local">Local only</option><option value="api">API only</option></select></label><label>Daily budget (USD)<input class="console-field" id="nexus-budget" type="number" min="0" max="1000" step="0.05" disabled></label></div><button type="submit" class="btn-secondary" id="nexus-settings-save" style="margin-top:12px" disabled>Save Nexus settings</button></form><p id="nexus-settings-feedback" class="console-feedback" role="status" aria-live="polite"></p></div>
       <div class="view-head"><h1>Facility Settings</h1><span class="sub">autonomy, voice input and routing.</span><button class="btn-secondary" id="decision-new">Create decision list</button></div>
       <div class="card" style="margin-bottom:16px"><h3>Facility Sensors &amp; Audio</h3><p class="console-note">Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.</p><div class="grid cols-3">
@@ -434,6 +439,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <div class="view-head"><h1>Diagnostics</h1><span class="sub">engine infrastructure, inference capacity, and device health.</span></div>
       <div class="grid cols-2">
         <div class="card"><h3>Hardware &amp; Model Adaptation</h3><div id="v-hardware"></div></div>
+        <div class="card"><h3>Reply latency</h3><div id="v-latency"></div></div>
         <div class="card"><h3>Engine components</h3><div id="components"></div></div>
         <div class="card"><h3>Audio</h3><div id="v-audio"></div></div>
         <div class="card"><h3>Interaction</h3><div id="v-interaction"></div></div>
@@ -502,7 +508,7 @@ const S = {
   audio:{rms:-40, vad:false, updated_at:0}, speaking:false,
   mcpServers:[],
   vision:"no visual feed", visionMind:null, searchSettings:null, nexus:null,
-  autonomyCore:null, hardware:null,
+  autonomyCore:null, hardware:null, latency:[],
   lanes:{prioQ:0, autoQ:0, autoInflight:0, workers:0, enabled:false},
   inference:null, commandSlot:null, routing:null, decisions:null, agents:[], minds:[], agentMinds:null, tools:[], slots:[], commands:[], controls:{}, operator:null,
   seq:100,
@@ -787,6 +793,30 @@ function openCommand(){
   $('command-task').onchange=preview;preview();
   $('run-command').onclick=()=>perform(async()=>commandResult(await apiPost('/api/tools/command',{task:$('command-task').value})),'command-result');
 }
+function latencyTrend(turns){
+  // Oldest on the left; each point is one reply's total, scaled to the slowest shown.
+  const values=turns.map(t=>t.total_ms).filter(v=>v!=null).reverse();
+  if(values.length<2) return '';
+  const W=280,H=48,max=Math.max(...values),step=W/(values.length-1);
+  const points=values.map((v,i)=>(i*step).toFixed(1)+','+(H-2-(v/max)*(H-6)).toFixed(1)).join(' ');
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" role="img" aria-label="Reply latency trend" style="display:block;margin-bottom:8px">'+
+    '<polyline points="'+points+'" fill="none" stroke="var(--accent, #ffa020)" stroke-width="2" stroke-linejoin="round"/>'+
+    '<text x="'+W+'" y="10" text-anchor="end" font-size="9" fill="currentColor" opacity=".6">'+(max>=1000?(max/1000).toFixed(1)+' s':Math.round(max)+' ms')+'</text></svg>';
+}
+function renderLatency(){
+  const turns=S.latency||[], last=turns[0];
+  if(!last){ setHTML($("v-latency"), '<span class="chip">No reply measured yet</span>'); return; }
+  const ms=v=>v==null?'—':(v>=1000?(v/1000).toFixed(2)+' s':Math.round(v)+' ms');
+  const totals=turns.map(t=>t.total_ms).filter(v=>v!=null).sort((a,b)=>a-b);
+  const median=totals.length?totals[Math.floor(totals.length/2)]:null;
+  setHTML($("v-latency"), latencyTrend(turns) + kv("Last reply", '<b>'+ms(last.total_ms)+'</b> · '+esc(last.source)) +
+    kv("Speech recognition", ms(last.asr_ms)) +
+    kv("Model first token", ms(last.llm_ms)) +
+    kv("First voice clip", ms(last.tts_ms)) +
+    kv("Until playback", ms(last.playback_ms)) +
+    kv("Median of last "+totals.length, ms(median)) +
+    (S.endOfSpeech ? kv("End-of-speech silence", ms(S.endOfSpeech)+' · before the timer starts') : ''));
+}
 function renderVitals(){
   if($("v-hardware")){
     const h = S.hardware;
@@ -809,6 +839,7 @@ function renderVitals(){
       setHTML($("v-hardware"), '<span class="chip">Hardware telemetry standby</span>');
     }
   }
+  renderLatency();
   setHTML($("components"), S.minds.filter(m=>!S.agents.some(a=>a.agent_id===m.mind_id)).map(m=>kv(esc(m.title),esc(m.status)+" · "+esc(m.summary||""))).join("")||"No engine components reported.");
   if(!$("v-audio")) return;
   const a = S.audio;
@@ -1005,6 +1036,20 @@ async function perform(action,feedback='console-feedback'){
   catch(error){$(feedback).textContent=error.message;}
   finally{operationPending=false;renderConsoleControls();}
 }
+function renderPairing(data){
+  const when=t=>new Date(t*1000).toLocaleString();
+  if(!data.enabled){ setHTML($('pairing-devices'),'<span class="chip">The console only listens on this machine.</span>'); $('pairing-revoke-all').disabled=true; return; }
+  $('pairing-revoke-all').disabled=!data.devices.length;
+  if('authority' in data) $('pairing-authority').hidden=!data.authority;
+  setHTML($('pairing-devices'), data.devices.map(d=>kv(esc(d.label)+(d.id===data.current?' <span class="chip teal">this device</span>':''),
+    esc(d.address)+' · '+esc(when(d.last_seen))+' <button type="button" class="btn-secondary" data-revoke="'+esc(d.id)+'">Revoke</button>')).join('')
+    || '<span class="chip">No paired devices</span>');
+}
+async function loadPairing(){ try{ renderPairing(await maybeFetch('/api/pairing')); }catch(error){ $('pairing-feedback').textContent=error.message; } }
+$('pairing-refresh').onclick=loadPairing;
+$('pairing-revoke-all').onclick=()=>perform(async()=>{renderPairing({enabled:true,...await apiPost('/api/pairing',{action:'revoke_all'})});return 'Every device was signed out.';},'pairing-feedback');
+$('pairing-devices').addEventListener('click',event=>{const id=event.target.dataset?.revoke; if(id) perform(async()=>{
+  const data=await apiPost('/api/pairing',{action:'revoke',id}); renderPairing({enabled:true,...data}); return 'Device signed out.';},'pairing-feedback');});
 let visionIntervalDirty=false;
 let searchSourcesDirty=false;
 const searchCategories=['weather','news','reddit','general'];
@@ -1176,6 +1221,8 @@ function applyState(st){
   if(st.interaction){ S.sinceUser=st.interaction.seconds_since_user; S.sinceAsst=st.interaction.seconds_since_assistant; }
   if(st.speaking!==undefined) S.speaking=!!st.speaking;
   if(st.hardware) S.hardware=st.hardware;
+  if(st.latency) S.latency=st.latency;
+  if("end_of_speech_ms" in st) S.endOfSpeech=st.end_of_speech_ms;
   if(st.mcp) S.mcpServers=st.mcp.servers||[];
 }
 function entryEvent(ev){ entry({t:(ev.timestamp||0)*1000, src:ev.source||"", kind:ev.kind||"", level:ev.level||"info", msg:ev.message||"", meta:ev.meta||{}}); }
@@ -1183,7 +1230,7 @@ function startLive(){
   maybeFetch("/api/snapshot").then(j => {
     S.live=true;
     emit("engine","console","ok","LIVE TELEMETRY LINKED",{});
-    applySnapshot(j); paint(); renderFullWire();
+    applySnapshot(j); paint(); renderFullWire(); loadPairing();
     const es = new EventSource("/api/stream");
     es.addEventListener("obs", e=>entryEvent(JSON.parse(e.data)));
     es.addEventListener("state", e=>{ applyState(JSON.parse(e.data)); paint(); });

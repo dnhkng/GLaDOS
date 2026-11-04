@@ -3,6 +3,7 @@ import asyncio
 from hashlib import sha256
 from pathlib import Path
 import sys
+from typing import Any
 
 import httpx
 from rich import print as rprint
@@ -59,6 +60,12 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
     "models/TTS/phomenizer_en.onnx": {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/phomenizer_en.onnx",
         "checksum": "b64dbbeca8b350927a0b6ca5c4642e0230173034abd0b5bb72c07680d700c5a0",
+    },
+    # Native French voice for `language: "fr"` (the GLaDOS model only speaks English); its config,
+    # fr_FR-siwis-medium.json, is tracked in git. Voice: SIWIS corpus, Piper (rhasspy/piper-voices).
+    "models/TTS/fr_FR-siwis-medium.onnx": {
+        "url": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
+        "checksum": "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
     },
 }
 
@@ -302,9 +309,10 @@ def run_webapp(
         sys.exit(1)
 
     tls = None
+    authority = None
     if webapp_config.tls:
         from .webapp.config import AUTO_HOST, console_hosts, local_addresses
-        from .webapp.tls import ensure_certificate, server_context
+        from .webapp.tls import DEFAULT_DIR, ensure_certificate, server_context
 
         if webapp_config.tls_cert and webapp_config.tls_key:
             cert, key = Path(webapp_config.tls_cert), Path(webapp_config.tls_key)
@@ -313,6 +321,7 @@ def run_webapp(
             # Covers today's address; a new network regenerates the certificate on the next start.
             hosts = (hosts - {AUTO_HOST}) | (local_addresses() if AUTO_HOST in hosts else frozenset())
             cert, key = ensure_certificate(hosts)
+            authority = DEFAULT_DIR / "ca.pem"
         tls = server_context(cert, key)
 
     from .webapp.auth import ensure_token, is_loopback_bind
@@ -320,20 +329,16 @@ def run_webapp(
     # Other devices on the network must pair; the console exposes the camera, memory and microphone.
     token = webapp_config.access_token or (None if is_loopback_bind(webapp_config.host) else ensure_token())
     glados = Glados.from_config(glados_config)
+    from .webapp.auth import SessionStore
+
     server = WebappServer(
         glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts,
-        tls=tls, token=token,
+        tls=tls, token=token, sessions=SessionStore() if token else None, authority=authority,
     )
     server.start()
     if server.is_running and token is not None:
-        from .webapp.config import local_addresses
-
-        scheme = "https" if tls else "http"
-        wildcard = webapp_config.host in ("0.0.0.0", "::", "")
-        for address in sorted(local_addresses()) if wildcard else [webapp_config.host]:
-            shown = f"[{address}]" if ":" in address else address
-            logger.success("Pair a device on this network (keep this link private): {}://{}:{}/?token={}",
-                           scheme, shown, server.bound_port, token)
+        for link in pairing_links(webapp_config, token, server.bound_port):
+            logger.success("Pair a device on this network (keep this link private): {}", link)
     if not server.is_running:
         logger.error(
             "Webapp console could not bind {}:{} - aborting.",
@@ -350,6 +355,42 @@ def run_webapp(
         glados.run()
     finally:
         server.shutdown()
+
+
+def pairing_links(webapp_config: Any, token: str, port: int | None = None) -> list[str]:
+    from .webapp.config import local_addresses
+    from .webapp.tls import certifiable
+
+    scheme = "https" if webapp_config.tls else "http"
+    wildcard = webapp_config.host in ("0.0.0.0", "::", "")
+    links = []
+    for address in sorted(local_addresses()) if wildcard else [webapp_config.host]:
+        if webapp_config.tls and not webapp_config.tls_cert and not certifiable(address):
+            continue  # The generated certificate cannot cover public addresses.
+        shown = f"[{address}]" if ":" in address else address
+        links.append(f"{scheme}://{shown}:{port or webapp_config.port}/?token={token}")
+    return links
+
+
+def pair(config_path: str | Path, reset: bool = False) -> int:
+    """Print the console pairing link; ``reset`` issues a new token and signs every device out."""
+    from .webapp.auth import SessionStore, ensure_token, is_loopback_bind
+
+    webapp_config = GladosConfig.from_yaml(config_path).webapp
+    if webapp_config is None or not webapp_config.enabled or is_loopback_bind(webapp_config.host):
+        print("The console only listens on this machine; no pairing is needed.")
+        return 0
+    if reset and webapp_config.access_token:
+        print("access_token is fixed in the configuration; change it there to reset pairing.")
+        return 1
+    if reset:
+        ensure_token(reset=True)
+        revoked = SessionStore().revoke()
+        print(f"New pairing token issued; {revoked} device(s) signed out. Restart GLaDOS if it is running.")
+    token = webapp_config.access_token or ensure_token()
+    for link in pairing_links(webapp_config, token):
+        print(link)
+    return 0
 
 
 def parser_add_config(parser: argparse.ArgumentParser) -> None:
@@ -455,6 +496,10 @@ def main() -> int:
     # Download command
     subparsers.add_parser("download", help="Download model files")
 
+    pair_parser = subparsers.add_parser("pair", help="Show the console pairing link for phones and other devices")
+    parser_add_config(pair_parser)
+    pair_parser.add_argument("--reset", action="store_true", help="Issue a new token and sign every device out")
+
     # Start command
     start_parser = subparsers.add_parser("start", help="Start GLaDOS voice assistant")
     parser_add_common_tui_cli_args(start_parser)
@@ -484,6 +529,8 @@ def main() -> int:
 
     if args.command == "download":
         return asyncio.run(download_models())
+    if args.command == "pair":
+        return pair(args.config, reset=args.reset)
     else:
         if not models_valid():
             print("Some model files are invalid or missing. Please run 'uv run glados download'")
