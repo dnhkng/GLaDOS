@@ -11,7 +11,8 @@ from rich import print as rprint
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
 import sounddevice as sd
 
-from .core.engine import Glados, GladosConfig
+from .core.config import GladosConfig
+from .core.engine import Glados
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path

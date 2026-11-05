@@ -14,9 +14,10 @@ from glados.tools.agent import AgentConfig, agent_definitions
 @pytest.fixture(autouse=True)
 def _quiet_desktop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests must not pop real notifications on the developer's desktop."""
-    from glados.tools import agent
+    from glados.tools.agent import shell, worker
 
-    monkeypatch.setattr(agent, "_notify_desktop", lambda title, body: None)
+    for module in (shell, worker):
+        monkeypatch.setattr(module, "_notify_desktop", lambda title, body: None)
 
 
 class _Sink:
@@ -105,6 +106,23 @@ def test_protected_paths_need_the_code(tmp_path: Path) -> None:
     assert _run("read_file", {"path": "secret/key"}, tmp_path, latest="tsuki", **config)["content"] == "private"
 
 
+def test_writable_roots_confine_file_changes_even_with_the_code(tmp_path: Path) -> None:
+    inside, outside = tmp_path / "wt", tmp_path / "live"
+    inside.mkdir()
+    outside.mkdir()
+    (outside / "app.py").write_text("x = 1\n")
+    roots = {"writable_roots": [str(inside)], "latest": "tsuki"}
+    assert _run("write_file", {"path": str(inside / "a.txt"), "content": "ok"}, tmp_path, **roots)["ok"]
+    for tool, args in [
+        ("write_file", {"path": str(outside / "a.txt"), "content": "no"}),
+        ("edit_file", {"path": str(outside / "app.py"), "old_text": "1", "new_text": "2"}),
+        ("write_file", {"path": str(inside / ".." / "live" / "b.txt"), "content": "no"}),
+    ]:
+        refused = _run(tool, args, tmp_path, **roots)
+        assert refused["ok"] is False and "outside the folders" in refused["error"]
+    assert sorted(p.name for p in outside.iterdir()) == ["app.py"] and (outside / "app.py").read_text() == "x = 1\n"
+
+
 def test_disabled_agent_tools_refuse(tmp_path: Path) -> None:
     sink = _Sink()
     tool_classes["run_shell"](llm_queue=sink, tool_config={}).run("c", {"command": "echo hi"})
@@ -172,7 +190,7 @@ def test_delegated_task_loops_over_tools_and_reports(tmp_path: Path, monkeypatch
         assert "delegate_task" not in {t["function"]["name"] for t in json["tools"]}
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: next(replies))
 
-    monkeypatch.setattr(agent.requests, "post", post)
+    monkeypatch.setattr(agent.worker.requests, "post", post)
     worker = agent.DelegateTask(_Sink(), {"agent": AgentConfig(enabled=True, working_dir=str(tmp_path))})
     result = worker.work("say 42", threading.Event())
     report = json.loads(result.report)
@@ -285,8 +303,8 @@ def test_locate_maps_vision_answers_to_layout_coordinates(tmp_path: Path, monkey
 def test_schedule_validates_and_never_stores_the_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from glados.tools import agent
 
-    monkeypatch.setattr(agent, "SCHEDULE_DIR", tmp_path / "scheduled")
-    monkeypatch.setattr(agent, "UNIT_DIR", tmp_path / "units")
+    monkeypatch.setattr(agent.schedule, "SCHEDULE_DIR", tmp_path / "scheduled")
+    monkeypatch.setattr(agent.schedule, "UNIT_DIR", tmp_path / "units")
     calls: list[list[str]] = []
     tool = agent.Schedule(_Sink(), {"agent": AgentConfig(enabled=True)})
     monkeypatch.setattr(tool, "execute", lambda argv, *a, **k: calls.append(argv) or {"ok": True, "stdout": ""})
@@ -311,7 +329,7 @@ def test_scheduled_messages_cannot_approve(tmp_path: Path) -> None:
 
 
 def test_browser_keys_and_validation(tmp_path: Path) -> None:
-    from glados.tools.agent import _key
+    from glados.tools.agent.browser import _key
 
     assert _key("Return") == {"key": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13, "text": "\r"}
     assert "needs a value" in _run("browser", {"action": "open"}, tmp_path)["error"]
@@ -351,7 +369,7 @@ def test_worker_speaks_openai_compatible_apis(tmp_path: Path, monkeypatch: pytes
         seen.append({"headers": headers, "messages": list(json["messages"])})
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: next(replies))
 
-    monkeypatch.setattr(agent.requests, "post", post)
+    monkeypatch.setattr(agent.worker.requests, "post", post)
     monkeypatch.setenv("GLADOS_WORKER_API_KEY", "k")
     config = AgentConfig(
         enabled=True, working_dir=str(tmp_path), worker_api="openai", worker_url="https://x/v1/chat/completions"
@@ -371,7 +389,7 @@ def test_paid_worker_calls_share_the_nexus_budget(tmp_path: Path, monkeypatch: p
     usage = {"prompt_tokens": 100, "completion_tokens": 20}
     reply = {"choices": [{"message": {"role": "assistant", "content": "Done."}}], "usage": usage}
     monkeypatch.setattr(
-        agent.requests,
+        agent.worker.requests,
         "post",
         lambda url, json, timeout, headers: SimpleNamespace(raise_for_status=lambda: None, json=lambda: reply),
     )

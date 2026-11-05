@@ -10,7 +10,6 @@ import re
 import threading
 import time
 from typing import Any, ClassVar, Protocol
-import unicodedata
 from urllib.parse import urlparse
 import uuid
 
@@ -50,267 +49,18 @@ from .speculative import SpeculativeStream
 from .speech_chunking import split_speech_clauses
 from .speech_markup import SPEECH_DIRECTION_PROMPT, SpeechText
 from .store import Store
-
-INTERNET_SEARCH_TOOL = "mcp.internet_search.web_search_exa"
+from .tool_offer import (
+    INTERNET_SEARCH_TOOL,
+    filter_tools_for_message,
+    is_self_improve_request,
+    measurement_hint,
+)
 
 
 class LineStream(Protocol):
     """What reading a reply needs: a live HTTP response or a speculative draft both provide it."""
 
     def iter_lines(self, chunk_size: int = ...) -> Iterator[bytes]: ...
-
-
-# The owner asking GLaDOS to change herself (accent-free, lower case): "améliore-toi", "modifie ton code"...
-SELF_IMPROVE_REQUEST = re.compile(
-    r"\b(amelior|modifi|chang|corrig|reprogramm|optimis|mets? a jour)(e|er|es|ez)?[- ](toi|ton|ta|tes)\b"
-    r"|\bauto-?amelior|\bself[-_ ]?improv|\bimprove (yourself|your (own )?code)"
-    r"|\b(chang|pass|bascul)(e|er|es|ez)? (de|sur|vers|le|ton|ta) (modele|model|llm|voix)"
-)
-
-AGENT_TOOL_GROUPS = {
-    "run_shell": "shell",
-    "delegate_task": "shell",
-    "agent_notes": "any",
-    "read_file": "files",
-    "write_file": "files",
-    "edit_file": "files",
-    "list_dir": "files",
-    "desktop": "desktop",
-    "schedule": "schedule",
-    "browser": "web",
-    "self_improve": "self",
-}
-# Accent-free, lower-case stems in French and English; "any" offers every agent tool.
-AGENT_TOOL_KEYWORDS = {
-    "any": ("agent", "tache de fond", "en arriere-plan", "background", "delegue", "delegate", "automatis"),
-    "shell": (
-        "command",
-        "lance",
-        "execute",
-        "run ",
-        "terminal",
-        "shell",
-        "bash",
-        "script",
-        "install",
-        "mets a jour",
-        "update",
-        "git",
-        "compile",
-        "build",
-        "processus",
-        "process",
-        "paquet",
-        "package",
-        "service",
-        "systemctl",
-        "redemarre",
-        "restart",
-        "ping",
-        "reseau",
-        "network",
-        "telecharge",
-        "download",
-        "projet",
-        "project",
-        "code",
-        "programme",
-        "cherche",
-        "trouve",
-        "find",
-        "search",
-        "combien",
-        "how many",
-        "tache",
-        "task",
-    ),
-    "files": (
-        "fichier",
-        "file",
-        "dossier",
-        "folder",
-        "repertoire",
-        "directory",
-        "lis ",
-        "lire",
-        "read",
-        "ecris",
-        "write",
-        "modifie",
-        "edit",
-        "cree",
-        "create",
-        "supprime",
-        "delete",
-        "deplace",
-        "move",
-        "copie",
-        "copy",
-        "renomme",
-        "rename",
-        "note",
-        "document",
-        "projet",
-        "project",
-        "config",
-        "~/",
-        "/home",
-        ".txt",
-        ".md",
-        ".py",
-        ".json",
-        ".yaml",
-        "liste",
-        "list",
-    ),
-    "self": (
-        "ameliore-toi",
-        "ameliore toi",
-        "ton code",
-        "ton propre code",
-        "ton modele",
-        "tes modeles",
-        "change de modele",
-        "modifie-toi",
-        "modifie toi",
-        "toi-meme",
-        "toi meme",
-        "auto-amelior",
-        "self-improv",
-        "your code",
-        "your model",
-        "improve yourself",
-        "proposition",
-        "proposal",
-        "applique",
-        "apply",
-        "ta config",
-        "ta configuration",
-        "ton fonctionnement",
-        "nouvelle fonction",
-        "fonctionnalite",
-        "feature",
-    ),
-    "web": (
-        "site",
-        "page",
-        "web",
-        "internet",
-        "navigu",
-        "browse",
-        "va sur",
-        "go to",
-        "url",
-        "http",
-        "www",
-        ".com",
-        ".fr",
-        ".org",
-        "formulaire",
-        "form",
-        "connecte-toi",
-        "log in",
-        "wikipedia",
-        "youtube",
-        "google",
-        "recherche",
-        "cherche",
-        "search",
-        "lien",
-        "link",
-        "navigateur",
-        "browser",
-        "commande",
-        "achete",
-        "reserve",
-    ),
-    "schedule": (
-        "rappel",
-        "remind",
-        "planifi",
-        "programme",
-        "schedule",
-        "timer",
-        "minuteur",
-        "alarme",
-        "alarm",
-        "demain",
-        "tomorrow",
-        "tous les",
-        "chaque",
-        "every",
-        "dans ",
-        " in ",
-        "ce soir",
-        "tonight",
-        "matin",
-        "morning",
-        " a ",
-        "heure",
-        "h00",
-        "o'clock",
-    ),
-    "desktop": (
-        "ecran",
-        "screen",
-        "fenetre",
-        "window",
-        "ouvre",
-        "open",
-        "ferme",
-        "close",
-        "lance",
-        "launch",
-        "app",
-        "workspace",
-        "bureau",
-        "desktop",
-        "volume",
-        "son ",
-        "sound",
-        "musique",
-        "music",
-        "pause",
-        "lecture",
-        "play",
-        "suivant",
-        "next",
-        "luminosite",
-        "brightness",
-        "notif",
-        "capture",
-        "screenshot",
-        "presse-papier",
-        "clipboard",
-        "copie",
-        "colle",
-        "paste",
-        "tape",
-        "type",
-        "touche",
-        "key",
-        "clique",
-        "click",
-        "souris",
-        "mouse",
-        "verrouille",
-        "lock",
-        "navigateur",
-        "browser",
-        "firefox",
-        "chrome",
-        "site",
-        "url",
-        "http",
-        "vois",
-        "regarde",
-        "look",
-        "see",
-        "affiche",
-        "plein ecran",
-        "fullscreen",
-    ),
-}
 
 
 class LanguageModelProcessor(LLMWireFormat):
@@ -463,71 +213,8 @@ class LanguageModelProcessor(LLMWireFormat):
             != self._autonomy_generation()
         )
 
-    @staticmethod
-    def _filter_tools_for_message(tools: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
-        text = content.casefold()
-        wants_system = any(
-            keyword in text
-            for keyword in (
-                "system",
-                "status",
-                "cpu",
-                "memory",
-                "ram",
-                "disk",
-                "storage",
-                "network",
-                "ip",
-                "uptime",
-                "temperature",
-                "temp",
-                "process",
-                "battery",
-                "power",
-                "load",
-            )
-        )
-        wants_clap = "clap" in text
-        folded = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
-        # Agent tools cost ~800 prompt tokens: offer each group only when the request sounds like it.
-        wanted_groups = {group for group, stems in AGENT_TOOL_KEYWORDS.items() if any(s in folded for s in stems)}
-        filtered: list[dict[str, Any]] = []
-        for tool in tools:
-            name = tool.get("function", {}).get("name", "")
-            if name in ("slow_clap", "slow clap") and not wants_clap:
-                continue
-            group = AGENT_TOOL_GROUPS.get(name)
-            if group is not None and not ({group, "any"} & wanted_groups):
-                continue
-            if name.startswith("mcp.") and name != INTERNET_SEARCH_TOOL and not wants_system:
-                continue
-            filtered.append(tool)
-        return filtered
-
-    @staticmethod
-    def _measurement_hint(content: str) -> str:
-        """Make structured CPU readings explicit without confusing periods with values."""
-        try:
-            result = json.loads(content)
-        except (ValueError, TypeError):
-            return ""
-        if not isinstance(result, dict):
-            return ""
-        if all(key in result for key in ("load_1m", "load_5m", "load_15m")):
-            values = [str(result[key]) for key in ("load_1m", "load_5m", "load_15m")]
-        elif result.get("task") == "cpu_load" and result.get("ok") is True:
-            values = str(result.get("stdout", "")).split()[:3]
-        else:
-            return ""
-        if len(values) != 3 or any(not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", v) for v in values):
-            return ""
-        readings = [f"{float(v):.2f}" for v in values]
-        return (
-            " Verified measurement, rounded to two decimals: the CPU load averages are "
-            + ", ".join(readings)
-            + " for the one-minute, five-minute and fifteen-minute periods respectively. "
-            "Use this exact factual sentence in your reply. The period names are not the measured values."
-        )
+    _filter_tools_for_message = staticmethod(filter_tools_for_message)
+    _measurement_hint = staticmethod(measurement_hint)
 
     def _process_tool_call(
         self,
@@ -1228,8 +915,7 @@ class LanguageModelProcessor(LLMWireFormat):
         content = turn.llm_message.get("content")
         if not offered or turn.autonomy_mode or turn.llm_message.get("role") != "user" or not isinstance(content, str):
             return False
-        folded = "".join(c for c in unicodedata.normalize("NFKD", content.casefold()) if not unicodedata.combining(c))
-        if not SELF_IMPROVE_REQUEST.search(folded):
+        if not is_self_improve_request(content):
             return False
         call = {
             "id": f"self_{uuid.uuid4().hex}",

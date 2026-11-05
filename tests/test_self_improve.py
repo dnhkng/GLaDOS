@@ -32,6 +32,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
     subprocess.run([*git, "init", "-q"], cwd=root, check=True)
     (root / "app.py").write_text("VALUE = 1\n")
+    (root / "lib.py").write_text("LIMIT = 1\n")
     subprocess.run([*git, "add", "."], cwd=root, check=True)
     subprocess.run([*git, "commit", "-qm", "init"], cwd=root, check=True)
     (root / "app.py").write_text("VALUE = 2\n")  # uncommitted
@@ -57,11 +58,12 @@ def _tool(state: AgentState, latest: str = "hello", **extra: Any) -> self_improv
     return self_improve.SelfImprove(_Sink(), config)
 
 
-def _worker_edits(new_text: str) -> Any:
+def _worker_edits(new_text: str, name: str = "app.py") -> Any:
     def loop(self: Any, task: str, cancelled: threading.Event, prompt: str = "", steps: int | None = None) -> Any:
-        Path(self.config.working_dir, "app.py").write_text(new_text)
+        Path(self.config.working_dir, name).write_text(new_text)
         assert str(self_improve.REPO) in str(self.config.protected_paths), "the live checkout is protected"
-        return "done", "Changed VALUE.", ["edit_file app.py"]
+        assert self.config.writable_roots == [self.config.working_dir], "file tools change only the worktree"
+        return "done", "Changed it.", [f"edit_file {name}"]
 
     return loop
 
@@ -74,17 +76,46 @@ def test_the_worktree_matches_the_running_checkout(repo: Path) -> None:
     assert (repo / "app.py").read_text() == "VALUE = 2\n", "the live checkout is untouched"
 
 
-def test_a_passing_change_waits_for_approval_then_applies(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    state = AgentState(audit_path=None)
-    tool = _tool(state)
+def _ready(tool: self_improve.SelfImprove, monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
+    """A proposal that set ``name`` to ``CHANGED = True`` and passed its checks."""
     monkeypatch.setattr(self_improve, "failures", lambda worktree: ({"tests/x.py::flaky"}, True))
-    monkeypatch.setattr(self_improve.DelegateTask, "loop", _worker_edits("VALUE = 3\n"))
-    meta = {"id": "abcdef12", "request": "set VALUE to 3", "status": "working", "created": 0}
+    monkeypatch.setattr(self_improve.DelegateTask, "loop", _worker_edits("CHANGED = True\n", name))
+    meta = {"id": "abcdef12", "request": "change it", "status": "working", "created": 0}
     tool.save(meta)
     result = tool.build(meta, threading.Event())
     assert result.status == "done" and tool.load("abcdef12")["status"] == "ready"
-    assert "+VALUE = 3" in (self_improve.WORK_DIR / "abcdef12" / "change.patch").read_text()
-    assert (repo / "app.py").read_text() == "VALUE = 2\n", "nothing changes before approval"
+    return tool.load("abcdef12")
+
+
+def _run_apply_script(tmp_path: Path, healthy: bool) -> None:
+    """Run apply.sh for real, with the service, health check and notifications stubbed out."""
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name, body in {
+        "systemctl": "exit 0",
+        "notify-send": "exit 0",
+        "sleep": "exit 0",
+        "curl": f"printf {200 if healthy else 500}",
+    }.items():
+        (stubs / name).write_text(f"#!/bin/sh\n{body}\n")
+        (stubs / name).chmod(0o755)
+    script = self_improve.WORK_DIR / "abcdef12" / "apply.sh"
+    env = {"PATH": f"{stubs}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    subprocess.run(["bash", str(script)], env=env, capture_output=True, check=True, timeout=60)
+
+
+def _log(repo: Path) -> list[str]:
+    done = subprocess.run(["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True, check=True)
+    return done.stdout.split("\n")
+
+
+def test_a_passing_change_waits_for_approval_then_applies(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = AgentState(audit_path=None)
+    tool = _tool(state)
+    meta = _ready(tool, monkeypatch, "lib.py")
+    assert meta["paths"] == ["lib.py"]
+    assert "+CHANGED = True" in (self_improve.WORK_DIR / "abcdef12" / "change.patch").read_text()
+    assert (repo / "lib.py").read_text() == "LIMIT = 1\n", "nothing changes before approval"
     [pending] = state.approvals()
     assert "abcdef12" in pending["summary"]
 
@@ -97,7 +128,52 @@ def test_a_passing_change_waits_for_approval_then_applies(repo: Path, monkeypatc
     assert launched[0][:3] == ["systemd-run", "--user", "--collect"]
     script = self_improve.WORK_DIR / "abcdef12" / "apply.sh"
     assert subprocess.run(["bash", "-n", str(script)], check=False).returncode == 0
-    assert "git apply -R" in script.read_text(), "the script reverts when GLaDOS does not come back"
+
+
+def test_applying_commits_only_the_proposal(repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = AgentState(audit_path=None)
+    tool = _tool(state)
+    _ready(tool, monkeypatch, "lib.py")
+    state.decide(state.approvals()[0]["id"], True)
+    monkeypatch.setattr(tool, "execute", lambda argv, *a, **k: {"ok": True})
+    tool.call({"action": "apply", "id": "abcdef12"})
+    _run_apply_script(tmp_path, healthy=True)
+    assert _log(repo)[0] == "Self-improvement abcdef12: change it"
+    assert (repo / "lib.py").read_text() == "CHANGED = True\n"
+    show = ["git", "show", "--name-only", "--format="]
+    committed = subprocess.run(show, cwd=repo, capture_output=True, text=True, check=True)
+    assert committed.stdout.split() == ["lib.py"], "the owner's own uncommitted work stays out of the commit"
+    assert (repo / "app.py").read_text() == "VALUE = 2\n" and (repo / "new.py").exists()
+    [row] = tool.listing()
+    assert row["status"] == "applied" and row["commit"]
+
+
+def test_a_change_that_does_not_come_back_is_reverted(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = AgentState(audit_path=None)
+    tool = _tool(state)
+    _ready(tool, monkeypatch, "lib.py")
+    state.decide(state.approvals()[0]["id"], True)
+    monkeypatch.setattr(tool, "execute", lambda argv, *a, **k: {"ok": True})
+    tool.call({"action": "apply", "id": "abcdef12"})
+    _run_apply_script(tmp_path, healthy=False)
+    assert _log(repo)[:2] == [
+        "Revert self-improvement abcdef12: GLaDOS did not come back online",
+        "Self-improvement abcdef12: change it",
+    ]
+    assert (repo / "lib.py").read_text() == "LIMIT = 1\n" and (repo / "app.py").read_text() == "VALUE = 2\n"
+    assert tool.listing()[0]["status"] == "rolled_back"
+
+
+def test_applying_over_the_owners_uncommitted_edits_is_refused(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = AgentState(audit_path=None)
+    tool = _tool(state)
+    _ready(tool, monkeypatch, "app.py")  # app.py has uncommitted edits in the live checkout
+    state.decide(state.approvals()[0]["id"], True)
+    result = tool.call({"action": "apply", "id": "abcdef12"})
+    assert result["ok"] is False and "uncommitted" in result["error"]
+    assert (repo / "app.py").read_text() == "VALUE = 2\n"
 
 
 def test_new_test_failures_reject_the_proposal(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
