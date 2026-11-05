@@ -115,14 +115,14 @@
       if (thoughtsHost.children && thoughtsHost.children.length === slots.length && slots.length > 0) {
         for (let i = 0; i < slots.length; i++) {
           const s = slots[i];
-          const thoughtHtml = '<span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small>';
+          const thoughtHtml = '<span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p title="'+esc(s.summary)+'">'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small>';
           const child = thoughtsHost.children[i];
           const importantClass = s.update_priority === 'important' ? 'thought important' : 'thought';
           if (child.className !== importantClass) child.className = importantClass;
           setHTML(child, thoughtHtml);
         }
       } else {
-        const thoughtsHtml=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p>'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
+        const thoughtsHtml=slots.map(s=>'<div class="thought '+(s.update_priority==='important'?'important':'')+'"><span>'+esc(s.title || coreOwner(s.owner_id))+'</span><p title="'+esc(s.summary)+'">'+esc(s.summary)+'</p><small>'+esc(s.status)+(s.queue_position!=null?' · queue '+s.queue_position:'')+' · '+age(Math.max(0,Date.now()/1000-s.updated_at))+'</small></div>').join('') || '<p class="console-note">No core reports yet.</p>';
         setHTML(thoughtsHost, thoughtsHtml);
       }
     }

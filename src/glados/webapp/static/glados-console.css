@@ -36,13 +36,15 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
 .presence-info {display:grid;gap:16px;min-width:0}
 .presence-user {color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .presence-user .slice {color:var(--accent-2);margin-right:8px}
-#latest-reply {font-size:clamp(20px,2.1vw,32px);line-height:1.3;margin-top:8px;overflow-wrap:anywhere;white-space:pre-wrap}
+/* Fixed height: a reply that grows while it streams scrolls inside its box instead of pushing the page down. */
+#latest-reply {font-size:clamp(20px,2.1vw,32px);line-height:1.3;margin-top:8px;overflow-wrap:anywhere;white-space:pre-wrap;height:7.8em;overflow-y:auto;overscroll-behavior:contain}
 .vision-description {border-left:2px solid var(--accent-2);padding-left:12px}
 .vision-description p {white-space:pre-wrap}
 .presence-thoughts h3 {margin-bottom:8px}
 .thought {display:grid;grid-template-columns:100px minmax(0,1fr);gap:4px 12px;padding:9px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:6px;background:var(--surface-2)}
 .thought>span {font:11px var(--mono);color:var(--muted)}
-.thought p {font-size:12px;overflow-wrap:anywhere}
+/* Three lines, always: a summary that changes length must not move what is below it. */
+.thought p {font-size:12px;line-height:1.4;overflow-wrap:anywhere;height:4.2em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
 .thought small {grid-column:2;color:var(--dim);font:10px var(--mono)}
 .thought.important {border-left:3px solid var(--warn)}
 .overview-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}

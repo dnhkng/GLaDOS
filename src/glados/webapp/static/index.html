@@ -556,11 +556,14 @@ function entry(ev){
   ev.level = ({debug:"debg",success:"ok",warning:"warn",error:"err",critical:"err"})[ev.level] || ev.level;
   if(!("t" in ev)) ev.t = Date.now();
   if(ev.kind==='user_input'){
-    replyParts=[]; $('latest-reply').textContent='Waiting for GLaDOS…';
+    replyParts=[]; $('latest-reply').textContent='Waiting for GLaDOS…'; $('latest-reply').scrollTop=0;
   }
   if(ev.src==='tts' && ev.kind==='synthesize'){
+    // Follow the newest sentence only while the reader is at the bottom; otherwise leave them where they are.
+    const reply=$('latest-reply'), following=reply.scrollHeight-reply.scrollTop-reply.clientHeight<8;
     replyParts.push(ev.msg); if(replyParts.length>40) replyParts.shift();
-    $('latest-reply').textContent=replyParts.join(' ');
+    reply.textContent=replyParts.join(' ');
+    if(following) reply.scrollTop=reply.scrollHeight;
   }
   overview.event(ev);
   track(ev);
