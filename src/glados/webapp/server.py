@@ -21,6 +21,11 @@ Endpoints
      GET  /api/slots/{id}         full slot incl. on-demand report
      GET  /api/agents            registered subagent statuses
      POST /api/command           run an engine command ({"command": "/agents"})
+     POST /api/input             send text to GLaDOS without waiting ({"text": "..."})
+     POST /api/chat              send text and wait for her reply ({"text": "...", "from": "Claude"})
+
+Clients that are not on this machine and have no paired-browser cookie (scripts, other AIs)
+authenticate with ``Authorization: Bearer <pairing token>`` (the token from ``glados pair``).
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import queue
 import socket
 import ssl
 import struct
@@ -198,6 +204,8 @@ _STATIC_FILES = frozenset(
 )
 # POST bodies are small JSON, except a decision test that may carry recorded speech.
 _BODY_LIMITS = {"/api/decisions/test": 2_000_000}
+# /api/chat waits this long for the spoken reply unless the request asks otherwise.
+_CHAT_TIMEOUT_S, _CHAT_TIMEOUT_MAX_S = 120, 600
 
 
 def _decode_test_audio(encoded: str) -> list[dict[str, Any]]:
@@ -306,8 +314,13 @@ class _Handler(BaseHTTPRequestHandler):
         address = self.client_address[0].split("%", 1)[0].lower()
         return self.server.trust_loopback and (auth.is_loopback(address) or address in local_addresses())
 
+    def _bearer(self) -> bool:
+        """Scripts and other AIs authenticate with ``Authorization: Bearer <pairing token>``."""
+        scheme, _, value = self.headers.get("Authorization", "").partition(" ")
+        return self.server.token is not None and scheme.lower() == "bearer" and auth.matches(self.server.token, value)
+
     def _authorized(self) -> bool:
-        if self.server.token is None or self._from_this_machine():
+        if self.server.token is None or self._from_this_machine() or self._bearer():
             return True
         return self._device() is not None
 
@@ -611,6 +624,45 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(409, {"error": "Engine is not accepting input"})
         self._json(202, {"accepted": True})
 
+    def _op_chat(self, engine: Glados, body: dict[str, Any]) -> None:
+        """Send a message and wait for GLaDOS's delivered reply to that turn."""
+        message, sender, timeout = body.get("text"), body.get("from"), body.get("timeout", _CHAT_TIMEOUT_S)
+        if not isinstance(message, str) or not message.strip() or len(message) > 8000:
+            raise ValueError("Enter a message of 1-8000 characters")
+        if sender is not None and (not isinstance(sender, str) or not 0 < len(sender.strip()) <= 64):
+            raise ValueError("from must be a name of 1-64 characters")
+        if isinstance(timeout, bool) or not isinstance(timeout, int | float) or not 1 <= timeout <= _CHAT_TIMEOUT_MAX_S:
+            raise ValueError(f"timeout must be 1-{_CHAT_TIMEOUT_MAX_S} seconds")
+        if sender:
+            message = f"[Message from {' '.join(sender.split())}, another AI] {message}"
+        bus = engine.observability_bus
+        events = bus.subscribe()
+        try:
+            if engine.shutdown_event.is_set() or not engine.submit_text_input(message, source="api"):
+                return self._json(409, {"error": "Engine is not accepting input"})
+            deadline, generation = time.monotonic() + timeout, None
+            while (left := deadline - time.monotonic()) > 0:
+                try:
+                    event = events.get(timeout=left)
+                except queue.Empty:
+                    break
+                if event.source == "api" and event.kind == "user_input" and generation is None:
+                    generation = event.meta.get("generation")
+                elif event.kind == "user_input":
+                    if generation is not None:  # Someone else spoke; this turn was superseded.
+                        return self._json(409, {"error": "Another input replaced this turn", "generation": generation})
+                elif (
+                    event.source == "tts"
+                    and event.kind == "reply"
+                    and generation is not None
+                    and event.meta.get("generation") == generation
+                    and not event.meta.get("autonomy")
+                ):
+                    return self._json(200, {"reply": event.meta.get("text", event.message), "generation": generation})
+            self._json(504, {"error": f"No reply within {timeout:g} s", "accepted": True, "generation": generation})
+        finally:
+            bus.unsubscribe(events)
+
     def _op_save_task(self, engine: Glados, body: dict[str, Any]) -> None:
         store = _find_store(engine)
         if store is None:
@@ -632,6 +684,7 @@ class _Handler(BaseHTTPRequestHandler):
         "/api/control": _op_control,
         "/api/instructions": _op_instructions,
         "/api/input": _op_input,
+        "/api/chat": _op_chat,
         "/api/slots": _op_save_task,
     }
 

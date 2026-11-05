@@ -256,6 +256,47 @@ def test_certificate_authority_is_downloadable_before_pairing(tmp_path: Path) ->
         server.shutdown()
 
 
+def test_other_ais_chat_with_a_bearer_token_and_get_the_reply() -> None:
+    token = "t" * 43
+    engine = _FakeEngine()
+    received: list[str] = []
+
+    def submit_text_input(text: str, source: str = "text") -> bool:
+        received.append(text)
+        bus = engine.observability_bus
+
+        def answer() -> None:
+            bus.emit(source, "user_input", text, meta={"generation": 7})
+            bus.emit(
+                "tts", "reply", "Autonomy reply", meta={"generation": 7, "autonomy": True, "text": "Autonomy reply"}
+            )
+            bus.emit("tts", "reply", "Hello.", meta={"generation": 7, "autonomy": False, "text": "Hello, other AI."})
+
+        threading.Timer(0.05, answer).start()
+        return True
+
+    engine.submit_text_input = submit_text_input
+    server = WebappServer(engine, host="127.0.0.1", port=0, token=token, trust_loopback=False)
+    server.start()
+    try:
+
+        def chat(body: dict[str, object], headers: dict[str, str]) -> tuple[int, dict[str, object]]:
+            conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+            conn.request(
+                "POST", "/api/chat", body=json.dumps(body), headers={"Content-Type": "application/json", **headers}
+            )
+            response = conn.getresponse()
+            return response.status, json.loads(response.read())
+
+        assert chat({"text": "hi"}, {"Authorization": "Bearer wrong"})[0] == 401
+        status, reply = chat({"text": "hi", "from": "Claude"}, {"Authorization": "Bearer " + token})
+        assert (status, reply) == (200, {"reply": "Hello, other AI.", "generation": 7})
+        assert received == ["[Message from Claude, another AI] hi"]
+        assert chat({"text": "hi", "timeout": 0}, {"Authorization": "Bearer " + token})[0] == 400
+    finally:
+        server.shutdown()
+
+
 def test_console_token_is_private_and_stable(tmp_path: Path) -> None:
     from glados.webapp.auth import ensure_token, is_loopback, is_loopback_bind
 

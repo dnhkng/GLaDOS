@@ -102,9 +102,21 @@ class SpeechPlayer:
                 if audio_msg.is_eos:
                     logger.debug("AudioPlayer: Processing end of stream token.")
                     if assistant_text_accumulator:
-                        self._conversation_store.append(
-                            {"role": "assistant", "content": " ".join(assistant_text_accumulator)}
-                        )
+                        reply = " ".join(assistant_text_accumulator)
+                        self._conversation_store.append({"role": "assistant", "content": reply})
+                        if self._observability_bus:
+                            # The whole delivered reply, for API clients waiting on this turn.
+                            self._observability_bus.emit(
+                                source="tts",
+                                kind="reply",
+                                level="debug",
+                                message=trim_message(reply),
+                                meta={
+                                    "generation": accumulator_generation,
+                                    "autonomy": accumulator_autonomy is not None,
+                                    "text": reply,
+                                },
+                            )
                     if audio_msg.autonomy_cycle and self._on_autonomy_done:
                         delivered = bool(assistant_text_accumulator)
                         self._on_autonomy_done(
