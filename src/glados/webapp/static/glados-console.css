@@ -27,6 +27,24 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
 .hazard-bar {display:none}
 .card h3 .btn-secondary {margin-left:auto}
 .conversation-input {margin-bottom:16px}
+/* The everyday switches sit with the message box, and show at a glance what is off. */
+.quick-controls {margin-top:12px}
+.quick-controls button {min-height:40px}
+.quick-controls button[aria-pressed="true"] {border-color:var(--accent-2);color:var(--text)}
+#control-microphone[aria-pressed="false"],#control-voice[aria-pressed="false"],#control-quiet[aria-pressed="true"] {border-color:var(--warn);color:var(--warn)}
+/* Simple view: the conversation and its switches; the internals move to the full view. */
+:root[data-detail="simple"] .operator-only,:root[data-detail="simple"] .home-controls,
+:root[data-detail="simple"] .nav-item:is([data-view="context"],[data-view="tools"],[data-view="wire"],[data-view="vitals"]) {display:none}
+#detail-toggle[aria-pressed="true"] {border-color:var(--accent-2)}
+/* Header: theme, language and the presence screen live in one Display menu. */
+.header-menu {position:relative}
+.header-menu summary {list-style:none;cursor:pointer}
+.header-menu summary::-webkit-details-marker {display:none}
+.header-menu summary::after {content:" ▾"}
+.header-menu-panel {position:absolute;right:0;top:calc(100% + 8px);z-index:60;display:grid;gap:10px;min-width:220px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.header-menu-panel .theme-label {justify-content:space-between}
+.header-menu-panel .surface-switch {text-align:center}
+:root[data-detail="simple"] .topbar :is(.uptime,.clock,.brand .sub) {display:none}
 .presence-stage {grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr);gap:24px;padding:22px;align-items:start}
 .presence-stage:not(.camera-on) {grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr)}
 .avatar-stage {background:transparent;align-self:center;gap:12px}
@@ -101,12 +119,12 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
 :root[data-surface="presence"] .avatar-stage svg {max-width:540px;width:min(100%,58vh)}
 :root[data-surface="presence"] .home-controls {display:block}
 :root[data-surface="presence"] .central-controls>h3,:root[data-surface="presence"] .central-controls>p {display:none}
-:root[data-surface="presence"] .central-controls .console-actions {justify-content:center}
-:root[data-surface="presence"] .central-controls .console-actions button {padding:14px 18px;min-height:48px}
+:root[data-surface="presence"] .quick-controls {justify-content:center}
+:root[data-surface="presence"] .quick-controls button {padding:14px 18px;min-height:48px}
 @media(max-width:1150px) {.overview-grid {grid-template-columns:1fr}.grid.cols-3 {grid-template-columns:repeat(3,minmax(0,1fr))}.uptime {display:none}}
 @media(max-width:760px) {
   #app {grid-template-columns:1fr;grid-template-rows:auto auto minmax(0,1fr)}
-  .topbar {flex-wrap:wrap;padding:10px;gap:8px}.brand .sub {display:none}.topbar .clock {display:none}.live {font-size:10px;padding:4px 6px}
+  .topbar {flex-wrap:wrap;padding:10px;gap:8px}.brand .sub {display:none}.topbar .clock {display:none}.topbar .brand-t {display:none}.topbar .spacer {flex:1}.live {font-size:10px;padding:4px 6px}
   .sidebar {grid-row:2;display:flex;gap:4px;overflow-x:auto;padding:6px;border-right:0;border-bottom:1px solid var(--line);min-width:0}
   .sidebar .nav-item {width:auto;flex:0 0 auto;justify-content:start;font-size:12px;padding:8px;gap:5px}
   .sidebar .nav-item span:not(.ico) {display:inline}.sidebar .nav-item .badge,.sec-label,.nav-hint {display:none}
@@ -115,6 +133,8 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
   .avatar-stage svg,:root[data-surface="presence"] .avatar-stage svg {max-width:280px;width:70vw}
   .turn-waterfall {grid-template-columns:120px minmax(35px,1fr) 65px;gap:8px}.timing-label {font-size:11px}
   .grid.cols-3 {grid-template-columns:1fr}.thought {grid-template-columns:80px minmax(0,1fr)}
+  /* On a phone the simple view keeps the eye small so the message box is reachable without scrolling far. */
+  :root[data-detail="simple"]:not([data-surface="presence"]) .avatar-stage svg {max-width:170px}
   :root[data-surface="presence"] #app {grid-template-rows:auto minmax(0,1fr)}
   :root[data-surface="presence"] .main {grid-row:2}
   :root[data-surface="presence"] #view-home {padding:14px 12px}

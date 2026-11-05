@@ -15,6 +15,8 @@
   const surface = params.get('surface') === 'presence' ? 'presence' : 'console';
   root.document.documentElement.dataset.theme = initial;
   root.document.documentElement.dataset.surface = surface;
+  // The simple view keeps talking and the main switches; the full view adds the engine internals.
+  root.document.documentElement.dataset.detail = preference('glados-detail') === 'full' ? 'full' : 'simple';
   function mount(doc, changed) {
     const host = doc.getElementById('theme-choice');
     const link = doc.getElementById('surface-switch');
@@ -33,6 +35,24 @@
       try {root.localStorage?.setItem('glados-theme', host.value);} catch { /* Private storage may be disabled. */ }
       changed();
     };
+    const detail = doc.getElementById('detail-toggle');
+    function showDetail(level) {
+      doc.documentElement.dataset.detail = level;
+      detail.textContent = level === 'full' ? 'Simple view' : 'Full view';
+      detail.setAttribute('aria-pressed', String(level === 'full'));
+    }
+    showDetail(doc.documentElement.dataset.detail);
+    detail.onclick = () => {
+      const level = doc.documentElement.dataset.detail === 'full' ? 'simple' : 'full';
+      showDetail(level);
+      try {root.localStorage?.setItem('glados-detail', level);} catch { /* Private storage may be disabled. */ }
+      // Leaving a view that the simple view hides would strand the reader on a hidden page.
+      const active = doc.querySelector('.nav-item.active');
+      if (active && root.getComputedStyle?.(active).display === 'none') doc.querySelector('.nav-item[data-view="home"]')?.click();
+      changed();
+    };
+    const menu = doc.getElementById('header-menu');
+    doc.addEventListener?.('click', event => { if (menu?.open && !menu.contains(event.target)) menu.open = false; });
     const settings = doc.getElementById('theme-settings');
     if (settings) {
       settings.innerHTML = host.innerHTML;

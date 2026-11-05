@@ -220,8 +220,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <header class="topbar">
     <div class="brand"><svg class="aperture-mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(0 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(45 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(90 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(135 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(180 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(225 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(270 50 50)"/><path d="M 50 8 L 81 22 L 59 40 L 33 40 Z" transform="rotate(315 50 50)"/></svg><div class="brand-t"><div class="t1">GLaDOS</div><div class="sub">APERTURE SCIENCE &middot; CORE CONSOLE</div></div></div>
     <div class="spacer"></div>
-    <label class="theme-label">Theme <select id="theme-choice" aria-label="Interface theme"></select></label>
-    <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
+    <button type="button" class="btn-secondary" id="detail-toggle" aria-pressed="false">Full view</button>
+    <details class="header-menu" id="header-menu">
+      <summary class="btn-secondary">Display</summary>
+      <div class="header-menu-panel">
+        <label class="theme-label">Theme <select id="theme-choice" aria-label="Interface theme"></select></label>
+        <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
+      </div>
+    </details>
     <span class="uptime" id="uptime">UP —</span>
     <span class="clock" id="clock">--:--:--</span>
     <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
@@ -276,6 +282,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           <input class="console-field" id="message-text" maxlength="8000" required placeholder="What would you like to do?">
           <button class="btn-secondary" id="message-send" type="submit">Send message</button>
         </form>
+        <div class="console-actions quick-controls">
+          <button class="btn-secondary" id="control-microphone" type="button">Microphone</button>
+          <button class="btn-secondary" id="control-voice" type="button">Voice output</button>
+          <button class="btn-secondary" id="control-camera" type="button">Camera</button>
+          <button class="btn-secondary" id="control-quiet" type="button">Put GLaDOS to sleep</button>
+        </div>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
       </div>
       <div class="overview-grid operator-only">
@@ -314,12 +326,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <div class="card central-controls">
           <h3>Central Core <span class="now" id="brainstem-source">Engine state</span></h3>
           <p class="console-note" id="brainstem-detail"></p>
-          <div class="console-actions">
-            <button class="btn-secondary" id="control-microphone" type="button">Microphone</button>
-            <button class="btn-secondary" id="control-voice" type="button">Voice output</button>
-            <button class="btn-secondary" id="control-camera" type="button">Camera</button>
-            <button class="btn-secondary" id="control-quiet" type="button">Quiet</button>
-          </div>
           <p class="console-note" id="brainstem-expression"></p>
           <p class="console-note" id="brainstem-affect"></p>
           <div class="gauge-row operator-only">
@@ -1338,7 +1344,7 @@ function renderAutonomySettings(){
   q.disabled=!S.live||!c.quiet_available;
   q.textContent=c.quiet_mode?'Wake GLaDOS':'Put GLaDOS to sleep';
   q.setAttribute('aria-pressed',String(!!c.quiet_mode));
-  const h=$('control-quiet');h.textContent=c.quiet_mode?'Wake GLaDOS':'Quiet: OFF';h.disabled=q.disabled;h.setAttribute('aria-pressed',String(!!c.quiet_mode));
+  const h=$('control-quiet');h.textContent=c.quiet_mode?'Wake GLaDOS':'Put GLaDOS to sleep';h.disabled=q.disabled;h.setAttribute('aria-pressed',String(!!c.quiet_mode));
   q.onclick=()=>perform(async()=>{const state=await apiPost('/api/control',{action:'quiet',enabled:!S.controls.quiet_mode});applyState(state);paint();return S.controls.quiet_mode?'Quiet mode: listening for wake requests.':'GLaDOS is awake.';},'quiet-settings-feedback');
   h.onclick=q.onclick;
   b.disabled=!S.live||!c.autonomy_available;

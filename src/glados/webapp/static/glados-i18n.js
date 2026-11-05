@@ -4,10 +4,10 @@
   const FR = {
     // Navigation & header
     'Theme': 'Thème', 'Interface theme': "Thème de l'interface", 'Language': 'Langue',
-    'Presence screen ↗': 'Écran de présence ↗', 'CONNECTING': 'CONNEXION', 'Views': 'Vues',
-    'Enrichment Center': "Centre d'enrichissement", 'Cores': 'Noyaux', 'Test Chamber': 'Salle de test',
-    'Neural Buffer': 'Tampon neuronal', 'Facility Tools': 'Outils du centre', 'Test Assignments': 'Missions de test',
-    'Facility Settings': 'Réglages du centre', 'Observation Log': "Journal d'observation", 'Diagnostics': 'Diagnostics',
+    'Presence screen ↗': 'Écran de présence ↗', 'Full view': 'Vue complète', 'Display': 'Affichage', 'Simple view': 'Vue simple', 'CONNECTING': 'CONNEXION', 'Views': 'Vues',
+    'Enrichment Center': 'Accueil', 'Cores': 'Noyaux', 'Test Chamber': 'Mémoire',
+    'Neural Buffer': 'Contexte', 'Facility Tools': 'Outils', 'Test Assignments': 'Tâches',
+    'Facility Settings': 'Réglages', 'Observation Log': 'Journal', 'Diagnostics': 'Diagnostics',
     'LIVE TELEMETRY LINKED': 'TÉLÉMÉTRIE EN DIRECT', 'LIVE TELEMETRY': 'TÉLÉMÉTRIE EN DIRECT',
     'DISCONNECTED · RETRYING': 'DÉCONNECTÉ · NOUVELLE TENTATIVE', 'DEMO DATA': 'DONNÉES DE DÉMO',
     // Home
@@ -42,7 +42,7 @@
     'Edit response instructions': 'Modifier les consignes de réponse', 'Inspect context': 'Inspecter le contexte',
     'Inspect emotion': "Inspecter l'émotion", 'Last user': 'Dernier message', 'Last spoke': 'Dernière prise de parole',
     'Since last user': 'Depuis votre dernier message', 'Since last spoke': 'Depuis sa dernière parole',
-    'Test assignments': 'Missions de test', 'Create assignment': 'Créer une mission', 'Edit assignment': 'Modifier la mission',
+    'Test assignments': 'Tâches', 'Create assignment': 'Créer une mission', 'Edit assignment': 'Modifier la mission',
     'Assignments are shared with the Central Core. Ask GLaDOS to work on an open assignment.':
       'Les missions sont partagées avec le noyau central. Demandez à GLaDOS de travailler sur une mission ouverte.',
     'Observation log · live stream': "Journal d'observation · direct", 'open inspector →': "ouvrir l'inspecteur →",
@@ -116,7 +116,7 @@
     'Messages are numbered in the order sent: reusable instructions, conversation history, live state, then the current input. Live preview shows what a new request would receive; new voice or text is added when it arrives. Last submitted request shows the actual payload. Tools are displayed separately below the messages.':
       "Les messages sont numérotés dans l'ordre d'envoi : consignes réutilisables, historique, état en direct, puis l'entrée actuelle. L'aperçu en direct montre ce que recevrait une nouvelle requête ; la voix ou le texte s'ajoute à l'arrivée. La dernière requête envoyée montre le contenu réel. Les outils sont affichés à part, sous les messages.",
     'Find in context': 'Chercher dans le contexte', 'Search prompts, core reports or conversation…': 'Chercher dans les consignes, rapports ou la conversation…',
-    'Open the Neural Buffer to inspect the connected engine.': 'Ouvrez le Tampon neuronal pour inspecter le moteur connecté.',
+    'Open the Neural Buffer to inspect the connected engine.': 'Ouvrez Contexte pour inspecter le moteur connecté.',
     'Available tool catalogue · preview only': 'Catalogue des outils · aperçu seulement', 'Tools offered in this request': 'Outils proposés dans cette requête',
     'This catalogue is not a message sent to GLaDOS. Routing selects the offered subset for the next request.':
       "Ce catalogue n'est pas un message envoyé à GLaDOS. Le routage choisit le sous-ensemble proposé à la prochaine requête.",
@@ -131,7 +131,7 @@
       'Parcourez les faits et résumés enregistrés. Chercher ici ne change pas ce que GLaDOS se rappelle.',
     'Search memory': 'Chercher dans la mémoire', 'A name, preference or project…': 'Un nom, une préférence ou un projet…',
     'Show': 'Afficher', 'Facts and summaries': 'Faits et résumés', 'Facts': 'Faits', 'Summaries': 'Résumés', 'Search': 'Chercher',
-    'Open Test Chamber to browse saved memory.': 'Ouvrez la Salle de test pour parcourir la mémoire.', 'Previous': 'Précédent', 'Next': 'Suivant',
+    'Open Test Chamber to browse saved memory.': 'Ouvrez Mémoire pour parcourir les souvenirs.', 'Previous': 'Précédent', 'Next': 'Suivant',
     'No saved memories match this view.': 'Aucun souvenir ne correspond à cette vue.', 'Summary': 'Résumé', 'Fact': 'Fait',
     'Date unavailable': 'Date indisponible', 'Engine disconnected. Displayed memory may be stale.': 'Moteur déconnecté. La mémoire affichée peut être périmée.',
     'Memory could not be loaded.': "La mémoire n'a pas pu être chargée.", 'Recall unavailable.': 'Rappel indisponible.',
@@ -169,7 +169,7 @@
     'Choose the webcam, microphone and speakers connected to the GLaDOS host. Changes apply immediately for this session.':
       "Choisissez la webcam, le micro et les haut-parleurs branchés sur la machine de GLaDOS. Les changements s'appliquent tout de suite pour cette session.",
     'Webcam input': 'Webcam', 'Audio input': 'Entrée audio', 'Audio output': 'Sortie audio', 'Refresh devices': 'Actualiser les appareils',
-    'Open Facility Settings to list connected devices.': 'Ouvrez les Réglages du centre pour lister les appareils.',
+    'Open Facility Settings to list connected devices.': 'Ouvrez Réglages pour lister les appareils.',
     'System default': 'Par défaut du système', 'Connect the engine to select host devices.': 'Connectez le moteur pour choisir les appareils.',
     'Listing connected devices…': 'Recherche des appareils…', 'Devices could not be updated.': "Les appareils n'ont pas pu être mis à jour.",
     'Connected devices refreshed.': 'Appareils actualisés.',
