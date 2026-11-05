@@ -306,6 +306,26 @@ class SpeechListener:
         since = self._interaction_state.seconds_since_assistant() if self._interaction_state else None
         return self.WAKE_FOLLOW_UP_S > 0 and since is not None and since <= self.WAKE_FOLLOW_UP_S
 
+    # Seconds after the wake word was last heard during which speech needs no wake word (0 disables it).
+    # Saying the wake word again restarts the window.
+    WAKE_SESSION_S: float = 0.0
+    _wake_heard_at: float | None = None
+
+    def _accepts(self, text: str) -> bool:
+        """Whether this utterance is for GLaDOS: it names her, or follows closely enough."""
+        if not self.wake_word:
+            return True
+        now = time.monotonic()
+        if self._wakeword_detected(text):
+            if self.WAKE_SESSION_S > 0:
+                logger.info(f"Wake word heard: listening without it for {self.WAKE_SESSION_S:.0f} s.")
+            self._wake_heard_at = now
+            return True
+        heard = self._wake_heard_at
+        return (self.WAKE_SESSION_S > 0 and heard is not None and now - heard <= self.WAKE_SESSION_S) or (
+            self._in_follow_up()
+        )
+
     def _wakeword_detected(self, text: str) -> bool:
         """
         Checks if the transcribed text contains a sufficiently similar match to the configured wake word.
@@ -436,7 +456,7 @@ class SpeechListener:
         if detected_text:
             logger.success(f"ASR text: '{detected_text}'")
 
-            if self.wake_word and not self._wakeword_detected(detected_text) and not self._in_follow_up():
+            if not self._accepts(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
                 if self._observability_bus:

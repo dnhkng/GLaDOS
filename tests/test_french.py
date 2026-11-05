@@ -81,3 +81,23 @@ def test_wake_word_ignores_punctuation_and_allows_a_follow_up_window() -> None:
         return SpeechListener._in_follow_up(SimpleNamespace(WAKE_FOLLOW_UP_S=window, _interaction_state=state))
 
     assert follow_up(15, 4.0) and not follow_up(15, 40.0) and not follow_up(0, 1.0) and not follow_up(15, None)
+
+
+def test_wake_word_opens_a_session_that_restarts_each_time_it_is_said(monkeypatch: pytest.MonkeyPatch) -> None:
+    from glados.core import speech_listener as module
+    from glados.core.speech_listener import SpeechListener
+
+    clock = [1000.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    listener = SpeechListener.__new__(SpeechListener)
+    listener.wake_word, listener._interaction_state, listener.WAKE_SESSION_S = "glados", None, 1800
+
+    assert not listener._accepts("quelle heure est-il")
+    assert listener._accepts("GLaDOS, tu es là ?")
+    clock[0] += 1700
+    assert listener._accepts("quelle heure est-il")
+    assert listener._accepts("merci glados")  # restarts the 30 min
+    clock[0] += 1700
+    assert listener._accepts("et la météo ?")
+    clock[0] += 101
+    assert not listener._accepts("et la météo ?")

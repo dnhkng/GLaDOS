@@ -145,6 +145,12 @@ class GladosConfig(BaseModel):
         le=120,
         description=("After GLaDOS speaks, how long a reply is accepted without repeating the wake word."),
     )
+    wake_word_session_s: float = Field(
+        default=0.0,
+        ge=0,
+        le=86400,
+        description="After the wake word is heard, how long speech is accepted without it; saying it again restarts.",
+    )
     voice: str
     announcement: str | None
     llm_headers: dict[str, str] | None = None
@@ -367,6 +373,7 @@ class Glados(GladosCommands):
         wake_word: str | None = None,
         end_of_speech_ms: int = 416,
         wake_word_follow_up_s: float = 0.0,
+        wake_word_session_s: float = 0.0,
         language: str = "en",
         announcement: str | None = None,
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
@@ -404,6 +411,7 @@ class Glados(GladosCommands):
         self.end_of_speech_ms = end_of_speech_ms
         self.language = language
         self.wake_word_follow_up_s = wake_word_follow_up_s
+        self.wake_word_session_s = wake_word_session_s
         native_audio = (
             NativeAudioInput(native_audio_config) if native_audio_config and native_audio_config.enabled else None
         )
@@ -624,6 +632,7 @@ class Glados(GladosCommands):
             )
             self.speech_listener.PAUSE_LIMIT = getattr(self, "end_of_speech_ms", SpeechListener.PAUSE_LIMIT)
             self.speech_listener.WAKE_FOLLOW_UP_S = getattr(self, "wake_word_follow_up_s", 0.0)
+            self.speech_listener.WAKE_SESSION_S = getattr(self, "wake_word_session_s", 0.0)
         if self.input_mode in {"text", "both"}:
             if self.input_mode == "text":
                 logger.info("Text input mode enabled. ASR is disabled.")
@@ -1063,6 +1072,7 @@ class Glados(GladosCommands):
                 wake_word=config.wake_word,
                 end_of_speech_ms=config.end_of_speech_ms,
                 wake_word_follow_up_s=config.wake_word_follow_up_s,
+                wake_word_session_s=config.wake_word_session_s,
                 language=config.language,
                 announcement=config.announcement,
                 personality_preprompt=tuple(config.to_chat_messages()),
