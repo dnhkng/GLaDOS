@@ -228,6 +228,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
       </div>
     </details>
+    <button type="button" class="btn-secondary btn-shutdown" id="header-shutdown-btn" title="Arrêter GLaDOS et libérer le GPU">⏻ Arrêter</button>
     <span class="uptime" id="uptime">UP —</span>
     <span class="clock" id="clock">--:--:--</span>
     <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
@@ -288,6 +289,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           <button class="btn-secondary" id="control-voice" type="button">Voice output</button>
           <button class="btn-secondary" id="control-camera" type="button">Camera</button>
           <button class="btn-secondary" id="control-quiet" type="button">Put GLaDOS to sleep</button>
+          <button class="btn-secondary btn-shutdown" id="control-shutdown" type="button" title="Arrêter GLaDOS et libérer la mémoire GPU">Arrêter GLaDOS</button>
         </div>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
       </div>
@@ -1142,7 +1144,7 @@ function renderConsoleControls(){
   camera.setAttribute('aria-pressed',String(cameraOn));
   camera.disabled=!ready || !v?.running || c.quiet_mode;
   camera.title=cameraOn?'Suspend Vision Core observations and release the webcam.':'Resume Vision Core observations.';
-  ['message-send','edit-instructions','home-new-task','new-task'].forEach(id=>$(id).disabled=!ready);
+  ['message-send','edit-instructions','home-new-task','new-task','header-shutdown-btn','control-shutdown'].forEach(id=>{const el=$(id);if(el)el.disabled=!ready;});
   $('brainstem-source').textContent=c.emotion_paused?'PAD schedule paused':c.emotion_running?'PAD agent active':'Speech + interaction';
   $('brainstem-detail').textContent=c.emotion_available?'GLaDOS’s modeled mood, from −1 to +1. PAD updates before each reply and directs its tone and expression.':'Emotion tracking is disabled in this profile. Enable autonomy.emotion.enabled to use the PAD gauges.';
   $('instructions-preview').textContent=S.operator ? (S.operator.instructions || 'No extra response instructions. The base personality and tool instructions still apply.') : 'Response instructions are unavailable until the engine connects.';
@@ -1178,6 +1180,20 @@ function editTask(task={}){
   },'task-feedback');});
 }
 $('new-task').onclick=()=>editTask();$('home-new-task').onclick=()=>editTask();
+async function requestShutdown(){
+  if(!confirm("Voulez-vous vraiment éteindre GLaDOS et libérer la mémoire GPU ?")) return;
+  try {
+    const feedback=$('console-feedback');
+    if(feedback) feedback.textContent='Arrêt de GLaDOS en cours…';
+    const status=$('connection-status');
+    if(status) status.textContent='ARRÊT EN COURS…';
+    await apiPost('/api/shutdown',{confirm:true});
+  }catch(err){
+    alert("Impossible d'éteindre : "+err.message);
+  }
+}
+$('header-shutdown-btn')?.addEventListener('click',requestShutdown);
+$('control-shutdown')?.addEventListener('click',requestShutdown);
 function renderHomeTasks(){
   const host=$('home-tasks');
   if(!host) return;

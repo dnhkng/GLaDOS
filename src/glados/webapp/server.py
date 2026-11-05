@@ -609,6 +609,23 @@ class _Handler(BaseHTTPRequestHandler):
             raise ValueError("Control unavailable")
         self._json(200, build_state(engine))
 
+    def _op_shutdown(self, engine: Glados, body: dict[str, Any]) -> None:
+        """Shut down GLaDOS: stop service, release GPU VRAM and close console."""
+        self._json(200, {"status": "shutting_down", "message": "Arrêt de GLaDOS en cours"})
+
+        def _do_shutdown() -> None:
+            time.sleep(0.5)
+            launcher = Path.home() / ".local/bin/glados-app"
+            if launcher.exists():
+                try:
+                    subprocess.run([str(launcher), "stop"], check=False)
+                    return
+                except Exception as exc:
+                    logger.warning("glados-app stop failed: {}", exc)
+            engine.shutdown_event.set()
+
+        threading.Thread(target=_do_shutdown, daemon=True).start()
+
     def _op_instructions(self, engine: Glados, body: dict[str, Any]) -> None:
         instructions = body.get("instructions")
         if not isinstance(instructions, str):
@@ -706,6 +723,7 @@ class _Handler(BaseHTTPRequestHandler):
         "/api/devices": _op_devices,
         "/api/minds/control": _op_mind_control,
         "/api/control": _op_control,
+        "/api/shutdown": _op_shutdown,
         "/api/instructions": _op_instructions,
         "/api/input": _op_input,
         "/api/chat": _op_chat,

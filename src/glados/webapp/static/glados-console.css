@@ -158,4 +158,19 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
 .agent-diff {max-height:420px;overflow:auto;font-size:12px;padding:10px;border-radius:6px;background:rgba(127,127,127,.08)}
 .diff-add {color:#3fb950}
 .diff-del {color:#f85149}
+
+/* Shutdown button styling */
+.btn-shutdown {
+  border-color: var(--err, #ff5c6c) !important;
+  color: var(--err, #ff5c6c) !important;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-shutdown:hover:not(:disabled) {
+  background: var(--err, #ff5c6c) !important;
+  color: #fff !important;
+  border-color: var(--err, #ff5c6c) !important;
+  box-shadow: 0 0 10px rgba(255, 92, 108, 0.45);
+}
 .diff-meta {color:#58a6ff}

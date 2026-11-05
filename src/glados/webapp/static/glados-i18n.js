@@ -196,6 +196,7 @@
     'One observation queued.': 'Une observation en file.', 'Reconnect to the engine before making changes.': 'Reconnectez le moteur avant de modifier.',
     'The engine rejected the request.': 'Le moteur a refusé la demande.', 'Engine unavailable': 'Moteur indisponible',
     'Wake GLaDOS': 'Réveiller GLaDOS', 'Put GLaDOS to sleep': 'Endormir GLaDOS',
+    'Shut down': 'Arrêter', 'Shut down GLaDOS': 'Arrêter GLaDOS', 'Arrêter': 'Arrêter', 'Arrêter GLaDOS': 'Arrêter GLaDOS',
     'Quiet mode: listening for wake requests.': "Mode silence : en attente d'une demande de réveil.", 'GLaDOS is awake.': 'GLaDOS est réveillée.',
     'Autonomy enabled.': 'Autonomie activée.', 'Autonomy disabled.': 'Autonomie désactivée.', 'Enabled': 'Activé', 'Disabled': 'Désactivé',
     'Camera enabled.': 'Caméra activée.', 'Camera paused and released.': 'Caméra en pause et libérée.',
