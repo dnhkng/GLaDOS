@@ -228,7 +228,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <a class="btn-secondary surface-switch" id="surface-switch" href="/?surface=presence">Presence screen ↗</a>
       </div>
     </details>
-    <button type="button" class="btn-secondary btn-shutdown" id="header-shutdown-btn" title="Arrêter GLaDOS et libérer le GPU">⏻ Arrêter</button>
+    <button type="button" class="btn-secondary btn-shutdown" id="header-shutdown-btn" title="Shut down GLaDOS and free the GPU">⏻ Shut down</button>
     <span class="uptime" id="uptime">UP —</span>
     <span class="clock" id="clock">--:--:--</span>
     <span class="live" role="status"><span class="dot"></span><span id="connection-status">CONNECTING</span></span>
@@ -289,7 +289,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           <button class="btn-secondary" id="control-voice" type="button">Voice output</button>
           <button class="btn-secondary" id="control-camera" type="button">Camera</button>
           <button class="btn-secondary" id="control-quiet" type="button">Put GLaDOS to sleep</button>
-          <button class="btn-secondary btn-shutdown" id="control-shutdown" type="button" title="Arrêter GLaDOS et libérer la mémoire GPU">Arrêter GLaDOS</button>
+          <button class="btn-secondary btn-shutdown" id="control-shutdown" type="button" title="Shut down GLaDOS and free GPU memory">Shut down GLaDOS</button>
         </div>
         <p class="console-feedback" id="console-feedback" role="status" aria-live="polite"></p>
       </div>
@@ -1184,7 +1184,7 @@ async function requestShutdown(){
   if(!confirm("Voulez-vous vraiment éteindre GLaDOS et libérer la mémoire GPU ?")) return;
   try {
     const feedback=$('console-feedback');
-    if(feedback) feedback.textContent='Arrêt de GLaDOS en cours…';
+    if(feedback) feedback.textContent='Shutting down GLaDOS…';
     const status=$('connection-status');
     if(status) status.textContent='ARRÊT EN COURS…';
     await apiPost('/api/shutdown',{confirm:true});

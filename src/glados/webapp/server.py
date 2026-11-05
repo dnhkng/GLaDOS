@@ -40,6 +40,7 @@ import queue
 import socket
 import ssl
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -611,7 +612,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _op_shutdown(self, engine: Glados, body: dict[str, Any]) -> None:
         """Shut down GLaDOS: stop service, release GPU VRAM and close console."""
-        self._json(200, {"status": "shutting_down", "message": "Arrêt de GLaDOS en cours"})
+        self._json(200, {"status": "shutting_down", "message": "Shutting down GLaDOS"})
 
         def _do_shutdown() -> None:
             time.sleep(0.5)
@@ -620,7 +621,7 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     subprocess.run([str(launcher), "stop"], check=False)
                     return
-                except Exception as exc:
+                except OSError as exc:
                     logger.warning("glados-app stop failed: {}", exc)
             engine.shutdown_event.set()
 
