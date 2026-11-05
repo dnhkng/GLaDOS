@@ -33,6 +33,7 @@ class ProcessorTurn:
     base_messages: list[dict[str, Any]] = field(default_factory=list)
     data: dict[str, Any] = field(default_factory=dict)
     search_planning: bool = False
+    search_requested: bool = False
     wait_s: float | None = None
     queue_depth: int | None = None
 

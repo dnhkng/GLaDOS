@@ -14,6 +14,11 @@ Glados:
     worker_url: "https://api.openai.com/v1/chat/completions"
     worker_model: "gpt-5-mini"
     worker_api_key_env: "OPENAI_API_KEY"
+  nexus:
+    base:
+      reasoning_effort: "low"        # "minimal" made gpt-5-nano announce searches without calling the tool
+  autonomy:
+    cooldown_s: 90                   # 20 s re-prompted the local model after every reply, starving Health and heating the iGPU
   llm_request_options:
     keep_alive: -1                  # Ollama unloads after 5 min idle by default; reloading + prefill costs ~14 s
 

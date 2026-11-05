@@ -15,6 +15,20 @@ SEARCH_AVAILABLE_INSTRUCTIONS = (
     "search fails or returns no useful evidence, say so; do not invent results."
 )
 
+VOICE_REPLY_INSTRUCTIONS = (
+    "Your reply is spoken aloud. Answer in one to three short sentences unless the user explicitly asks for "
+    "detail; give the answer first, without a preamble. Never use lists, bullet points, headings, tables or other "
+    "markdown: if several items matter, name the two or three most useful ones in a sentence. Do not end with an "
+    "offer of more help or a question unless something is genuinely missing."
+)
+
+ACTION_TOOL_INSTRUCTIONS = (
+    "Only a tool call performs an action. When the user asks for a search, a check or any other action you have a "
+    "tool for, call that tool in this reply; do not ask permission again once they agreed. Never say that you are "
+    "launching, doing, checking or activating something unless you call the matching tool in this same reply. "
+    "If no offered tool can do it, say plainly that you cannot."
+)
+
 ROUTING_FALLBACK_INSTRUCTIONS = (
     "[Routing status for this request]\nThe fast router did not authorize a fixed action. Interpret "
     "the original request yourself using the offered read-only capabilities."

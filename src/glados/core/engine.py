@@ -572,6 +572,7 @@ class Glados(GladosCommands):
             interaction_state=self.interaction_state,
             observability_bus=self.observability_bus,
             speech_animation=self.speech_animation,
+            audio_state=self.audio_state,
         )
 
     def _init_autonomy_loop(self) -> None:

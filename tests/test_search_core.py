@@ -534,3 +534,89 @@ def test_review_deadline_includes_waiting_for_inference_capacity(
     else:
         assert result == "Evidence"
         assert post.call_args.kwargs["timeout"] == expected_timeout
+
+
+@pytest.mark.parametrize(
+    ("sentence", "spoken"),
+    [
+        ("- Assembleur  ", "Assembleur"),
+        (" 2) Langages machine", "Langages machine"),
+        ("## En pratique", "En pratique"),
+        ("Le **langage machine** reste `binaire`.", "Le langage machine reste binaire."),
+        ("Il fait -3 degrés.", "Il fait -3 degrés."),
+    ],
+)
+def test_markdown_markers_are_not_read_aloud(sentence: str, spoken: str) -> None:
+    processor = make_processor()
+    processor._process_sentence_for_tts([sentence])
+    assert processor.tts_input_queue.get_nowait().text.strip() == spoken
+
+
+@pytest.mark.parametrize("allow_tools", [True, False])
+def test_replies_are_told_to_stay_short_and_to_act_only_through_tools(
+    allow_tools: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    processor = make_processor()
+    processor.llm_input_queue.put({"role": "user", "content": "Ouais, vas-y.", "_allow_tools": allow_tools})
+    response = MagicMock(status_code=200)
+    response.__enter__.return_value = response
+    response.iter_lines.return_value = iter(())
+    prompts: list[str] = []
+
+    def post(*_args: object, **kwargs: object) -> MagicMock:
+        processor.shutdown_event.set()
+        prompts.append(json.dumps(kwargs["json"], ensure_ascii=False))
+        return response
+
+    monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
+    processor.run()
+    assert "spoken aloud" in prompts[0] and "bullet points" in prompts[0]
+    assert ("Only a tool call performs an action" in prompts[0]) == ('"tools"' in prompts[0])
+
+
+OFFER = "Je peux faire une recherche rapide. Voulez-vous que je vérifie le chiffre exact avec la source ?"
+
+
+@pytest.mark.parametrize(
+    ("content", "last_reply", "expected"),
+    [
+        ("Ouais, vas-y.", OFFER, True),
+        ("C'est ça.", OFFER, True),
+        ("Oui.", "Tu veux un café ?", False),
+        ("Ouais, vas-y.", "Je vais activer le Nexus Core.", False),
+        ("Cherche sur internet la météo de Lyon", "", True),
+        ("Où en est la recherche ?", "", True),
+        ("Cherche le fichier config dans mon projet", "", False),
+        ("Quel est le langage le plus bas niveau ?", "", False),
+    ],
+)
+def test_search_is_wanted_for_lookups_and_for_a_yes_to_her_offer(content: str, last_reply: str, expected: bool) -> None:
+    from glados.core.tool_offer import wants_search
+
+    assert wants_search(content, last_reply) is expected
+
+
+def test_a_yes_to_her_search_offer_requires_the_search_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    processor = make_processor()
+    processor.extra_tools = [
+        {"type": "function", "function": {"name": SEARCH_TOOL, "parameters": {"type": "object"}}},
+        {"type": "function", "function": {"name": "get_time", "parameters": {"type": "object"}}},
+    ]
+    processor._conversation_store = ConversationStore(
+        [{"role": "assistant", "content": OFFER}, {"role": "user", "content": "Ouais, vas-y."}]
+    )
+    processor.llm_input_queue.put({"role": "user", "content": "Ouais, vas-y."})
+    response = MagicMock(status_code=200)
+    response.__enter__.return_value = response
+    response.iter_lines.return_value = iter(())
+    bodies: list[dict] = []
+
+    def post(*_args: object, **kwargs: object) -> MagicMock:
+        processor.shutdown_event.set()
+        bodies.append(kwargs["json"])
+        return response
+
+    monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
+    processor.run()
+    assert bodies[0]["tool_choice"] == "required"
+    assert [tool["function"]["name"] for tool in bodies[0]["tools"]] == [SEARCH_TOOL.replace(".", "_")]

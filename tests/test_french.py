@@ -83,3 +83,18 @@ def test_wake_word_opens_a_session_that_restarts_each_time_it_is_said(monkeypatc
     assert listener._accepts("et la météo ?")
     clock[0] += 101
     assert not listener._accepts("et la météo ?")
+
+
+def test_session_ignores_hesitations_the_asr_invents(monkeypatch: pytest.MonkeyPatch) -> None:
+    from glados.core import speech_listener as module
+    from glados.core.speech_listener import SpeechListener
+
+    monkeypatch.setattr(module.time, "monotonic", lambda: 1000.0)
+    listener = SpeechListener.__new__(SpeechListener)
+    listener.wake_word, listener._interaction_state, listener.WAKE_SESSION_S = "glados", None, 1800
+    assert listener._accepts("GLaDOS ?")
+    for noise in ("Yeah.", "Uh", "Uh and", "And then", "Euh...", "Hmm, hmm."):
+        assert not listener._accepts(noise), noise
+    for reply in ("Oui.", "Ouais, vas-y.", "Okay.", "Quoi ?", "Euh, la météo ?"):
+        assert listener._accepts(reply), reply
+    assert listener._accepts("Uh GLaDOS"), "naming her always counts"

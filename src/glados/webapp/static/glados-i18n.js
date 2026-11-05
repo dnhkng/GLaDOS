@@ -200,6 +200,8 @@
     'Shut down GLaDOS and free the GPU': 'Arrêter GLaDOS et libérer le GPU',
     'Shut down GLaDOS and free GPU memory': 'Arrêter GLaDOS et libérer la mémoire GPU',
     'Shutting down GLaDOS…': 'Arrêt de GLaDOS en cours…',
+    '⏻ Start': '⏻ Démarrer', 'Start GLaDOS': 'Démarrer GLaDOS', 'STARTING…': 'DÉMARRAGE…',
+    'Start GLaDOS and reload the console': 'Démarrer GLaDOS et recharger la console',
     'Quiet mode: listening for wake requests.': "Mode silence : en attente d'une demande de réveil.", 'GLaDOS is awake.': 'GLaDOS est réveillée.',
     'Autonomy enabled.': 'Autonomie activée.', 'Autonomy disabled.': 'Autonomie désactivée.', 'Enabled': 'Activé', 'Disabled': 'Désactivé',
     'Camera enabled.': 'Caméra activée.', 'Camera paused and released.': 'Caméra en pause et libérée.',

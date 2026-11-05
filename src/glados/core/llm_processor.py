@@ -37,12 +37,14 @@ from .native_audio import NativeAudioInput
 from .operator_state import CONSOLE_PROMPT
 from .processor_turn import ProcessorTurn, ResponseState
 from .prompts import (
+    ACTION_TOOL_INSTRUCTIONS,
     ROUTING_FALLBACK_INSTRUCTIONS,
     SEARCH_AVAILABLE_INSTRUCTIONS,
     SEARCH_COMPLETED_INSTRUCTIONS,
     SEARCH_FINDINGS_INSTRUCTIONS,
     SEARCH_PENDING_INSTRUCTIONS,
     SELF_IMPROVE_AVAILABLE_INSTRUCTIONS,
+    VOICE_REPLY_INSTRUCTIONS,
 )
 from .routing import DecisionRouter
 from .speculative import SpeculativeStream
@@ -54,6 +56,7 @@ from .tool_offer import (
     filter_tools_for_message,
     is_self_improve_request,
     measurement_hint,
+    wants_search,
 )
 
 
@@ -294,6 +297,9 @@ class LanguageModelProcessor(LLMWireFormat):
             return f"GLADOSCITATIONURL{len(urls) - 1}TOKEN"
 
         sentence = re.sub(r"https?://[^\s<>\])]+", protect_url, sentence)
+        # Markdown is read aloud literally ("tiret Assembleur"): keep bold words, drop list and heading markers.
+        sentence = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), sentence)
+        sentence = re.sub(r"(?m)^[ \t]*(?:[-*•\u2013]|\d{1,2}[.)]|#{1,6})[ \t]+", "", sentence).replace("`", "")
         sentence = re.sub(r"\*.*?\*|\(.*?\)", "", sentence)
         sentence = sentence.replace("\n\n", ". ").replace("\n", ". ").replace("  ", " ").replace(":", " ")
         for index, url in enumerate(urls):
@@ -979,14 +985,29 @@ class LanguageModelProcessor(LLMWireFormat):
         ):
             content = str(turn.llm_message.get("content", ""))
             turn.tools = self._filter_tools_for_message(turn.tools, content)
+            search = [tool for tool in turn.tools if tool.get("function", {}).get("name") == INTERNET_SEARCH_TOOL]
+            if search and wants_search(content, self._last_reply_text()):
+                # Offered alongside other tools, small models promise "je lance une recherche" and never call it.
+                turn.tools, turn.search_requested = search, True
         turn.tool_names = {
             tool.get("function", {}).get("name", "") for tool in turn.tools if tool.get("function", {}).get("name")
         }
         if turn.autonomy_mode:
             self._autonomy_offered_tools = turn.tools
 
+    def _last_reply_text(self) -> str:
+        for message in reversed(self._conversation_store.snapshot()):
+            if message.get("role") == "assistant" and isinstance(message.get("content"), str):
+                return message["content"]
+        return ""
+
     def _add_turn_instructions(self, turn: ProcessorTurn) -> None:
         self._add_reply_instructions(turn.base_messages, turn.tool_names)
+        if not turn.autonomy_mode:
+            self._add_request_context(turn.base_messages, VOICE_REPLY_INSTRUCTIONS)
+            if turn.tool_names:
+                # Small models announce a search and never run it.
+                self._add_request_context(turn.base_messages, ACTION_TOOL_INSTRUCTIONS)
         if turn.routing_permit:
             route = turn.route or {}
             self._add_request_context(
@@ -1078,8 +1099,10 @@ class LanguageModelProcessor(LLMWireFormat):
             turn.allow_tools
             and turn.tools
             and not turn.autonomy_mode
-            and turn.routing_permit
-            and turn.routing_permit["tool_scope"] == [INTERNET_SEARCH_TOOL]
+            and (
+                turn.search_requested
+                or (turn.routing_permit and turn.routing_permit["tool_scope"] == [INTERNET_SEARCH_TOOL])
+            )
         )
         if turn.allow_tools and turn.tools and not turn.autonomy_mode:
             turn.data["tools"] = turn.tools
@@ -1222,7 +1245,8 @@ class LanguageModelProcessor(LLMWireFormat):
                 routing_permit=turn.routing_permit,
             )
         elif self.processing_active_event.is_set() and turn.search_planning:
-            self._process_sentence_for_tts(["I couldn't start the internet search."])
+            failed = "Je n'ai pas pu lancer la recherche." if self.language_reminder else None
+            self._process_sentence_for_tts([failed or "I couldn't start the internet search."])
         elif self.processing_active_event.is_set() and not turn.autonomy_mode:
             for segment in state.speech_parser.feed("", final=True):
                 if segment.emotion != state.sentence_emotion and state.sentence_buffer:

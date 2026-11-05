@@ -11,6 +11,7 @@ from loguru import logger
 from ..audio_io import AudioProtocol
 from ..observability import ObservabilityBus, trim_message
 from .audio_data import AudioMessage
+from .audio_state import AudioState
 from .conversation_store import ConversationStore
 from .speech_animation import SpeechAnimationState
 
@@ -46,6 +47,7 @@ class SpeechPlayer:
         on_autonomy_done: Callable[[str, str, str], None] | None = None,
         on_response_started: Callable[[int | None], None] | None = None,
         playback_lock: threading.RLock | None = None,
+        audio_state: AudioState | None = None,
     ) -> None:
         self.audio_io = audio_io
         self.audio_output_queue = audio_output_queue
@@ -65,6 +67,7 @@ class SpeechPlayer:
         self._on_autonomy_done = on_autonomy_done
         self._on_response_started = on_response_started
         self._playback_lock = playback_lock or threading.RLock()
+        self._audio_state = audio_state
 
     def _autonomy_current(self, generation: int | None) -> bool:
         return generation is None or (self._autonomy_enabled() and generation == self._autonomy_generation())
@@ -202,6 +205,8 @@ class SpeechPlayer:
                                 },
                             )
 
+                        if self._audio_state is not None:
+                            self._audio_state.spoke(audio_msg.text, audio_len / self.tts_sample_rate)
                         self.audio_io.start_speaking(audio_msg.audio, self.tts_sample_rate)
                     if self._speech_animation:
                         self._speech_animation.set(True, audio_msg.emotion)

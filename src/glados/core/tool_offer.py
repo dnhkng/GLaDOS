@@ -292,6 +292,33 @@ def is_self_improve_request(content: str) -> bool:
     return SELF_IMPROVE_REQUEST.search(fold(content)) is not None
 
 
+# Accent-free stems of an explicit web lookup, and of a short "yes, go ahead".
+SEARCH_REQUEST = re.compile(
+    r"cherch|\bgoogl|\bsur (internet|le web|le net)\b|\ben ligne\b|\bsearch\b|\blook (it |that )?up\b"
+)
+AFFIRMATION = re.compile(
+    r"^\W*(oui|ouais|ok|okay|d'?accord|vas[- ]y|go|fais[- ]le|lance|c'?est ca|exactement|carrement|bien sur"
+    r"|yes|yep|sure)\b"
+)
+SEARCH_OFFER = re.compile(r"cherch|verifi|chiffres? exacts?|\bsource")
+# "Cherche le fichier..." is an agent request on this PC, not a web lookup.
+LOCAL_TARGET = re.compile(
+    r"fichier|dossier|repertoire|\bfiles?\b|folder|director|\bpc\b|ordi|disque|\bdisk|\bcode\b|projet|project"
+    r"|\bgit\b|\blogs?\b|\bprocess|\bpaquet|package"
+)
+
+
+def wants_search(content: str, last_reply: str = "") -> bool:
+    """An explicit lookup, or a yes to her own offer to search: small models answer both without searching."""
+    text = fold(content)
+    if SEARCH_REQUEST.search(text):
+        return LOCAL_TARGET.search(text) is None
+    offered = fold(last_reply)
+    return (len(text.split()) <= 8 and AFFIRMATION.search(text) is not None and "?" in offered) and SEARCH_OFFER.search(
+        offered
+    ) is not None
+
+
 def filter_tools_for_message(tools: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
     text = content.casefold()
     wants_system = any(keyword in text for keyword in SYSTEM_KEYWORDS)

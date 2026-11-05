@@ -1144,7 +1144,8 @@ function renderConsoleControls(){
   camera.setAttribute('aria-pressed',String(cameraOn));
   camera.disabled=!ready || !v?.running || c.quiet_mode;
   camera.title=cameraOn?'Suspend Vision Core observations and release the webcam.':'Resume Vision Core observations.';
-  ['message-send','edit-instructions','home-new-task','new-task','header-shutdown-btn','control-shutdown'].forEach(id=>{const el=$(id);if(el)el.disabled=!ready;});
+  ['message-send','edit-instructions','home-new-task','new-task'].forEach(id=>{const el=$(id);if(el)el.disabled=!ready;});
+  paintPower(ready);
   $('brainstem-source').textContent=c.emotion_paused?'PAD schedule paused':c.emotion_running?'PAD agent active':'Speech + interaction';
   $('brainstem-detail').textContent=c.emotion_available?'GLaDOS’s modeled mood, from −1 to +1. PAD updates before each reply and directs its tone and expression.':'Emotion tracking is disabled in this profile. Enable autonomy.emotion.enabled to use the PAD gauges.';
   $('instructions-preview').textContent=S.operator ? (S.operator.instructions || 'No extra response instructions. The base personality and tool instructions still apply.') : 'Response instructions are unavailable until the engine connects.';
@@ -1180,6 +1181,34 @@ function editTask(task={}){
   },'task-feedback');});
 }
 $('new-task').onclick=()=>editTask();$('home-new-task').onclick=()=>editTask();
+// Once the engine is gone the shutdown buttons start it again, through the glados:// link the
+// desktop launcher registers. Only this machine has that handler, so remote consoles keep them off.
+const POWER={'header-shutdown-btn':['⏻ Shut down','⏻ Start'],'control-shutdown':['Shut down GLaDOS','Start GLaDOS']};
+const LOCAL_CONSOLE=typeof location!=='undefined'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
+function paintPower(ready){
+  const start=S.connection==='disconnected'&&LOCAL_CONSOLE;
+  for(const [id,[stopLabel,startLabel]] of Object.entries(POWER)){
+    const el=$(id);if(!el) continue;
+    el.disabled=start?false:!ready;
+    if(el.dataset.power===(start?'start':'stop')) continue;
+    el.dataset.power=start?'start':'stop';
+    el.textContent=start?startLabel:stopLabel;
+    el.title=start?'Start GLaDOS and reload the console':'Shut down GLaDOS and free GPU memory';
+  }
+}
+let startRequested=false;
+function requestStart(){
+  $('connection-status').textContent='STARTING…';
+  location.href='glados://start';
+  if(startRequested) return;
+  startRequested=true;
+  // The engine needs 15-25 s to load; reload the console as soon as it answers.
+  const poll=()=>fetch('/api/snapshot',{cache:'no-store'}).then(r=>{if(r.ok) location.reload(); else setTimeout(poll,2000);},()=>setTimeout(poll,2000));
+  setTimeout(poll,2000);
+}
+function requestPower(event){
+  if(event.currentTarget.dataset.power==='start') requestStart(); else requestShutdown();
+}
 async function requestShutdown(){
   if(!confirm("Voulez-vous vraiment éteindre GLaDOS et libérer la mémoire GPU ?")) return;
   try {
@@ -1192,8 +1221,8 @@ async function requestShutdown(){
     alert("Impossible d'éteindre : "+err.message);
   }
 }
-$('header-shutdown-btn')?.addEventListener('click',requestShutdown);
-$('control-shutdown')?.addEventListener('click',requestShutdown);
+$('header-shutdown-btn')?.addEventListener('click',requestPower);
+$('control-shutdown')?.addEventListener('click',requestPower);
 function renderHomeTasks(){
   const host=$('home-tasks');
   if(!host) return;

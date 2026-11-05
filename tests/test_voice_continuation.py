@@ -266,3 +266,30 @@ def test_speech_without_the_wake_word_does_not_cancel_the_reply_in_progress():
     core.asr = MagicMock(return_value="GLaDOS, stop")
     say(core, 0.1)
     assert generation[0] == 1 and pending.get_nowait()["content"] == "GLaDOS, stop"
+
+
+def test_her_own_voice_picked_up_by_the_microphone_is_ignored():
+    from glados.core.audio_state import AudioState
+
+    core, pending, generation = listener(native=False)
+    core.wake_word = "glados"  # Interrupting waits for the transcript, so an echo cannot cut her off.
+    core._audio_state = AudioState()
+    core._audio_state.spoke("Ah, une autre série de gestes élégants de votre part.", duration_s=3.0)
+    core.asr = MagicMock(return_value="Une autre série de gestes élégants de votre part.")
+    say(core, 0.1)
+    assert pending.empty() and generation[0] == 0, "her echo neither answers nor cuts her off"
+    core.asr = MagicMock(return_value="GLaDOS, quelle heure est-il ?")
+    say(core, 0.1)
+    assert pending.get_nowait()["content"] == "GLaDOS, quelle heure est-il ?"
+
+
+def test_echo_memory_forgets_lines_shortly_after_they_end(monkeypatch):
+    from glados.core import audio_state
+
+    now = [100.0]
+    monkeypatch.setattr(audio_state.time, "monotonic", lambda: now[0])
+    state = audio_state.AudioState()
+    state.spoke("Bien sûr.", duration_s=1.0)
+    assert state.is_echo("bien sur") and not state.is_echo("non merci")
+    now[0] += 1.0 + audio_state.ECHO_TAIL_S + 0.1
+    assert not state.is_echo("bien sur"), "the user may repeat her words once she is done"

@@ -8,6 +8,7 @@ voice activity detection, speech recognition, and wake word detection.
 from collections import deque
 from collections.abc import Callable
 import queue
+import re
 import threading
 import time
 from typing import Any
@@ -24,6 +25,17 @@ from ..autonomy.interaction_state import InteractionState
 from ..observability import ObservabilityBus, trim_message
 from .audio_state import AudioState
 from .native_audio import NativeAudioInput
+
+# Hesitations and noise the ASR invents ("Yeah.", "Uh and"): without the wake word they are not a request.
+FILLER_WORDS = frozenset(
+    {"uh", "um", "umm", "hmm", "hm", "mm", "mmh", "euh", "heu", "hein", "yeah", "and", "then", "so", "something"}
+)
+
+
+def _is_filler(text: str) -> bool:
+    words = re.findall(r"[^\W\d_]+", text.casefold())
+    return all(word in FILLER_WORDS for word in words)
+
 
 # Callback signature: (event_type: str) -> None
 InterruptCallback = Callable[[str], None]
@@ -330,6 +342,8 @@ class SpeechListener:
                 logger.info(f"Wake word heard: listening without it for {self.WAKE_SESSION_S:.0f} s.")
             self._wake_heard_at = now
             return True
+        if _is_filler(text):
+            return False
         heard = self._wake_heard_at
         return (self.WAKE_SESSION_S > 0 and heard is not None and now - heard <= self.WAKE_SESSION_S) or (
             self._in_follow_up()
@@ -466,7 +480,9 @@ class SpeechListener:
         if detected_text:
             logger.success(f"ASR text: '{detected_text}'")
 
-            if not self._accepts(detected_text):
+            if self._audio_state is not None and self._audio_state.is_echo(detected_text):
+                logger.info("Ignored: the microphone picked up her own voice.")
+            elif not self._accepts(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
                 if self._deferred_interrupt is not None:
