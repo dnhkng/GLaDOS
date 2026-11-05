@@ -39,6 +39,7 @@ from ..autonomy.events import TimeTickEvent
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..observability.latency import LatencyTracker
+from ..tools.agent import AgentConfig, agent_definitions
 from ..tools.safe_command import SafeCommandRunner
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
@@ -179,6 +180,7 @@ class GladosConfig(BaseModel):
     )
     slow_clap_audio_path: str = "data/slow-clap.mp3"
     tool_timeout: float = 30.0
+    agent: AgentConfig = Field(default_factory=AgentConfig)
     vision: VisionConfig | None = None
     autonomy: AutonomyConfig | None = None
     mcp_servers: list[MCPServerConfig] | None = None
@@ -665,6 +667,7 @@ class Glados(GladosCommands):
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
+            extra_tools=agent_definitions if getattr(self.tool_config.get("agent"), "enabled", False) else [],
             slot_store=self.autonomy_slots,
             preferences_store=self.preferences_store,
             constitutional_state=self.constitutional_state,
@@ -784,6 +787,8 @@ class Glados(GladosCommands):
                 "search_agent": self.search_agent,
                 "nexus_agent": self.nexus_agent,
                 "memory_agent": self.compaction_agent,
+                "conversation_store": self._conversation_store,
+                "interaction_state": self.interaction_state,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,
@@ -1076,7 +1081,7 @@ class Glados(GladosCommands):
                 language=config.language,
                 announcement=config.announcement,
                 personality_preprompt=tuple(config.to_chat_messages()),
-                tool_config={"slow_clap_audio_path": config.slow_clap_audio_path},
+                tool_config={"slow_clap_audio_path": config.slow_clap_audio_path, "agent": config.agent},
                 tool_timeout=config.tool_timeout,
                 vision_config=config.vision,
                 autonomy_config=config.autonomy,

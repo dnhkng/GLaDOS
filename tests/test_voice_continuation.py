@@ -254,3 +254,15 @@ def test_playback_boundary_acknowledges_only_current_generation(cancelled):
     assert not worker.is_alive()
     assert acknowledged == ([] if cancelled else [1])
     assert audio.start_speaking.call_count == (0 if cancelled else 1)
+
+
+def test_speech_without_the_wake_word_does_not_cancel_the_reply_in_progress():
+    core, pending, generation = listener(native=False)
+    core.wake_word = "glados"
+    core.processing_active_event.set()  # a reply (for example an API request) is being generated
+    core.asr = MagicMock(return_value="on parle d'autre chose")
+    say(core, 0.1)
+    assert generation[0] == 0 and core.processing_active_event.is_set() and pending.empty()
+    core.asr = MagicMock(return_value="GLaDOS, stop")
+    say(core, 0.1)
+    assert generation[0] == 1 and pending.get_nowait()["content"] == "GLaDOS, stop"

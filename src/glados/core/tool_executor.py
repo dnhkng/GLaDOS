@@ -69,6 +69,9 @@ class ToolExecutor:
         self._end_user_turn = end_user_turn
         self._quiet_mode, self._quiet_generation = quiet_mode, quiet_generation
         self._autonomy_generation, self._on_autonomy_done = autonomy_generation, on_autonomy_done
+        agent = self.tool_config.get("agent")
+        self._max_steps: int | None = agent.max_steps if agent is not None and agent.enabled else None
+        self._steps: dict[int, int] = {}  # tool calls made for each user request (by quiet generation)
 
     def _emit_tool_event(self, event_type: str, tool_name: str) -> None:
         """Emit a tool event to the callback if registered."""
@@ -512,6 +515,7 @@ class ToolExecutor:
                     "_quiet_generation": call.generation,
                     "_autonomy_generation": call.autonomy_epoch if call.autonomy_mode else None,
                     "_cancelled": result_queue.cancelled,
+                    "_tool_timeout": self.tool_timeout,
                 },
             )
             future = self._tool_pool.submit(tool_instance.run, call.tool_call_id, call.args)
@@ -591,8 +595,28 @@ class ToolExecutor:
             lane=call.lane,
         )
 
+    def _over_step_limit(self, call: ToolInvocation) -> bool:
+        """Stop an agent chain that keeps calling tools for the same request."""
+        if self._max_steps is None or call.autonomy_mode or call.generation is None:
+            return False
+        self._steps = {call.generation: self._steps.get(call.generation, 0) + 1}
+        if self._steps[call.generation] <= self._max_steps:
+            return False
+        self._enqueue(
+            call.results,
+            {
+                "role": "tool",
+                "tool_call_id": call.tool_call_id,
+                "content": f"error: step limit reached ({self._max_steps} tool calls for this request). Stop "
+                "calling tools; tell the user what is done and what remains.",
+                "_allow_tools": False,
+            },
+            lane=call.lane,
+        )
+        return True
+
     def _dispatch_call(self, call: ToolInvocation) -> None:
-        if not self._prepare_call(call):
+        if not self._prepare_call(call) or self._over_step_limit(call):
             return
         if call.tool.startswith("mcp."):
             self._execute_mcp(call)

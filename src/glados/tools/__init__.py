@@ -1,5 +1,6 @@
 from typing import Any
 
+from .agent import agent_classes
 from .core_controls import CancelTask, ManageMemory, cancel_definition, memory_definition
 
 # Import individual tools
@@ -57,6 +58,8 @@ tool_classes: dict[str, type[Tool]] = {
     "manage_slot": ManageSlot,
     "nexus_control": NexusControl,
     "nexus_consult": NexusConsult,
+    # Offered only when agent.enabled; see LanguageModelProcessor(extra_tools=...).
+    **agent_classes,
 }
 
 # Export all tool names

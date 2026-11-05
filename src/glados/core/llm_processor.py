@@ -81,6 +81,7 @@ class LanguageModelProcessor(LLMWireFormat):
         shutdown_event: threading.Event,
         pause_time: float = 0.05,
         vision_state: VisionState | None = None,
+        extra_tools: list[dict[str, Any]] | None = None,
         slot_store: TaskSlotStore | None = None,
         preferences_store: Store[Any] | None = None,
         constitutional_state: ConstitutionalState | None = None,
@@ -139,6 +140,7 @@ class LanguageModelProcessor(LLMWireFormat):
         self.shutdown_event = shutdown_event
         self.pause_time = pause_time
         self.vision_state = vision_state
+        self.extra_tools = list(extra_tools or [])
         self.slot_store = slot_store
         self.preferences_store = preferences_store
         self.constitutional_state = constitutional_state
@@ -567,7 +569,7 @@ class LanguageModelProcessor(LLMWireFormat):
 
     def _build_tools(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Return the tool list for the LLM request."""
-        tools = list(tool_definitions)
+        tools = [*tool_definitions, *self.extra_tools]
         if self.vision_state is None:
             tools = [tool for tool in tools if tool.get("function", {}).get("name") != "vision_look"]
         nexus = self._nexus()
@@ -995,6 +997,8 @@ class LanguageModelProcessor(LLMWireFormat):
                     "get_report",
                     "get_preferences",
                     "vision_look",
+                    "read_file",
+                    "list_dir",
                     INTERNET_SEARCH_TOOL,
                 }
             ]

@@ -108,6 +108,7 @@ class SpeechListener:
         self._begin_user_turn = begin_user_turn
         self._end_user_turn = end_user_turn
         self._turn_generation: int | None = None
+        self._deferred_interrupt: bool | None = None  # was_speaking, while waiting for the wake word check
         self._speech_onset = 0
         self._turn_is_current = turn_is_current
         self._continuation_lock = threading.RLock()
@@ -238,10 +239,12 @@ class SpeechListener:
             # Check if this is an interrupt (user speaking while GLaDOS was speaking)
             was_speaking = self.currently_speaking_event.is_set()
 
-            self.audio_io.stop_speaking()
-            self.processing_active_event.clear()
-            # Invalidate the old reply before claiming its unanswered audio.
-            self._turn_generation = self._begin_user_turn() if self._begin_user_turn else None
+            if self.wake_word and not self._native_audio:
+                # Speech that does not name her (background talk, a voice chat) must not cancel the reply in
+                # progress: interrupt only once the transcript is accepted, in _submit_detected_audio.
+                self._deferred_interrupt = was_speaking
+            else:
+                self._interrupt(was_speaking)
             with self._continuation_lock:
                 pending, self._pending_voice = self._pending_voice, None
                 continued = pending if not was_speaking else None
@@ -254,8 +257,14 @@ class SpeechListener:
                 )
             self._recording_started = True
 
-            if was_speaking and self._on_interrupt:
-                self._on_interrupt("user_interrupt")
+    def _interrupt(self, was_speaking: bool) -> None:
+        """Stop the current reply and open a new user turn."""
+        self.audio_io.stop_speaking()
+        self.processing_active_event.clear()
+        # Invalidate the old reply before claiming its unanswered audio.
+        self._turn_generation = self._begin_user_turn() if self._begin_user_turn else None
+        if was_speaking and self._on_interrupt:
+            self._on_interrupt("user_interrupt")
 
     def _process_activated_audio(self, sample: NDArray[np.float32], vad_confidence: bool) -> None:
         """
@@ -379,6 +388,7 @@ class SpeechListener:
         self._native_audio_overflow = False
         self._speech_onset = 0
         self._turn_generation = None
+        self._deferred_interrupt = None
         if self._audio_state is not None:
             self._audio_state.reset()
 
@@ -459,6 +469,8 @@ class SpeechListener:
             if not self._accepts(detected_text):
                 logger.info(f"Required wake word {self.wake_word=} not detected.")
             else:
+                if self._deferred_interrupt is not None:
+                    self._interrupt(self._deferred_interrupt)
                 if self._observability_bus:
                     self._observability_bus.emit(
                         source="asr",
