@@ -3,13 +3,17 @@ Glados:
   language: "fr"                     # French replies, native French voice (Piper siwis) with a GLaDOS effect
   announcement: "Tous les modules de réseau neuronal sont chargés. Système opérationnel."
   wake_word: "glados"                # Ollama cannot tell who is being addressed: only answer speech that names her
-  wake_word_follow_up_s: 15          # ...or that follows one of her replies within 15 s
+  wake_word_follow_up_s: 0           # Off: during voice chats a 15 s window let her answer (and act on) overheard friends
   wake_word_session_s: 1800          # ...or comes within 30 min of the last "glados" (saying it again restarts the 30 min)
   tool_timeout: 120                  # Agent shell commands may run up to ~2 min
   agent:
     enabled: true                    # Shell, files and Hyprland desktop tools
     confirm_code: "tsuki"            # Blacklisted commands / protected paths run only if your last message says it
     vision_model: "qwen2.5vl:3b"     # Lets desktop describe_screen actually look at the screen
+    worker_api: "openai"             # delegate_task runs on the OpenAI API (key: OPENAI_API_KEY in .env)
+    worker_url: "https://api.openai.com/v1/chat/completions"
+    worker_model: "gpt-5-mini"
+    worker_api_key_env: "OPENAI_API_KEY"
   llm_request_options:
     keep_alive: -1                  # Ollama unloads after 5 min idle by default; reloading + prefill costs ~14 s
 

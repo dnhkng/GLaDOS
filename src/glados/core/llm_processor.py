@@ -10,6 +10,7 @@ import re
 import threading
 import time
 from typing import Any, ClassVar, Protocol
+import unicodedata
 from urllib.parse import urlparse
 import uuid
 
@@ -42,6 +43,7 @@ from .prompts import (
     SEARCH_COMPLETED_INSTRUCTIONS,
     SEARCH_FINDINGS_INSTRUCTIONS,
     SEARCH_PENDING_INSTRUCTIONS,
+    SELF_IMPROVE_AVAILABLE_INSTRUCTIONS,
 )
 from .routing import DecisionRouter
 from .speculative import SpeculativeStream
@@ -56,6 +58,259 @@ class LineStream(Protocol):
     """What reading a reply needs: a live HTTP response or a speculative draft both provide it."""
 
     def iter_lines(self, chunk_size: int = ...) -> Iterator[bytes]: ...
+
+
+# The owner asking GLaDOS to change herself (accent-free, lower case): "améliore-toi", "modifie ton code"...
+SELF_IMPROVE_REQUEST = re.compile(
+    r"\b(amelior|modifi|chang|corrig|reprogramm|optimis|mets? a jour)(e|er|es|ez)?[- ](toi|ton|ta|tes)\b"
+    r"|\bauto-?amelior|\bself[-_ ]?improv|\bimprove (yourself|your (own )?code)"
+    r"|\b(chang|pass|bascul)(e|er|es|ez)? (de|sur|vers|le|ton|ta) (modele|model|llm|voix)"
+)
+
+AGENT_TOOL_GROUPS = {
+    "run_shell": "shell",
+    "delegate_task": "shell",
+    "agent_notes": "any",
+    "read_file": "files",
+    "write_file": "files",
+    "edit_file": "files",
+    "list_dir": "files",
+    "desktop": "desktop",
+    "schedule": "schedule",
+    "browser": "web",
+    "self_improve": "self",
+}
+# Accent-free, lower-case stems in French and English; "any" offers every agent tool.
+AGENT_TOOL_KEYWORDS = {
+    "any": ("agent", "tache de fond", "en arriere-plan", "background", "delegue", "delegate", "automatis"),
+    "shell": (
+        "command",
+        "lance",
+        "execute",
+        "run ",
+        "terminal",
+        "shell",
+        "bash",
+        "script",
+        "install",
+        "mets a jour",
+        "update",
+        "git",
+        "compile",
+        "build",
+        "processus",
+        "process",
+        "paquet",
+        "package",
+        "service",
+        "systemctl",
+        "redemarre",
+        "restart",
+        "ping",
+        "reseau",
+        "network",
+        "telecharge",
+        "download",
+        "projet",
+        "project",
+        "code",
+        "programme",
+        "cherche",
+        "trouve",
+        "find",
+        "search",
+        "combien",
+        "how many",
+        "tache",
+        "task",
+    ),
+    "files": (
+        "fichier",
+        "file",
+        "dossier",
+        "folder",
+        "repertoire",
+        "directory",
+        "lis ",
+        "lire",
+        "read",
+        "ecris",
+        "write",
+        "modifie",
+        "edit",
+        "cree",
+        "create",
+        "supprime",
+        "delete",
+        "deplace",
+        "move",
+        "copie",
+        "copy",
+        "renomme",
+        "rename",
+        "note",
+        "document",
+        "projet",
+        "project",
+        "config",
+        "~/",
+        "/home",
+        ".txt",
+        ".md",
+        ".py",
+        ".json",
+        ".yaml",
+        "liste",
+        "list",
+    ),
+    "self": (
+        "ameliore-toi",
+        "ameliore toi",
+        "ton code",
+        "ton propre code",
+        "ton modele",
+        "tes modeles",
+        "change de modele",
+        "modifie-toi",
+        "modifie toi",
+        "toi-meme",
+        "toi meme",
+        "auto-amelior",
+        "self-improv",
+        "your code",
+        "your model",
+        "improve yourself",
+        "proposition",
+        "proposal",
+        "applique",
+        "apply",
+        "ta config",
+        "ta configuration",
+        "ton fonctionnement",
+        "nouvelle fonction",
+        "fonctionnalite",
+        "feature",
+    ),
+    "web": (
+        "site",
+        "page",
+        "web",
+        "internet",
+        "navigu",
+        "browse",
+        "va sur",
+        "go to",
+        "url",
+        "http",
+        "www",
+        ".com",
+        ".fr",
+        ".org",
+        "formulaire",
+        "form",
+        "connecte-toi",
+        "log in",
+        "wikipedia",
+        "youtube",
+        "google",
+        "recherche",
+        "cherche",
+        "search",
+        "lien",
+        "link",
+        "navigateur",
+        "browser",
+        "commande",
+        "achete",
+        "reserve",
+    ),
+    "schedule": (
+        "rappel",
+        "remind",
+        "planifi",
+        "programme",
+        "schedule",
+        "timer",
+        "minuteur",
+        "alarme",
+        "alarm",
+        "demain",
+        "tomorrow",
+        "tous les",
+        "chaque",
+        "every",
+        "dans ",
+        " in ",
+        "ce soir",
+        "tonight",
+        "matin",
+        "morning",
+        " a ",
+        "heure",
+        "h00",
+        "o'clock",
+    ),
+    "desktop": (
+        "ecran",
+        "screen",
+        "fenetre",
+        "window",
+        "ouvre",
+        "open",
+        "ferme",
+        "close",
+        "lance",
+        "launch",
+        "app",
+        "workspace",
+        "bureau",
+        "desktop",
+        "volume",
+        "son ",
+        "sound",
+        "musique",
+        "music",
+        "pause",
+        "lecture",
+        "play",
+        "suivant",
+        "next",
+        "luminosite",
+        "brightness",
+        "notif",
+        "capture",
+        "screenshot",
+        "presse-papier",
+        "clipboard",
+        "copie",
+        "colle",
+        "paste",
+        "tape",
+        "type",
+        "touche",
+        "key",
+        "clique",
+        "click",
+        "souris",
+        "mouse",
+        "verrouille",
+        "lock",
+        "navigateur",
+        "browser",
+        "firefox",
+        "chrome",
+        "site",
+        "url",
+        "http",
+        "vois",
+        "regarde",
+        "look",
+        "see",
+        "affiche",
+        "plein ecran",
+        "fullscreen",
+    ),
+}
 
 
 class LanguageModelProcessor(LLMWireFormat):
@@ -233,10 +488,16 @@ class LanguageModelProcessor(LLMWireFormat):
             )
         )
         wants_clap = "clap" in text
+        folded = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+        # Agent tools cost ~800 prompt tokens: offer each group only when the request sounds like it.
+        wanted_groups = {group for group, stems in AGENT_TOOL_KEYWORDS.items() if any(s in folded for s in stems)}
         filtered: list[dict[str, Any]] = []
         for tool in tools:
             name = tool.get("function", {}).get("name", "")
             if name in ("slow_clap", "slow clap") and not wants_clap:
+                continue
+            group = AGENT_TOOL_GROUPS.get(name)
+            if group is not None and not ({group, "any"} & wanted_groups):
                 continue
             if name.startswith("mcp.") and name != INTERNET_SEARCH_TOOL and not wants_system:
                 continue
@@ -566,6 +827,8 @@ class LanguageModelProcessor(LLMWireFormat):
             self._add_request_context(messages, self.language_reminder)
         if INTERNET_SEARCH_TOOL in tool_names:
             self._add_request_context(messages, SEARCH_AVAILABLE_INSTRUCTIONS)
+        if "self_improve" in tool_names:
+            self._add_request_context(messages, SELF_IMPROVE_AVAILABLE_INSTRUCTIONS)
 
     def _build_tools(self, autonomy_mode: bool) -> list[dict[str, Any]]:
         """Return the tool list for the LLM request."""
@@ -957,7 +1220,26 @@ class LanguageModelProcessor(LLMWireFormat):
                 }
             )
             return True
-        return False
+        return self._dispatch_self_improvement(turn)
+
+    def _dispatch_self_improvement(self, turn: ProcessorTurn) -> bool:
+        """Start a self-improvement proposal directly: small models too often answer instead of calling it."""
+        offered = any(t.get("function", {}).get("name") == "self_improve" for t in self.extra_tools)
+        content = turn.llm_message.get("content")
+        if not offered or turn.autonomy_mode or turn.llm_message.get("role") != "user" or not isinstance(content, str):
+            return False
+        folded = "".join(c for c in unicodedata.normalize("NFKD", content.casefold()) if not unicodedata.combining(c))
+        if not SELF_IMPROVE_REQUEST.search(folded):
+            return False
+        call = {
+            "id": f"self_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {"name": "self_improve", "arguments": json.dumps({"action": "propose", "request": content})},
+        }
+        self._conversation_store.append({"role": "assistant", "tool_calls": [call]})
+        self._tool_handoff = True
+        self.tool_calls_queue.put({**call, "_quiet_generation": self._reply_generation})
+        return True
 
     def _select_tools(self, turn: ProcessorTurn) -> None:
         turn.routing_permit = None
@@ -1387,6 +1669,19 @@ class LanguageModelProcessor(LLMWireFormat):
                 nexus.observe_failure(True, self._autonomy_error)  # The next request returns to the local base.
             if not turn.autonomy_mode and self.processing_active_event.is_set():
                 logger.debug("LLM Processor: Sending EOS token to TTS queue.")
+                if self._observability_bus and not self._autonomy_response:
+                    # Lets API clients tell a turn that hands off to tools from the one that answers.
+                    self._observability_bus.emit(
+                        "llm",
+                        "turn_end",
+                        "Reply turn finished",
+                        level="debug",
+                        meta={
+                            "generation": self._reply_generation,
+                            "tool_handoff": self._tool_handoff,
+                            "has_text": self._response_has_text,
+                        },
+                    )
                 if self._autonomy_response and self._response_has_text and not self._autonomy_error:
                     self._autonomy_handoff = True  # SpeechPlayer acknowledges actual delivery at EOS.
                 self.tts_input_queue.put(

@@ -144,3 +144,18 @@ body {background:var(--bg-glow),var(--bg);font-family:var(--font-ui);line-height
   :root[data-theme="terminal"] body::after {display:none}
 }
 #remote-audio-banner[hidden] {display:none !important}
+
+/* Agent panel */
+.agent-recent {overflow-x:auto}
+.agent-log {width:100%;border-collapse:collapse;font-size:12.5px}
+.agent-log th, .agent-log td {text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--line, rgba(127,127,127,.25))}
+.agent-log td:nth-child(4) {word-break:break-word;min-width:14em}
+.agent-approval p {margin:0 0 8px}
+#agentBadge[hidden] {display:none !important}
+#view-agent .card {margin-bottom:16px}
+.agent-proposal summary {cursor:pointer}
+.agent-summary {white-space:pre-wrap;margin:8px 0}
+.agent-diff {max-height:420px;overflow:auto;font-size:12px;padding:10px;border-radius:6px;background:rgba(127,127,127,.08)}
+.diff-add {color:#3fb950}
+.diff-del {color:#f85149}
+.diff-meta {color:#58a6ff}

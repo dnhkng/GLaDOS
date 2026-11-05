@@ -241,6 +241,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <div class="nav-item" data-view="context"><span class="ico">&#8801;</span><span>Neural Buffer</span></div>
     <div class="nav-item" data-view="tools"><span class="ico">⚒</span><span>Facility Tools</span><span class="badge" id="toolsBadge">0</span></div>
     <div class="nav-item" data-view="tasks"><span class="ico">▤</span><span>Test Assignments</span><span class="badge" id="tasksBadge">0</span></div>
+    <div class="nav-item" data-view="agent"><span class="ico">⌘</span><span>Agent</span><span class="badge" id="agentBadge" hidden>0</span></div>
     <div class="nav-item" data-view="settings"><span class="ico">⚙</span><span>Facility Settings</span></div>
     <div class="nav-item" data-view="wire"><span class="ico">&#8776;</span><span>Observation Log</span><span class="badge" id="wireBadge">0</span></div>
     <div class="nav-item" data-view="vitals"><span class="ico">&#9829;</span><span>Diagnostics</span></div>
@@ -376,6 +377,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <p class="console-note">Create an assignment, ask GLaDOS to work on it, then inspect its result. Core state and reports live in Cores.</p><div class="slots" id="slots"></div>
     </section>
 
+    <section class="view" id="view-agent">
+      <div class="view-head"><h1>Agent</h1><span class="sub">what GLaDOS does on this computer.</span><div class="right"><button type="button" class="btn-secondary" id="agent-notify">Notifications: off</button></div></div>
+      <p class="console-note">GLaDOS runs commands, edits files and controls the desktop by herself. Blacklisted actions wait here until you approve them, or until you say your confirmation code. Every action is also written to data/agent_audit.jsonl.</p>
+      <p class="console-note" id="agent-feedback" role="status"></p>
+      <div class="card"><h3>Waiting for approval</h3><div id="agent-approvals"></div></div>
+      <div class="card"><h3>Background jobs <span class="chip" id="agent-jobs-count">0</span></h3><div id="agent-jobs"></div></div>
+      <div class="card"><h3>Self-improvement proposals</h3><p class="console-note">Changes GLaDOS prepared to her own code or configuration, in an isolated copy, tested before they reach you. Read the change, approve it above, then ask GLaDOS to apply it. She restarts, and the change is undone automatically if she does not come back.</p><div id="agent-proposals"></div></div>
+      <div class="card"><h3>Recent actions</h3><div id="agent-recent" class="agent-recent"></div></div>
+    </section>
+
     <section class="view" id="view-context">
       <div class="view-head"><h1>Neural Buffer</h1><span class="sub">Inspect GLaDOS’s inference context.</span></div>
       <div class="card context-controls">
@@ -487,6 +498,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 <script src="glados-context.js"></script>
 <script src="glados-memory.js"></script>
 <script src="glados-devices.js"></script>
+<script src="glados-agent.js"></script>
 <script>
 "use strict";
 /* GLaDOS Core Console — dual mode.
@@ -527,6 +539,7 @@ window.GladosThemes.mount(document, () => { avatar.update(S); overview.update(S)
 const contextInspector = window.GladosContext.mount(document, () => S.live && S.connection === 'live');
 const memoryBrowser = window.GladosMemory.mount(document, () => S.live && S.connection === 'live');
 const deviceSelector = window.GladosDevices.mount(document, () => S.live && S.connection === 'live');
+const agentPanel = window.GladosAgent.mount(document, () => S.live && S.connection === 'live');
 let toolsRenderKey="",mindsRenderKey="",slotsRenderKey="",homeTasksRenderKey="";
 function normalizeLanes(lanes = {}){
   return {
@@ -596,11 +609,12 @@ function renderFilters(){
 /* ============ navigation ============ */
 function go(name){
   if(name==="minds" || name==="slots") name="cores";
-  document.title=(name==="cores"?"Cores":({home:"Enrichment Center",context:"Neural Buffer",memory:"Test Chamber",tools:"Facility Tools",tasks:"Test Assignments",settings:"Facility Settings",wire:"Observation Log",vitals:"Diagnostics"})[name]||"GLaDOS")+" · GLaDOS | Aperture Science";
+  document.title=(name==="cores"?"Cores":({home:"Enrichment Center",context:"Neural Buffer",memory:"Test Chamber",tools:"Facility Tools",tasks:"Test Assignments",agent:"Agent",settings:"Facility Settings",wire:"Observation Log",vitals:"Diagnostics"})[name]||"GLaDOS")+" · GLaDOS | Aperture Science";
   avatar.setVisible(name==="home");
   contextInspector.setVisible(name==='context');
   memoryBrowser.setVisible(name==='memory');
   deviceSelector.setVisible(name==='settings');
+  agentPanel.setVisible(name==='agent');
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view===name));
   $$(".view").forEach(v => v.classList.toggle("active", v.id==="view-"+name));
   if(name==="wire"){ renderFilters(); renderFullWire(); unread=0; updateBadges(); }

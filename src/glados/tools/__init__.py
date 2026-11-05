@@ -22,6 +22,7 @@ from .preferences import (
 from .protocol import Tool
 from .safe_command import RunSafeCommand
 from .safe_command import tool_definition as safe_command_def
+from .self_improve import SelfImprove
 from .slow_clap import SlowClap
 from .slow_clap import tool_definition as slow_clap_def
 from .vision_look import VisionLook
@@ -60,6 +61,7 @@ tool_classes: dict[str, type[Tool]] = {
     "nexus_consult": NexusConsult,
     # Offered only when agent.enabled; see LanguageModelProcessor(extra_tools=...).
     **agent_classes,
+    "self_improve": SelfImprove,
 }
 
 # Export all tool names

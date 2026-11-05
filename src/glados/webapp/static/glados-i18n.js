@@ -369,6 +369,24 @@
     'Next nudge due in ~27 min.': 'Prochain rappel dans ~27 min.', 'Syncing calendar; found a clash tomorrow 14:00–15:30.':
       'Synchronisation du calendrier ; conflit demain 14:00–15:30.', 'room lighting dimmed': 'éclairage de la pièce tamisé',
     'priority lane worker': 'exécuteur de la voie prioritaire', 'autonomy pool worker': "exécuteur du groupe d'autonomie",
+    // Agent panel
+    'Agent': 'Agent', 'what GLaDOS does on this computer.': 'ce que GLaDOS fait sur cet ordinateur.',
+    'GLaDOS runs commands, edits files and controls the desktop by herself. Blacklisted actions wait here until you approve them, or until you say your confirmation code. Every action is also written to data/agent_audit.jsonl.':
+      "GLaDOS lance des commandes, modifie des fichiers et pilote le bureau toute seule. Les actions de la liste noire attendent ici que vous les autorisiez, ou que vous disiez votre code de confirmation. Chaque action est aussi enregistrée dans data/agent_audit.jsonl.",
+    'Waiting for approval': 'En attente de validation', 'Background jobs': 'Tâches de fond', 'Recent actions': 'Actions récentes',
+    'Notifications: off': 'Notifications : désactivées', 'Notifications: on': 'Notifications : activées',
+    'Notifications unavailable': 'Notifications indisponibles', 'No action is waiting for approval.': 'Aucune action en attente de validation.',
+    'No background jobs.': 'Aucune tâche de fond.', 'No agent actions yet.': "Aucune action de l'agent pour le moment.",
+    'Approve': 'Autoriser', 'Deny': 'Refuser', 'Worker': 'Sous-agent', 'OK': 'OK', 'By': 'Par', 'Details': 'Détails', 'Result': 'Résultat',
+    'Approved. Ask GLaDOS to go ahead.': 'Autorisé. Demandez à GLaDOS de continuer.', 'Denied.': 'Refusé.',
+    'GLaDOS needs your approval': 'GLaDOS a besoin de votre validation', 'Background job finished': 'Tâche de fond terminée',
+    'Self-improvement proposals': "Propositions d'amélioration",
+    'Changes GLaDOS prepared to her own code or configuration, in an isolated copy, tested before they reach you. Read the change, approve it above, then ask GLaDOS to apply it. She restarts, and the change is undone automatically if she does not come back.':
+      "Modifications que GLaDOS a préparées sur son propre code ou sa configuration, dans une copie isolée, testées avant de vous parvenir. Lisez la modification, autorisez-la plus haut, puis demandez à GLaDOS de l'appliquer. Elle redémarre, et la modification est annulée automatiquement si elle ne revient pas.",
+    'No proposals. Ask GLaDOS to improve her code or change a model.': "Aucune proposition. Demandez à GLaDOS d'améliorer son code ou de changer de modèle.",
+    'Ready: approve to apply': 'Prête : à autoriser', 'Rejected by tests': 'Refusée par les tests', 'No change': 'Aucun changement',
+    'Applying…': 'Application…', 'Applied': 'Appliquée', 'Reverted': 'Annulée', 'Could not apply': "Impossible d'appliquer",
+    'Loading the change…': 'Chargement de la modification…',
     // Hardware tier recommendations (core/hardware.py)
     'Ultra high-end workstation. Fits 14B-32B models effortlessly with large context.':
       'Station de travail très haut de gamme. Fait tourner sans effort des modèles 14B-32B avec un grand contexte.',
@@ -439,6 +457,9 @@
     [/^([\d.]+) seconds ready$/, '$1 secondes prêtes'], [/^audio takes precedence over text$/, "l'audio prime sur le texte"],
     [/^(.+)% preference$/, 'préférence $1 %'], [/^lead (.+)$/, 'avance $1'], [/^(\d+) summaries$/, '$1 résumés'],
     [/^Live updates: (ON|OFF)$/, 'Mises à jour en direct : $1'],
+    [/^Requested (.+)\. One approval allows one run of this exact action for 3 minutes\.$/,
+      'Demandée à $1. Une validation autorise une seule exécution de cette action précise, pendant 3 minutes.'],
+    [/^Background job (error|cancelled)$/, (_, s) => 'Tâche de fond ' + (s === 'error' ? 'en échec' : 'annulée')],
   ];
   // Compound labels ("title; detail", "a · b"): translate each part on its own.
   const SEPARATORS = ['; ', ' · '];

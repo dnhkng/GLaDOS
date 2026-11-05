@@ -208,3 +208,6 @@ data/webapp_tls/
 data/webapp_token
 data/logs/
 data/webapp_sessions.json
+
+# Agent audit trail: a record of commands run on this machine
+data/agent_audit.jsonl

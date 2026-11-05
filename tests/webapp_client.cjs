@@ -152,7 +152,7 @@ class Element {
     EventSource, setInterval() {}, clearInterval() {},
   });
   vm.runInContext("globalThis.window = globalThis", context);
-  for (const asset of ["glados-dom.js", "glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-remote-audio.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js"]) {
+  for (const asset of ["glados-dom.js", "glados-themes.js", "glados-rig.js", "glados-vision.js", "glados-vision-themes.js", "glados-avatar.js", "glados-favicon.js", "glados-remote-audio.js", "glados-overview.js", "glados-routing.js", "glados-context.js", "glados-memory.js", "glados-devices.js", "glados-agent.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/glados/webapp/static", asset), "utf8"), context);
   }
   const optics=[],Vision=context.GladosVision.Vision,ThemedVision=context.GladosVision.ThemedVision;
@@ -167,7 +167,7 @@ class Element {
   await new Promise(resolve => setImmediate(resolve));
   assert.match(html,/data-view="cores"/);
   assert.deepEqual([...html.matchAll(/class="nav-item(?: active)?" data-view="([^"]+)"/g)].map(m=>m[1]),
-    ['home','cores','memory','context','tools','tasks','settings','wire','vitals'],'Menu order and destinations stay unchanged');
+    ['home','cores','memory','context','tools','tasks','agent','settings','wire','vitals'],'Menu order and destinations stay unchanged');
   assert.doesNotMatch(html,/data-view="(?:minds|slots)"|id="view-slots"/);
   const coresSection=html.match(/<section class="view" id="view-cores">([\s\S]*?)<\/section>/)[1];
   assert.match(coresSection,/<h1>Cores<\/h1>/);

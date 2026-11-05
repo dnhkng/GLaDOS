@@ -39,8 +39,9 @@ from ..autonomy.events import TimeTickEvent
 from ..mcp import MCPManager, MCPServerConfig
 from ..observability import MindRegistry, ObservabilityBus, trim_message
 from ..observability.latency import LatencyTracker
-from ..tools.agent import AgentConfig, agent_definitions
+from ..tools.agent import AgentConfig, AgentState, agent_definitions
 from ..tools.safe_command import SafeCommandRunner
+from ..tools.self_improve import self_improve_definition
 from ..TTS import SpeechSynthesizerProtocol, get_speech_synthesizer
 from ..utils import spoken_text_converter as stc
 from ..utils.resources import resource_path
@@ -667,7 +668,9 @@ class Glados(GladosCommands):
             shutdown_event=self.shutdown_event,
             pause_time=self.PAUSE_TIME,
             vision_state=self.vision_state,
-            extra_tools=agent_definitions if getattr(self.tool_config.get("agent"), "enabled", False) else [],
+            extra_tools=[*agent_definitions, self_improve_definition]
+            if getattr(self.tool_config.get("agent"), "enabled", False)
+            else [],
             slot_store=self.autonomy_slots,
             preferences_store=self.preferences_store,
             constitutional_state=self.constitutional_state,
@@ -763,6 +766,7 @@ class Glados(GladosCommands):
 
     def _init_tools_and_speech(self) -> None:
         self.command_runner = SafeCommandRunner(self.observability_bus)
+        self.agent_state = AgentState()
         self.tool_executor = ToolExecutor(
             end_user_turn=self.inference_scheduler.end_interaction,
             autonomy_enabled=lambda: self.autonomy_config.enabled and not self.quiet_event.is_set(),
@@ -789,6 +793,7 @@ class Glados(GladosCommands):
                 "memory_agent": self.compaction_agent,
                 "conversation_store": self._conversation_store,
                 "interaction_state": self.interaction_state,
+                "agent_state": self.agent_state,
             },
             tool_timeout=self.tool_timeout,
             pause_time=self.PAUSE_TIME,

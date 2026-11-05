@@ -185,6 +185,7 @@ _STATIC_FILES = frozenset(
         "/glados-routing.js",
         "/glados-context.js",
         "/glados-devices.js",
+        "/glados-agent.js",
         "/glados-memory.js",
         "/glados-themes.js",
         "/glados-overview.js",
@@ -641,27 +642,50 @@ class _Handler(BaseHTTPRequestHandler):
             if engine.shutdown_event.is_set() or not engine.submit_text_input(message, source="api"):
                 return self._json(409, {"error": "Engine is not accepting input"})
             deadline, generation = time.monotonic() + timeout, None
+            # One entry per finished turn that spoke, in speaking order: True when it was the final answer
+            # rather than a turn that handed off to tools (whose results start another turn).
+            spoken: list[bool] = []
+            steps: list[str] = []
             while (left := deadline - time.monotonic()) > 0:
                 try:
                     event = events.get(timeout=left)
                 except queue.Empty:
                     break
+                mine = generation is not None and event.meta.get("generation") == generation
                 if event.source == "api" and event.kind == "user_input" and generation is None:
                     generation = event.meta.get("generation")
                 elif event.kind == "user_input":
                     if generation is not None:  # Someone else spoke; this turn was superseded.
                         return self._json(409, {"error": "Another input replaced this turn", "generation": generation})
-                elif (
-                    event.source == "tts"
-                    and event.kind == "reply"
-                    and generation is not None
-                    and event.meta.get("generation") == generation
-                    and not event.meta.get("autonomy")
-                ):
-                    return self._json(200, {"reply": event.meta.get("text", event.message), "generation": generation})
+                elif event.source == "llm" and event.kind == "turn_end" and mine:
+                    final = not event.meta.get("tool_handoff")
+                    if event.meta.get("has_text"):
+                        spoken.append(final)
+                    elif final and not spoken:
+                        return self._json(200, {"reply": "", "steps": steps, "generation": generation})
+                elif event.source == "tts" and event.kind == "reply" and mine and not event.meta.get("autonomy"):
+                    text = event.meta.get("text", event.message)
+                    if spoken.pop(0) if spoken else True:
+                        return self._json(200, {"reply": text, "steps": steps, "generation": generation})
+                    steps.append(text)
             self._json(504, {"error": f"No reply within {timeout:g} s", "accepted": True, "generation": generation})
         finally:
             bus.unsubscribe(events)
+
+    def _op_agent_approve(self, engine: Glados, body: dict[str, Any]) -> None:
+        state = getattr(engine, "agent_state", None)
+        if state is None:
+            return self._json(409, {"error": "Agent tools are unavailable"})
+        if self.server.token is not None and not (self._from_this_machine() or self._device() is not None):
+            # Bearer clients are scripts and other AIs: they must not approve their own requests.
+            return self._json(403, {"error": "Approve from this PC or a paired browser"})
+        approval_id, approve = body.get("id"), body.get("approve")
+        if not isinstance(approval_id, str) or not isinstance(approve, bool):
+            raise TypeError("Give id and approve (true or false)")
+        if not state.decide(approval_id, approve):
+            return self._json(409, {"error": "This request is no longer pending"})
+        engine.observability_bus.emit("agent", "approval", ("Approved: " if approve else "Denied: ") + approval_id)
+        self._json(200, state.snapshot())
 
     def _op_save_task(self, engine: Glados, body: dict[str, Any]) -> None:
         store = _find_store(engine)
@@ -685,6 +709,7 @@ class _Handler(BaseHTTPRequestHandler):
         "/api/instructions": _op_instructions,
         "/api/input": _op_input,
         "/api/chat": _op_chat,
+        "/api/agent/approve": _op_agent_approve,
         "/api/slots": _op_save_task,
     }
 
@@ -762,6 +787,26 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._json(400, {"error": str(exc)})
 
+    def _get_agent(self, engine: Glados) -> None:
+        state = getattr(engine, "agent_state", None)
+        if state is None:
+            return self._json(200, {"available": False})
+        from ..tools.agent import _Collect
+        from ..tools.self_improve import SelfImprove
+
+        improver = SelfImprove(_Collect(), {"agent_state": state})
+        proposal_id = self._query().get("proposal")
+        if proposal_id:
+            try:
+                meta = improver.load(proposal_id)
+            except ValueError as exc:
+                return self._json(404, {"error": str(exc)})
+            patch = improver.proposals_dir() / proposal_id / "change.patch"
+            # The owner reviews the whole change here, so it is not trimmed like tool output.
+            diff = patch.read_text(errors="replace")[:400_000] if patch.exists() else ""
+            return self._json(200, {**meta, "diff": diff})
+        self._json(200, {**state.snapshot(), "proposals": improver.listing()})
+
     def _get_mind(self, engine: Glados, rest: str) -> None:
         mind_id, _, sub = rest.partition("/")
         mind_id = unquote(mind_id)
@@ -794,6 +839,7 @@ class _Handler(BaseHTTPRequestHandler):
         "/api/memory": _get_memory,
         "/api/stream": lambda handler, engine: handler._stream(engine),
         "/api/decisions": lambda handler, engine: handler._json(200, engine.decision_lists.snapshot()),
+        "/api/agent": lambda handler, engine: handler._get_agent(engine),
         "/api/snapshot": lambda handler, engine: handler._json(200, build_snapshot(engine)),
         "/api/state": lambda handler, engine: handler._json(200, build_state(engine)),
         "/api/minds": lambda handler, engine: handler._json(

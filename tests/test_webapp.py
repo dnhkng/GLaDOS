@@ -267,9 +267,11 @@ def test_other_ais_chat_with_a_bearer_token_and_get_the_reply() -> None:
 
         def answer() -> None:
             bus.emit(source, "user_input", text, meta={"generation": 7})
-            bus.emit(
-                "tts", "reply", "Autonomy reply", meta={"generation": 7, "autonomy": True, "text": "Autonomy reply"}
-            )
+            # A turn that speaks, then hands off to a tool; the tool result starts the turn that answers.
+            bus.emit("llm", "turn_end", "", meta={"generation": 7, "tool_handoff": True, "has_text": True})
+            bus.emit("llm", "turn_end", "", meta={"generation": 7, "tool_handoff": False, "has_text": True})
+            bus.emit("tts", "reply", "Autonomy", meta={"generation": 7, "autonomy": True, "text": "Autonomy reply"})
+            bus.emit("tts", "reply", "Checking.", meta={"generation": 7, "autonomy": False, "text": "Checking."})
             bus.emit("tts", "reply", "Hello.", meta={"generation": 7, "autonomy": False, "text": "Hello, other AI."})
 
         threading.Timer(0.05, answer).start()
@@ -290,9 +292,32 @@ def test_other_ais_chat_with_a_bearer_token_and_get_the_reply() -> None:
 
         assert chat({"text": "hi"}, {"Authorization": "Bearer wrong"})[0] == 401
         status, reply = chat({"text": "hi", "from": "Claude"}, {"Authorization": "Bearer " + token})
-        assert (status, reply) == (200, {"reply": "Hello, other AI.", "generation": 7})
+        assert (status, reply) == (200, {"reply": "Hello, other AI.", "steps": ["Checking."], "generation": 7})
         assert received == ["[Message from Claude, another AI] hi"]
         assert chat({"text": "hi", "timeout": 0}, {"Authorization": "Bearer " + token})[0] == 400
+    finally:
+        server.shutdown()
+
+
+def test_bearer_clients_cannot_approve_agent_actions() -> None:
+    from glados.tools.agent import AgentState
+
+    token = "t" * 43
+    engine = _FakeEngine()
+    engine.agent_state = AgentState(audit_path=None)
+    approval_id = engine.agent_state.request("run_shell:sudo true", "sudo true")
+    server = WebappServer(engine, host="127.0.0.1", port=0, token=token, trust_loopback=False)
+    server.start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
+        conn.request(
+            "POST",
+            "/api/agent/approve",
+            body=json.dumps({"id": approval_id, "approve": True}),
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        )
+        assert conn.getresponse().status == 403
+        assert engine.agent_state.approvals()[0]["status"] == "pending"
     finally:
         server.shutdown()
 
