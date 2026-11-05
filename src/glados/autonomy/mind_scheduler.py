@@ -115,7 +115,7 @@ class MindScheduler:
             if not cancelled:
                 try:
                     entry.policy.reset()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - a faulty schedule policy is reported on its core
                     self._policy_error(entry, exc)
                     cancelled = True
             if not cancelled:
@@ -165,7 +165,7 @@ class MindScheduler:
                 entry.anchor = self._clock()
                 try:
                     entry.policy.reset()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - a faulty schedule policy is reported on its core
                     self._policy_error(entry, exc)
                 entry.pending = self._delay(entry) is not None
             if not entry.busy and entry.status != "error":
@@ -206,7 +206,7 @@ class MindScheduler:
             return None
         try:
             return entry.policy.delay()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a faulty schedule policy is reported on its core
             self._policy_error(entry, exc)
             return None
 
@@ -272,7 +272,7 @@ class MindScheduler:
                 entry.anchor = self._clock()
                 try:
                     entry.policy.reset()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - a faulty schedule policy is reported on its core
                     self._policy_error(entry, exc)
                 self._state(
                     entry,

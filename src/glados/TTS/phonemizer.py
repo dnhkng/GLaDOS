@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-import onnxruntime as ort  # type: ignore
+import onnxruntime as ort
 
 from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
@@ -362,8 +362,7 @@ class Phonemizer:
             list[NDArray[np.int64]]: Processed phoneme indices with duplicates, padding, and excess tokens removed.
         """
 
-        arr_processed: list[NDArray[np.int64]] = np.argmax(arr[0], axis=2)
-        arr_processed = self._unique_consecutive(arr_processed)
+        arr_processed = self._unique_consecutive(list(np.argmax(arr[0], axis=2).astype(np.int64)))
         arr_processed = self._remove_padding(arr_processed)
         arr_processed = self._trim_to_stop(arr_processed)
 

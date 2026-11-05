@@ -111,14 +111,27 @@ def test_source_recovery_rejects_old_handoff_and_a_queued_old_central_request() 
 def test_caption_refresh_during_delivery_remembers_the_greeted_event(kind: str, same_event: bool) -> None:
     loop = make_loop()
     slots, main = loop._slot_store, queue.Queue()
-    slots.update_slot("vision", "Vision Core", "active", "You returned", attention_key=kind,
-                      report="Recorded greeting event", notify_user=False)
+    slots.update_slot(
+        "vision",
+        "Vision Core",
+        "active",
+        "You returned",
+        attention_key=kind,
+        report="Recorded greeting event",
+        notify_user=False,
+    )
     assert loop._dispatch("Review this greeting")
     cycle = loop._llm_queue.get_nowait()["_autonomy_cycle"]
     assert loop.prompt_main(cycle, {**decision("vision"), "instruction": "Greet the user"}, main)
-    slots.update_slot("vision", "Vision Core", "active", "A reworded description while speech plays",
-                      attention_key=kind if same_event else "person_arrived@200",
-                      report="Fresh capture; same scene", notify_user=False)
+    slots.update_slot(
+        "vision",
+        "Vision Core",
+        "active",
+        "A reworded description while speech plays",
+        attention_key=kind if same_event else "person_arrived@200",
+        report="Fresh capture; same scene",
+        notify_user=False,
+    )
     loop.finish_cycle(cycle, "response", "Greeting delivered")
     if same_event:
         assert loop._announced["vision"] == (kind,)
@@ -274,7 +287,7 @@ def test_reviewer_to_central_to_delivery_keeps_personality_and_private_instructi
     assert "GLaDOS" not in requests[0]["messages"][0]["content"]  # Reviewer has its own instructions.
     assert "You are GLaDOS" in requests[1]["messages"][0]["content"]
     assert history.snapshot()[: len(original)] == original
-    delivered = history.snapshot()[len(original):]
+    delivered = history.snapshot()[len(original) :]
     assert len(delivered) == 1 and delivered[0]["role"] == "assistant"
     assert " ".join(delivered[0]["content"].split()) == "Your GPU is at 97 degrees Celsius. Please check its cooling."
     assert "Internal request" not in json.dumps(history.snapshot())

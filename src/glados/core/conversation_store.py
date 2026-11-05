@@ -8,6 +8,7 @@ lock usage patterns.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 import json
@@ -114,8 +115,7 @@ class ConversationStore:
     def remove_voice_input(self, turn_id: str) -> None:
         """Withdraw the earlier user segment when an unanswered utterance continues."""
         with self._lock:
-            kept = [r for r in self._metadata if not (
-                r.voice_turn_id == turn_id and r.message.get("role") == "user")]
+            kept = [r for r in self._metadata if not (r.voice_turn_id == turn_id and r.message.get("role") == "user")]
             if len(kept) != len(self._metadata):
                 self._metadata = kept
                 self._messages = [r.message for r in kept]
@@ -167,7 +167,6 @@ class ConversationStore:
         with self._lock:
             return list(self._messages)
 
-
     def replace_all(self, new_messages: list[dict[str, Any]]) -> None:
         """
         Atomically replace the entire conversation history.
@@ -194,6 +193,7 @@ class ConversationStore:
 
     def edit_summary(self, record_id: str, expected_revision: str, content: str | None) -> None:
         from .memory_records import revision
+
         with self._lock:
             record = next((r for r in self._metadata if r.id == record_id and r.summary_level is not None), None)
             if record is None or revision(str(record.message.get("content", ""))) != expected_revision:
@@ -249,7 +249,7 @@ class ConversationStore:
     def modify_message(
         self,
         index: int,
-        modifier: Any,
+        modifier: dict[str, Any] | Callable[[dict[str, Any]], dict[str, Any]],
     ) -> bool:
         """
         Modify a message at a specific index atomically.

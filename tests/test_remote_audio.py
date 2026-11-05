@@ -71,8 +71,6 @@ def _drain(q: queue.Queue) -> list[tuple[np.ndarray, bool]]:
             return items
 
 
-
-
 def test_remote_client_replaces_local_microphone_and_speaker() -> None:
     local = _LocalAudio()
     audio = RemoteSwitchAudioIO(local)
@@ -162,8 +160,12 @@ def https_console(tmp_path: Path) -> Iterator[tuple[RemoteSwitchAudioIO, str, ss
 
 def test_phone_attaches_over_https_websocket_and_detaches_on_close(https_console: tuple) -> None:
     audio, url, client_tls, port = https_console
-    with connect(url, ssl=client_tls, origin=f"https://127.0.0.1:{port}",
-                 user_agent_header="Mozilla/5.0 (Linux; Android 15) Mobile") as ws:
+    with connect(
+        url,
+        ssl=client_tls,
+        origin=f"https://127.0.0.1:{port}",
+        user_agent_header="Mozilla/5.0 (Linux; Android 15) Mobile",
+    ) as ws:
         deadline = time.monotonic() + 3
         while not audio.remote_status()["active"] and time.monotonic() < deadline:
             time.sleep(0.02)

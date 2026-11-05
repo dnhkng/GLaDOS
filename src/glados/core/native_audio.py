@@ -42,8 +42,11 @@ class NativeAudioInput:
         sf.write(buffer, audio, self.SAMPLE_RATE, format="WAV", subtype="PCM_16")
         return {
             "role": "user",
-            "content": ("[User spoke via audio; optional transcript unavailable.]" if self.config.user_transcripts
-                        else "[User spoke via audio; transcript disabled.]"),
+            "content": (
+                "[User spoke via audio; optional transcript unavailable.]"
+                if self.config.user_transcripts
+                else "[User spoke via audio; transcript disabled.]"
+            ),
             "_native_audio": [
                 {
                     "type": "text",
@@ -60,7 +63,11 @@ class NativeAudioInput:
         }
 
     def transcribe(
-        self, content: list[dict[str, Any]], url: str, model: str, headers: dict[str, str],
+        self,
+        content: list[dict[str, Any]],
+        url: str,
+        model: str,
+        headers: dict[str, str],
         cancelled: Callable[[], bool] = lambda: False,
     ) -> str:
         """Optional transcript from the same Gemma server; no additional model is loaded."""

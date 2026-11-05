@@ -50,8 +50,9 @@ def get_speech_synthesizer(
             from ..utils.resources import resource_path
             from .voice_effect import GladosEffect
 
-            return tts_glados.SpeechSynthesizer(model_path=resource_path(FRENCH_VOICE), language="fr",
-                                                effect=GladosEffect())
+            return tts_glados.SpeechSynthesizer(
+                model_path=resource_path(FRENCH_VOICE), language="fr", effect=GladosEffect()
+            )
         return tts_glados.SpeechSynthesizer(language=language)
 
     from ..TTS import tts_kokoro

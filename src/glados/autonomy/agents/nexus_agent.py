@@ -43,12 +43,27 @@ class NexusModel(BaseModel):
 
 
 DEFAULT_MODELS = (
-    NexusModel(id="gpt-5-nano", strengths="short factual answers, rewording, simple lookups; fastest",
-               price_in=0.05, price_out=0.40, reasoning=["minimal", "low", "medium", "high"]),
-    NexusModel(id="gpt-5-mini", strengths="explanations, everyday maths and code, solid general knowledge",
-               price_in=0.25, price_out=2.00, reasoning=["minimal", "low", "medium", "high"]),
-    NexusModel(id="gpt-5", strengths="long or subtle reasoning, complex code, careful analysis",
-               price_in=1.25, price_out=10.00, reasoning=["minimal", "low", "medium", "high"]),
+    NexusModel(
+        id="gpt-5-nano",
+        strengths="short factual answers, rewording, simple lookups; fastest",
+        price_in=0.05,
+        price_out=0.40,
+        reasoning=["minimal", "low", "medium", "high"],
+    ),
+    NexusModel(
+        id="gpt-5-mini",
+        strengths="explanations, everyday maths and code, solid general knowledge",
+        price_in=0.25,
+        price_out=2.00,
+        reasoning=["minimal", "low", "medium", "high"],
+    ),
+    NexusModel(
+        id="gpt-5",
+        strengths="long or subtle reasoning, complex code, careful analysis",
+        price_in=1.25,
+        price_out=10.00,
+        reasoning=["minimal", "low", "medium", "high"],
+    ),
 )
 
 # Reasoning tokens count against the completion limit; leave room for the visible answer.
@@ -136,7 +151,7 @@ class NexusAgent(Subagent):
         self._preferences: list[str] = []
         self._spend: dict[str, float] = {}
         self._overrides: dict[str, Any] = {}
-        self._stats: dict[str, deque] = {}
+        self._stats: dict[str, deque[tuple[bool, float, float]]] = {}
         self._running: dict[str, str] = {}
         self._base = "local"
         self._base_reason = "Configured local model"
@@ -168,7 +183,7 @@ class NexusAgent(Subagent):
         except ValueError as exc:
             logger.warning("Nexus Core: ignoring saved setting: {}", exc)
 
-    def _apply_overrides(self, values: dict) -> None:
+    def _apply_overrides(self, values: dict[str, Any]) -> None:
         # Validate everything before changing anything.
         mode = values.get("base_mode", self.settings.base.mode)
         budget = values.get("daily_budget_usd", self.settings.daily_budget_usd)
@@ -183,8 +198,12 @@ class NexusAgent(Subagent):
         if not self._settings_path:
             return
         today = date.today().isoformat()
-        values = {"consult_active": self._consult_active, "preferences": self._preferences,
-                  **self._overrides, "spend": {today: round(self._spend.get(today, 0.0), 6)}}
+        values = {
+            "consult_active": self._consult_active,
+            "preferences": self._preferences,
+            **self._overrides,
+            "spend": {today: round(self._spend.get(today, 0.0), 6)},
+        }
         try:
             write_settings(self._settings_path, values)
         except OSError as exc:
@@ -199,7 +218,7 @@ class NexusAgent(Subagent):
     def api_key(self) -> str | None:
         return os.environ.get(self.settings.api_key_env) or None
 
-    def control(self, action: str, preference: str | None = None) -> dict:
+    def control(self, action: str, preference: str | None = None) -> dict[str, Any]:
         with self._lock:
             if action in {"on", "off"}:
                 self._consult_active = action == "on"
@@ -217,7 +236,7 @@ class NexusAgent(Subagent):
             self._publish()
             return self.status()
 
-    def update_settings(self, values: dict) -> dict:
+    def update_settings(self, values: dict[str, Any]) -> dict[str, Any]:
         """Console controls: consultation switch, base mode and daily budget."""
         unknown = set(values) - {"consultation", "base_mode", "daily_budget_usd"}
         if unknown or not values:
@@ -239,7 +258,7 @@ class NexusAgent(Subagent):
         self._publish()
         return self.status()
 
-    def status(self) -> dict:
+    def status(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "consultation": "on" if self.consult_active else "off",
@@ -249,15 +268,16 @@ class NexusAgent(Subagent):
                 "base": self._base,
                 "base_model": self._local_backend.get("model") if self._base == "local" else self._base_model().id,
                 "base_reason": self._base_reason,
-                "local_first_reply_estimate_s": None if self._local_estimate() is None
-                else round(self._local_estimate(), 1),
+                "local_first_reply_estimate_s": None
+                if (estimate := self._local_estimate()) is None
+                else round(estimate, 1),
                 "spent_today_usd": round(self.spent_today(), 4),
                 "daily_budget_usd": self.settings.daily_budget_usd,
                 "running_consultations": len(self._running),
                 "preferences": list(self._preferences),
             }
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         return self.status()
 
     def as_prompt(self) -> str | None:
@@ -265,11 +285,15 @@ class NexusAgent(Subagent):
         if not self.consult_active:
             return None
         estimate = self._local_estimate()
-        speed = (f"Your estimated first reply time on this machine is about {estimate:.0f} s. "
-                 if estimate is not None and self._base == "local" else "")
+        speed = (
+            f"Your estimated first reply time on this machine is about {estimate:.0f} s. "
+            if estimate is not None and self._base == "local"
+            else ""
+        )
         return (
-            "[nexus] Nexus Core is active. " + speed +
-            "Call nexus_consult to ask an external advisor AI whenever answering alone would be too slow, "
+            "[nexus] Nexus Core is active. "
+            + speed
+            + "Call nexus_consult to ask an external advisor AI whenever answering alone would be too slow, "
             "would risk a mistake that deeper reasoning avoids, or needs something you cannot do yourself. "
             "It runs in the background: acknowledge briefly and keep talking about anything else. "
             "When its answer is handed to you, interpret it yourself and answer that question. "
@@ -287,7 +311,7 @@ class NexusAgent(Subagent):
     def _model(self, model_id: str | None) -> NexusModel | None:
         return next((m for m in self.settings.models if m.id == model_id), None)
 
-    def charge(self, model_id: str, usage: dict | None) -> float:
+    def charge(self, model_id: str, usage: dict[str, Any] | None) -> float:
         if not isinstance(usage, dict):
             return 0.0
         model = self._model(model_id) or NexusModel(id=model_id)
@@ -304,7 +328,7 @@ class NexusAgent(Subagent):
         with self._lock:
             self._stats.setdefault(model_id, deque(maxlen=50)).append((ok, elapsed_s, cost))
 
-    def _stats_summary(self) -> dict:
+    def _stats_summary(self) -> dict[str, Any]:
         with self._lock:
             summary = {}
             for model_id, rows in self._stats.items():
@@ -318,8 +342,9 @@ class NexusAgent(Subagent):
 
     # External calls
 
-    def _chat(self, model: NexusModel, system: str, user: str, max_tokens: int, effort: str | None,
-              timeout: float) -> tuple[str, float]:
+    def _chat(
+        self, model: NexusModel, system: str, user: str, max_tokens: int, effort: str | None, timeout: float
+    ) -> tuple[str, float]:
         key = self.api_key()
         if not key:
             raise NexusStopError(f"No API key: set {self.settings.api_key_env}")
@@ -334,8 +359,12 @@ class NexusAgent(Subagent):
         }
         if effort:
             body["reasoning_effort"] = effort
-        response = requests.post(self.settings.api_url, json=body, timeout=timeout,
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+        response = requests.post(
+            self.settings.api_url,
+            json=body,
+            timeout=timeout,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        )
         if response.status_code >= 400:
             raise NexusError(f"{model.id} returned HTTP {response.status_code}")
         data = response.json()
@@ -347,14 +376,18 @@ class NexusAgent(Subagent):
         options = [m for m in self.settings.models if m.id not in excluded and (m.tools or not tools)]
         return min(options, key=lambda m: m.unit_cost, default=None)
 
-    def _dispatch(self, request: dict, failures: list[dict], timeout: float) -> dict:
+    def _dispatch(self, request: dict[str, Any], failures: list[dict[str, Any]], timeout: float) -> dict[str, Any]:
         excluded = {f["model"] for f in failures}
         catalog = [m for m in self.settings.models if m.id not in excluded]
         if not catalog:
             raise NexusStopError("Every catalog model failed")
         fallback = min(catalog, key=lambda m: m.unit_cost)
-        choice = {"model": fallback.id, "reasoning_effort": None, "max_output_tokens": self.settings.max_output_tokens,
-                  "reason": "Cheapest available model (dispatcher unavailable)"}
+        choice = {
+            "model": fallback.id,
+            "reasoning_effort": None,
+            "max_output_tokens": self.settings.max_output_tokens,
+            "reason": "Cheapest available model (dispatcher unavailable)",
+        }
         if len(catalog) > 1:
             dispatcher = self._model(self.settings.dispatcher) or NexusModel(id=self.settings.dispatcher)
             payload = {
@@ -367,8 +400,9 @@ class NexusAgent(Subagent):
                 "budget_left_usd": round(self.budget_left(), 4),
             }
             try:
-                content, _ = self._chat(dispatcher, _DISPATCH_PROMPT, json.dumps(payload, ensure_ascii=False),
-                                        300, "minimal", timeout)
+                content, _ = self._chat(
+                    dispatcher, _DISPATCH_PROMPT, json.dumps(payload, ensure_ascii=False), 300, "minimal", timeout
+                )
                 proposed = json.loads(content)
             except NexusStopError:
                 raise
@@ -380,30 +414,34 @@ class NexusAgent(Subagent):
                 choice = {
                     "model": model.id,
                     "reasoning_effort": proposed.get("reasoning_effort")
-                    if proposed.get("reasoning_effort") in model.reasoning else None,
+                    if proposed.get("reasoning_effort") in model.reasoning
+                    else None,
                     "max_output_tokens": max(128, min(int(tokens), self.settings.max_output_tokens))
-                    if isinstance(tokens, int) and not isinstance(tokens, bool) else self.settings.max_output_tokens,
+                    if isinstance(tokens, int) and not isinstance(tokens, bool)
+                    else self.settings.max_output_tokens,
                     "reason": str(proposed.get("reason") or "")[:300],
                 }
         return choice
 
     @staticmethod
-    def _parse_advice(content: str) -> dict | None:
+    def _parse_advice(content: str) -> dict[str, Any] | None:
         try:
             value = json.loads(content)
         except (ValueError, TypeError):
             return None
         if not isinstance(value, dict) or not isinstance(value.get("answer"), str) or not value["answer"].strip():
             return None
-        caveats = value.get("caveats") if isinstance(value.get("caveats"), list) else []
+        raw_caveats = value.get("caveats")
+        caveats = raw_caveats if isinstance(raw_caveats, list) else []
         return {
             "answer": value["answer"].strip(),
             "confidence": value.get("confidence") if value.get("confidence") in {"high", "medium", "low"} else None,
             "caveats": [str(c)[:200] for c in caveats[:5]],
         }
 
-    def consult(self, arguments: dict, cancelled: Callable[[], bool] = lambda: False,
-                task_id: str | None = None) -> str:
+    def consult(
+        self, arguments: dict[str, Any], cancelled: Callable[[], bool] = lambda: False, task_id: str | None = None
+    ) -> str:
         """Ask the advisor chosen by the dispatcher; returns a bounded JSON report."""
         need = str(arguments.get("need") or "").strip()[:1000]
         question = str(arguments.get("question") or "").strip()[:4000]
@@ -418,7 +456,7 @@ class NexusAgent(Subagent):
         task_id = task_id or uuid.uuid4().hex
         started = time.monotonic()
         request = {"need": need, "question": question, "context": context}
-        failures: list[dict] = []
+        failures: list[dict[str, Any]] = []
         with self._lock:
             self._running[task_id] = question[:160]
         self._publish()
@@ -438,20 +476,35 @@ class NexusAgent(Subagent):
                     choice = self._dispatch(request, failures, timeout)
                     model_id = choice["model"]
                     model = self._model(model_id)
+                    if model is None:
+                        raise NexusError(f"Dispatcher chose unknown model {model_id}")
                     if self._observability_bus:
-                        self._observability_bus.emit("nexus", "consult", f"{model_id}: {question[:120]}",
-                                                     meta={"reason": choice["reason"], "task_id": task_id})
-                    content, cost = self._chat(model, _ADVISOR_PROMPT, json.dumps(request, ensure_ascii=False),
-                                               choice["max_output_tokens"], choice["reasoning_effort"],
-                                               min(self.settings.request_timeout_s,
-                                                   self.settings.deadline_s - (time.monotonic() - started)))
+                        self._observability_bus.emit(
+                            "nexus",
+                            "consult",
+                            f"{model_id}: {question[:120]}",
+                            meta={"reason": choice["reason"], "task_id": task_id},
+                        )
+                    content, cost = self._chat(
+                        model,
+                        _ADVISOR_PROMPT,
+                        json.dumps(request, ensure_ascii=False),
+                        choice["max_output_tokens"],
+                        choice["reasoning_effort"],
+                        min(self.settings.request_timeout_s, self.settings.deadline_s - (time.monotonic() - started)),
+                    )
                     advice = self._parse_advice(content)
                     if advice is None:
                         raise NexusError(f"{model_id} returned no usable answer")
                     self._record(model_id, True, time.monotonic() - attempt_started, cost)
-                    report.update(status="cancelled" if cancelled() else "done", model=model_id,
-                                  reasoning_effort=choice["reasoning_effort"], reason=choice["reason"],
-                                  **advice, cost_usd=round(cost, 5))
+                    report.update(
+                        status="cancelled" if cancelled() else "done",
+                        model=model_id,
+                        reasoning_effort=choice["reasoning_effort"],
+                        reason=choice["reason"],
+                        **advice,
+                        cost_usd=round(cost, 5),
+                    )
                     break
                 except NexusStopError as exc:
                     report["error"] = str(exc)
@@ -475,7 +528,7 @@ class NexusAgent(Subagent):
         self._publish()
         return self._pack(report)
 
-    def _pack(self, report: dict) -> str:
+    def _pack(self, report: dict[str, Any]) -> str:
         if isinstance(report.get("answer"), str) and len(report["answer"]) > self.settings.max_answer_chars:
             report["answer"] = report["answer"][: self.settings.max_answer_chars] + "…"
             report["truncated"] = True
@@ -498,8 +551,13 @@ class NexusAgent(Subagent):
         effort = self.settings.base.reasoning_effort
         if effort and effort in model.reasoning:
             options["reasoning_effort"] = effort
-        return {"url": self.settings.api_url, "model": model.id, "request_options": options, "remote": True,
-                "headers": {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}}
+        return {
+            "url": self.settings.api_url,
+            "model": model.id,
+            "request_options": options,
+            "remote": True,
+            "headers": {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        }
 
     def _local_estimate(self) -> float | None:
         if self._local_latencies:
@@ -530,8 +588,11 @@ class NexusAgent(Subagent):
         if self._api_failed_at and time.monotonic() - self._api_failed_at < self.settings.base.reprobe_interval_s:
             return
         estimate = self._local_estimate()
-        if (len(self._local_latencies) >= self.settings.base.window and estimate is not None
-                and estimate > self.settings.base.latency_threshold_s):
+        if (
+            len(self._local_latencies) >= self.settings.base.window
+            and estimate is not None
+            and estimate > self.settings.base.latency_threshold_s
+        ):
             self._switch("api", f"Local first replies take about {estimate:.0f} s")
 
     def observe_failure(self, remote: bool, reason: str) -> None:
@@ -539,7 +600,7 @@ class NexusAgent(Subagent):
             self._api_failed_at = time.monotonic()
             self._switch("local", f"API base failed ({reason[:80]})")
 
-    def observe_usage(self, model_id: str, usage: dict | None) -> None:
+    def observe_usage(self, model_id: str, usage: dict[str, Any] | None) -> None:
         self.charge(model_id, usage)
         if self._base == "api" and self.budget_left() <= 0:
             self._switch("local", "Daily Nexus budget is exhausted")
@@ -551,16 +612,23 @@ class NexusAgent(Subagent):
         timeout = self.settings.base.probe_timeout_s
 
         def ask(text: str) -> float:
-            body: dict[str, Any] = {**self._local_backend.get("request_options", {}),
-                                    "model": self._local_backend.get("model"), "stream": False,
-                                    "messages": [{"role": "user", "content": text}]}
+            body: dict[str, Any] = {
+                **self._local_backend.get("request_options", {}),
+                "model": self._local_backend.get("model"),
+                "stream": False,
+                "messages": [{"role": "user", "content": text}],
+            }
             if ollama:
                 body["options"] = {**body.get("options", {}), "num_predict": 1}
             else:
                 body["max_tokens"] = 1
             started = time.perf_counter()
-            response = requests.post(url, json=body, timeout=timeout,
-                                     headers=self._local_backend.get("headers") or {"Content-Type": "application/json"})
+            response = requests.post(
+                url,
+                json=body,
+                timeout=timeout,
+                headers=self._local_backend.get("headers") or {"Content-Type": "application/json"},
+            )
             response.raise_for_status()
             return time.perf_counter() - started
 
@@ -609,8 +677,11 @@ class NexusAgent(Subagent):
                 self._switch("api", f"Local first replies estimated at {estimate:.0f} s")
             else:
                 self._publish()
-        elif (estimate is not None and estimate < threshold * self.settings.base.recover_ratio
-              and time.monotonic() - self._api_failed_at >= self.settings.base.reprobe_interval_s):
+        elif (
+            estimate is not None
+            and estimate < threshold * self.settings.base.recover_ratio
+            and time.monotonic() - self._api_failed_at >= self.settings.base.reprobe_interval_s
+        ):
             self._switch("local", f"Local first replies now estimated at {estimate:.0f} s")
         else:
             self._publish()

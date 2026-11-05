@@ -36,7 +36,7 @@ class SpeechPlayer:
         processing_active_event: threading.Event,
         pause_time: float,
         tts_muted_event: threading.Event | None = None,
-        interaction_state: "InteractionState | None" = None,
+        interaction_state: InteractionState | None = None,
         observability_bus: ObservabilityBus | None = None,
         quiet_mode: Callable[[], bool] = lambda: False,
         quiet_generation: Callable[[], int] = lambda: 0,
@@ -44,7 +44,7 @@ class SpeechPlayer:
         autonomy_generation: Callable[[], int] = lambda: 0,
         autonomy_enabled: Callable[[], bool] = lambda: True,
         on_autonomy_done: Callable[[str, str, str], None] | None = None,
-        on_response_started: Callable[[int], None] | None = None,
+        on_response_started: Callable[[int | None], None] | None = None,
         playback_lock: threading.RLock | None = None,
     ) -> None:
         self.audio_io = audio_io
@@ -84,12 +84,17 @@ class SpeechPlayer:
             try:
                 audio_msg = self.audio_output_queue.get(timeout=self.pause_time)
 
-                if accumulator_generation != self._quiet_generation() or not self._autonomy_current(accumulator_autonomy):
+                if accumulator_generation != self._quiet_generation() or not self._autonomy_current(
+                    accumulator_autonomy
+                ):
                     assistant_text_accumulator = []
                     accumulator_generation = self._quiet_generation()
                     accumulator_autonomy = None
-                if (self._quiet_mode() or not self._autonomy_current(audio_msg.autonomy_generation)
-                        or (audio_msg.generation is not None and audio_msg.generation != accumulator_generation)):
+                if (
+                    self._quiet_mode()
+                    or not self._autonomy_current(audio_msg.autonomy_generation)
+                    or (audio_msg.generation is not None and audio_msg.generation != accumulator_generation)
+                ):
                     continue
                 audio_len = len(audio_msg.audio) if audio_msg.audio is not None else 0
                 tts_muted = bool(self._tts_muted_event and self._tts_muted_event.is_set())
@@ -102,9 +107,13 @@ class SpeechPlayer:
                         )
                     if audio_msg.autonomy_cycle and self._on_autonomy_done:
                         delivered = bool(assistant_text_accumulator)
-                        self._on_autonomy_done(audio_msg.autonomy_cycle, "response" if delivered else "error",
-                                               "Central Core notification delivered" if delivered else
-                                               "No notification text was delivered")
+                        self._on_autonomy_done(
+                            audio_msg.autonomy_cycle,
+                            "response" if delivered else "error",
+                            "Central Core notification delivered"
+                            if delivered
+                            else "No notification text was delivered",
+                        )
                     assistant_text_accumulator = []
                     accumulator_autonomy = None
                     self.currently_speaking_event.clear()
@@ -112,8 +121,11 @@ class SpeechPlayer:
 
                 if tts_muted:
                     with self._playback_lock:
-                        if (self._quiet_mode() or (audio_msg.generation is not None and audio_msg.generation != self._quiet_generation())
-                                or not self._autonomy_current(audio_msg.autonomy_generation)):
+                        if (
+                            self._quiet_mode()
+                            or (audio_msg.generation is not None and audio_msg.generation != self._quiet_generation())
+                            or not self._autonomy_current(audio_msg.autonomy_generation)
+                        ):
                             continue
                         if audio_msg.text:
                             if self._on_response_started:
@@ -127,8 +139,12 @@ class SpeechPlayer:
                                     kind="play",
                                     level="debug",
                                     message=trim_message(audio_msg.text),
-                                    meta={"audio_samples": 0, "muted": True, "generation": audio_msg.generation,
-                                          "autonomy": audio_msg.autonomy_generation is not None},
+                                    meta={
+                                        "audio_samples": 0,
+                                        "muted": True,
+                                        "generation": audio_msg.generation,
+                                        "autonomy": audio_msg.autonomy_generation is not None,
+                                    },
                                 )
                                 self._observability_bus.emit(
                                     source="tts",
@@ -140,14 +156,19 @@ class SpeechPlayer:
                             assistant_text_accumulator.append(audio_msg.text)
                             accumulator_autonomy = audio_msg.autonomy_generation
                         else:
-                            logger.warning(f"AudioPlayer: Received empty audio message or no text: {audio_len, audio_msg}")
+                            logger.warning(
+                                f"AudioPlayer: Received empty audio message or no text: {audio_len, audio_msg}"
+                            )
                         self.currently_speaking_event.clear()
                         continue
 
                 if audio_len and audio_msg.text:  # Ensure there's audio and text
                     with self._playback_lock:
-                        if (self._quiet_mode() or (audio_msg.generation is not None and audio_msg.generation != self._quiet_generation())
-                                or not self._autonomy_current(audio_msg.autonomy_generation)):
+                        if (
+                            self._quiet_mode()
+                            or (audio_msg.generation is not None and audio_msg.generation != self._quiet_generation())
+                            or not self._autonomy_current(audio_msg.autonomy_generation)
+                        ):
                             continue
                         if self._on_response_started:
                             self._on_response_started(audio_msg.generation)
@@ -162,8 +183,11 @@ class SpeechPlayer:
                                 kind="play",
                                 level="debug",
                                 message=trim_message(audio_msg.text),
-                                meta={"audio_samples": audio_len, "generation": audio_msg.generation,
-                                      "autonomy": audio_msg.autonomy_generation is not None},
+                                meta={
+                                    "audio_samples": audio_len,
+                                    "generation": audio_msg.generation,
+                                    "autonomy": audio_msg.autonomy_generation is not None,
+                                },
                             )
 
                         self.audio_io.start_speaking(audio_msg.audio, self.tts_sample_rate)
@@ -176,8 +200,11 @@ class SpeechPlayer:
                         audio_len, self.tts_sample_rate
                     )
 
-                    if (self._quiet_mode() or accumulator_generation != self._quiet_generation()
-                            or not self._autonomy_current(audio_msg.autonomy_generation)):
+                    if (
+                        self._quiet_mode()
+                        or accumulator_generation != self._quiet_generation()
+                        or not self._autonomy_current(audio_msg.autonomy_generation)
+                    ):
                         assistant_text_accumulator = []
                         continue
                     if interrupted:
@@ -194,16 +221,18 @@ class SpeechPlayer:
 
                         assistant_text_accumulator.append(clipped_text)
                         # Atomically append both messages to avoid race conditions
-                        self._conversation_store.append_multiple([
-                            {"role": "assistant", "content": " ".join(assistant_text_accumulator)},
-                            {
-                                "role": "user",
-                                "content": (
-                                    "[SYSTEM: User interrupted mid-response! Full intended output: "
-                                    f"'{audio_msg.text}']"
-                                ),
-                            },
-                        ])
+                        self._conversation_store.append_multiple(
+                            [
+                                {"role": "assistant", "content": " ".join(assistant_text_accumulator)},
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "[SYSTEM: User interrupted mid-response! Full intended output: "
+                                        f"'{audio_msg.text}']"
+                                    ),
+                                },
+                            ]
+                        )
                         assistant_text_accumulator = []  # Reset accumulator
                         self._clear_audio_queue()
 
@@ -217,17 +246,17 @@ class SpeechPlayer:
                                 level="debug",
                                 message=trim_message(audio_msg.text),
                             )
-                        
+
                     self.currently_speaking_event.clear()
-    
+
                 else:
                     logger.warning(f"AudioPlayer: Received empty audio message or no text: {audio_len, audio_msg}")
 
             except queue.Empty:
                 pass  # No audio to play right now
 
-            except Exception as e:
-                logger.exception(f"AudioPlayer: Unexpected error in run loop: {e}")
+            except Exception:
+                logger.exception("AudioPlayer: Unexpected error in run loop")
                 time.sleep(self.pause_time)  # small sleep here to prevent tight loop on persistent error
             finally:
                 self.autonomy_speaking = False

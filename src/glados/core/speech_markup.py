@@ -94,10 +94,14 @@ class SpeechMarkupParser:
                     continue
                 # Bare form: the name ends at "]", or at the first non-letter once it is complete.
                 name = (self._marker + char).lstrip().lower()
-                if char == "]" or (not (char.isalpha() or char == " ")
-                                   or not any(e.startswith(name) for e in EMOTIONS)) and self._marker.strip():
-                    text += self._close_bare(char)
-                elif len(self._marker) > self._LONGEST + 1:
+                if (
+                    char == "]"
+                    or (
+                        (not (char.isalpha() or char == " ") or not any(e.startswith(name) for e in EMOTIONS))
+                        and self._marker.strip()
+                    )
+                    or len(self._marker) > self._LONGEST + 1
+                ):
                     text += self._close_bare(char)
                 else:
                     self._marker += char

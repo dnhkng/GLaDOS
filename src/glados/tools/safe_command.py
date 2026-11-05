@@ -3,13 +3,13 @@
 from collections import deque
 from copy import deepcopy
 import json
-import queue
 import subprocess
 import threading
 import time
 from typing import Any
 
 from ..observability import ObservabilityBus
+from .protocol import MessageSink
 
 COMMANDS = {
     "uptime": ("System uptime", ("/usr/bin/uptime", "-p")),
@@ -28,15 +28,21 @@ class SafeCommandRunner:
         self._timeout = timeout
         self._lock = threading.Lock()
         self._active: dict[str, Any] | None = None
-        self._recent: deque = deque(maxlen=20)
+        self._recent: deque[dict[str, Any]] = deque(maxlen=20)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return deepcopy({
-                "capacity": 1, "active": self._active, "recent": list(self._recent),
-                "catalog": [{"task": task, "label": label, "command": list(argv)}
-                            for task, (label, argv) in COMMANDS.items()],
-            })
+            return deepcopy(
+                {
+                    "capacity": 1,
+                    "active": self._active,
+                    "recent": list(self._recent),
+                    "catalog": [
+                        {"task": task, "label": label, "command": list(argv)}
+                        for task, (label, argv) in COMMANDS.items()
+                    ],
+                }
+            )
 
     def run(self, args: dict[str, Any], source: str = "assistant") -> dict[str, Any]:
         if not isinstance(args, dict) or set(args) != {"task"}:
@@ -46,8 +52,7 @@ class SafeCommandRunner:
             raise ValueError("Unknown command task; arbitrary commands are not supported")
         label, argv = COMMANDS[task]
         started = time.monotonic()
-        record = {"task": task, "label": label, "command": list(argv),
-                  "source": source, "started_at": time.time()}
+        record = {"task": task, "label": label, "command": list(argv), "source": source, "started_at": time.time()}
         with self._lock:
             if self._active is not None:
                 return {"ok": False, "task": task, "error": "Command slot is busy. Try again shortly."}
@@ -57,12 +62,23 @@ class SafeCommandRunner:
             if self._bus:
                 self._bus.emit("command", "start", label, meta={"task": task, "source": source})
             completed = subprocess.run(
-                argv, shell=False, stdin=subprocess.DEVNULL, capture_output=True,
-                text=True, errors="replace", timeout=self._timeout, cwd="/",
-                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, check=False,
+                argv,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=self._timeout,
+                cwd="/",
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                check=False,
             )
-            result.update(ok=completed.returncode == 0, exit_code=completed.returncode,
-                          stdout=completed.stdout[:4096], stderr=completed.stderr[:4096])
+            result.update(
+                ok=completed.returncode == 0,
+                exit_code=completed.returncode,
+                stdout=completed.stdout[:4096],
+                stderr=completed.stderr[:4096],
+            )
             if task == "cpu_load" and result["ok"]:
                 result["measurement"] = "1, 5 and 15 minute load averages; not CPU utilization percentages"
         except subprocess.TimeoutExpired:
@@ -75,9 +91,13 @@ class SafeCommandRunner:
                 self._recent.appendleft(result)
                 self._active = None
         if self._bus:
-            self._bus.emit("command", "finish" if result["ok"] else "error", label,
-                           level="info" if result["ok"] else "warning",
-                           meta={"task": task, "ok": result["ok"], "elapsed_ms": result["elapsed_ms"]})
+            self._bus.emit(
+                "command",
+                "finish" if result["ok"] else "error",
+                label,
+                level="info" if result["ok"] else "warning",
+                meta={"task": task, "ok": result["ok"], "elapsed_ms": result["elapsed_ms"]},
+            )
         return deepcopy(result)
 
 
@@ -86,19 +106,22 @@ tool_definition = {
     "function": {
         "name": "run_safe_command",
         "description": "Read host uptime, disk space, RAM usage, CPU load or operating system information. "
-                       "cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. "
-                       "Runs a fixed read-only command in the command slot. No custom commands or arguments.",
+        "cpu_load returns 1, 5 and 15 minute load averages, not utilization percentages. "
+        "Runs a fixed read-only command in the command slot. No custom commands or arguments.",
         "parameters": {
-            "type": "object", "properties": {
+            "type": "object",
+            "properties": {
                 "task": {"type": "string", "enum": list(COMMANDS)},
-            }, "required": ["task"], "additionalProperties": False,
+            },
+            "required": ["task"],
+            "additionalProperties": False,
         },
     },
 }
 
 
 class RunSafeCommand:
-    def __init__(self, llm_queue: queue.Queue, tool_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, llm_queue: MessageSink, tool_config: dict[str, Any] | None = None) -> None:
         self.llm_queue = llm_queue
         self.runner = (tool_config or {}).get("command_runner")
 

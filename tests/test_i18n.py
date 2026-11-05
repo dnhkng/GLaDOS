@@ -11,9 +11,26 @@ import pytest
 
 STATIC = Path(__file__).resolve().parents[1] / "src/glados/webapp/static"
 # Names, sample values and placeholders that read the same in French.
-UNTRANSLATED = {"GLaDOS", "GLaDOS · Aperture Science", "APERTURE SCIENCE · CORE CONSOLE", "SF Mono", "Fira Code",
-                "Segoe UI", "IBM Plex Mono", "PotatOS", "Terminal", "Audio", "Vision", "Interaction", "Diagnostics",
-                "Consultation", "Auto", "Dominance", "Action", "Microphone"}
+UNTRANSLATED = {
+    "GLaDOS",
+    "GLaDOS · Aperture Science",
+    "APERTURE SCIENCE · CORE CONSOLE",
+    "SF Mono",
+    "Fira Code",
+    "Segoe UI",
+    "IBM Plex Mono",
+    "PotatOS",
+    "Terminal",
+    "Audio",
+    "Vision",
+    "Interaction",
+    "Diagnostics",
+    "Consultation",
+    "Auto",
+    "Dominance",
+    "Action",
+    "Microphone",
+}
 SKIPPED_TAGS = {"script", "style", "pre", "code", "textarea"}
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is required for the console scripts")
@@ -37,8 +54,14 @@ class _Strings(HTMLParser):
 
 
 def _french(strings: list[str]) -> list[str]:
-    result = subprocess.run(["node", str(Path(__file__).with_name("i18n_keys.cjs"))], input=json.dumps(strings),
-                            capture_output=True, text=True, check=True, timeout=30)
+    result = subprocess.run(
+        ["node", str(Path(__file__).with_name("i18n_keys.cjs"))],
+        input=json.dumps(strings),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
     return json.loads(result.stdout)
 
 
@@ -54,4 +77,9 @@ def test_every_static_console_string_has_a_french_translation() -> None:
 
 def test_live_values_keep_their_numbers() -> None:
     assert _french(["3 in-flight", "Demo · Idle", "Microphone: off", "Median of last 12", "Unknown text"]) == [
-        "3 en cours", "Démo · Inactif", "Micro : désactivé", "Médiane des 12 dernières", "Unknown text"]
+        "3 en cours",
+        "Démo · Inactif",
+        "Micro : désactivé",
+        "Médiane des 12 dernières",
+        "Unknown text",
+    ]

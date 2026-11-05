@@ -49,7 +49,7 @@ class LLMConfig:
 def llm_call(
     config: LLMConfig,
     system_prompt: str,
-    user_prompt: str | list,
+    user_prompt: str | list[dict[str, Any]],
     json_response: bool = False,
 ) -> str | None:
     """
@@ -77,9 +77,21 @@ def llm_call(
     url_lower = str(config.url).lower()
     if "/api/chat" in url_lower or "/api/generate" in url_lower:
         ollama_param_keys = {
-            "num_ctx", "num_predict", "num_thread", "temperature", "top_k", "top_p",
-            "min_p", "repeat_penalty", "repeat_last_n", "seed", "tfs_z", "mirostat",
-            "mirostat_tau", "mirostat_eta", "stop"
+            "num_ctx",
+            "num_predict",
+            "num_thread",
+            "temperature",
+            "top_k",
+            "top_p",
+            "min_p",
+            "repeat_penalty",
+            "repeat_last_n",
+            "seed",
+            "tfs_z",
+            "mirostat",
+            "mirostat_tau",
+            "mirostat_eta",
+            "stop",
         }
         opts = dict(data.get("options") or {})
         for key in ollama_param_keys:
@@ -94,8 +106,11 @@ def llm_call(
                 config.owner,
                 config.lane,
                 config.model,
-                lambda: config.cancelled() or bool(config.shutdown_event and config.shutdown_event.is_set())
-                or (config.deadline is not None and time.monotonic() >= config.deadline),
+                lambda: (
+                    config.cancelled()
+                    or bool(config.shutdown_event and config.shutdown_event.is_set())
+                    or (config.deadline is not None and time.monotonic() >= config.deadline)
+                ),
             )
             if config.scheduler
             else nullcontext()
@@ -119,11 +134,13 @@ def llm_call(
 
         # Handle OpenAI-style response
         if result.get("choices"):
-            return result["choices"][0]["message"]["content"]
+            content = result["choices"][0]["message"]["content"]
+            return content if isinstance(content, str) else None
 
         # Handle Ollama-style response
         if "message" in result:
-            return result["message"].get("content")
+            content = result["message"].get("content")
+            return content if isinstance(content, str) else None
 
         logger.warning("LLM call: unexpected response format")
         return None

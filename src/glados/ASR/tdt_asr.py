@@ -5,8 +5,8 @@ import typing
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
-import onnxruntime as ort  # type: ignore
-import soundfile as sf  # type: ignore
+import onnxruntime as ort
+import soundfile as sf
 import yaml
 
 from ..onnx_runtime import audio_providers, report_session_providers

@@ -4,7 +4,6 @@ import queue
 import threading
 import time
 
-
 from glados.core.shutdown import (
     ComponentEntry,
     ShutdownOrchestrator,
@@ -64,7 +63,6 @@ class TestShutdownOrchestrator:
         orchestrator.unregister("test")
         # Unregistering again should be a no-op
         orchestrator.unregister("test")
-
 
     def test_shutdown_sets_event(self) -> None:
         """Test that shutdown sets the shutdown event."""
@@ -132,6 +130,7 @@ class TestShutdownOrchestrator:
                     time.sleep(0.01)
                 # Small delay to ensure join order is recorded correctly
                 time.sleep(0.01)
+
             return worker
 
         # Register in reverse priority order
@@ -156,7 +155,9 @@ class TestShutdownOrchestrator:
         background_idx = result_order.index("background")
 
         assert input_idx < processing_idx, f"input ({input_idx}) should be before processing ({processing_idx})"
-        assert processing_idx < background_idx, f"processing ({processing_idx}) should be before background ({background_idx})"
+        assert processing_idx < background_idx, (
+            f"processing ({processing_idx}) should be before background ({background_idx})"
+        )
 
     def test_shutdown_timeout_handling(self) -> None:
         """Test that shutdown handles stuck threads gracefully."""
@@ -184,7 +185,6 @@ class TestShutdownOrchestrator:
         # Should have a failed result
         failed = [r for r in results if not r.success]
         assert len(failed) > 0
-
 
     def test_shutdown_with_no_components(self) -> None:
         """Test shutdown with no registered components."""

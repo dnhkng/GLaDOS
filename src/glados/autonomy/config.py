@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, conint
+from pydantic import BaseModel, Field
 
 from ..core.memory_recall import RecallConfig
 
@@ -112,14 +112,13 @@ class AutonomyConfig(BaseModel):
     enabled: bool = True
     tick_interval_s: float = Field(default=10.0, gt=0)
     cooldown_s: float = Field(default=20.0, ge=0)
-    autonomy_parallel_calls: conint(ge=1, le=16) = 2
+    autonomy_parallel_calls: int = Field(default=2, ge=1, le=16)
     autonomy_queue_max: int | None = Field(default=None, ge=0)
     decision_thinking: bool = False
     """Optional reviewer reasoning; Central Core speech settings remain independent."""
     jobs: AutonomyJobsConfig = AutonomyJobsConfig()
     tokens: TokenConfig = TokenConfig()
     emotion: EmotionConfig = EmotionConfig()
-
 
     system_prompt: str = (
         "You are the Autonomy Core, an independent attention reviewer for GLaDOS. "

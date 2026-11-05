@@ -51,12 +51,12 @@ def test_decay_is_applied_before_new_input_after_pause(monkeypatch):
     agent.set_paused(True)
     model = Mock(return_value=None)
     monkeypatch.setattr(agent, "_ask_llm", model)
-    monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.time", lambda: 1360.)
+    monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.time", lambda: 1360.0)
     agent.set_paused(False)
     agent.react("Hello again")
     model.assert_not_called()
     agent.run(agent.runtime)
-    assert model.call_args.kwargs["state"].pleasure == pytest.approx(-.05)
+    assert model.call_args.kwargs["state"].pleasure == pytest.approx(-0.05)
 
 
 def test_idle_ticks_decay_without_inference(monkeypatch):
@@ -64,14 +64,14 @@ def test_idle_ticks_decay_without_inference(monkeypatch):
     set_extreme(agent)
     model = Mock(return_value=None)
     monkeypatch.setattr(agent, "_ask_llm", model)
-    clock = [1000.]
+    clock = [1000.0]
     monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.time", lambda: clock[0])
     monkeypatch.setattr("glados.autonomy.agents.emotion_agent.time.monotonic", lambda: clock[0])
     for now in range(1000, 1361):
         clock[0] = now
         agent.run(agent.runtime)
     model.assert_not_called()
-    assert agent.state.pleasure == pytest.approx(-.05)
+    assert agent.state.pleasure == pytest.approx(-0.05)
 
 
 def test_interaction_work_is_separate_from_timer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,26 +101,31 @@ def test_failed_scores_retain_events_for_retry(monkeypatch):
 
 
 def test_parallel_axis_scores_and_superseded_results(monkeypatch):
-    import threading
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import contextmanager
+    import threading
+
     module = "glados.autonomy.agents.emotion_agent."
     agent = emotion_agent(monkeypatch)
     barrier = threading.Barrier(4)
     release = threading.Event()
     lanes, requests = [], []
+
     class Scheduler:
         @contextmanager
         def lease(self, owner, lane, model, cancelled):
             lanes.append(lane)
             yield
+
     agent._llm_config.scheduler = Scheduler()
     monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5), strict=True)))
+
     def scores(url, headers, data, ids, timeout):
         requests.append(data)
         barrier.wait(timeout=2)
         assert release.wait(2)
-        return [.0, .2, .6, .2, .0]
+        return [0.0, 0.2, 0.6, 0.2, 0.0]
+
     monkeypatch.setattr(module + "request_scores", scores)
     agent.react("First input")
     with ThreadPoolExecutor(1) as worker:
@@ -142,15 +147,17 @@ def test_probability_weighted_axes_and_pause_rejects_inflight(monkeypatch):
     module = "glados.autonomy.agents.emotion_agent."
     agent = emotion_agent(monkeypatch)
     monkeypatch.setattr(module + "token_ids", lambda *a: dict(zip("ABCDE", range(5), strict=True)))
-    monkeypatch.setattr(module + "request_scores", lambda *a: [.5, .2, .1, .1, .1])
+    monkeypatch.setattr(module + "request_scores", lambda *a: [0.5, 0.2, 0.1, 0.1, 0.1])
     agent.react("An event")
     agent.run(agent.runtime)
-    assert agent.state.pleasure == pytest.approx(-.45)
-    assert agent.state.arousal == pytest.approx(-.45)
+    assert agent.state.pleasure == pytest.approx(-0.45)
+    assert agent.state.arousal == pytest.approx(-0.45)
     assert not agent._events
+
     def pause(*args):
         agent.set_paused(True)
-        return [.0, .0, .0, .0, 1.]
+        return [0.0, 0.0, 0.0, 0.0, 1.0]
+
     monkeypatch.setattr(module + "request_scores", pause)
     agent.react("Second event")
     agent.run(agent.runtime)

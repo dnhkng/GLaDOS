@@ -69,23 +69,24 @@ def test_vision_timing_migrates_and_saves_yaml(tmp_path: Path, monkeypatch: pyte
     assert mind.settings.interval_min_s == 3 and mind.settings.interval_max_s == 7
     mind.set_interval_range(4, 8)
     assert yaml.safe_load(path.read_text()) == {"interval_min_s": 4.0, "interval_max_s": 8.0}
-    restored = VisionMind(VisionConfig(), LLMConfig("http://unused"), VisionState(),
-                          TaskSlotStore(), settings_path=path)
+    restored = VisionMind(
+        VisionConfig(), LLMConfig("http://unused"), VisionState(), TaskSlotStore(), settings_path=path
+    )
     assert restored.settings.interval_min_s == 4 and restored.settings.interval_max_s == 8
 
 
 def test_routing_lists_migrate_and_hand_edits_reload(tmp_path: Path) -> None:
     legacy_path = tmp_path / "decision_lists.json"
-    legacy = DecisionListStore(legacy_path, lambda: [])
+    legacy = DecisionListStore(legacy_path, list)
     legacy._persist(legacy.snapshot())
     original = legacy_path.read_text()
     path = legacy_path.with_suffix(".yaml")
-    migrated = DecisionListStore(path, lambda: [])
+    migrated = DecisionListStore(path, list)
     assert migrated.snapshot() == yaml.safe_load(path.read_text())
     data = yaml.safe_load(path.read_text())
     data["lists"][0]["name"] = "Hand edited routing list"
     path.write_text(yaml.safe_dump(data))
-    assert DecisionListStore(path, lambda: []).snapshot()["lists"][0]["name"] == "Hand edited routing list"
+    assert DecisionListStore(path, list).snapshot()["lists"][0]["name"] == "Hand edited routing list"
     assert legacy_path.read_text() == original
 
 

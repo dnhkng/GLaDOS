@@ -58,10 +58,19 @@ def test_lease_released_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
 def store(tmp_path: Path) -> DecisionListStore:
     store = DecisionListStore(tmp_path / "decisions.json", lambda: [tool_definition], enabled=True)
     # Fixed-binding tests exercise an explicit foreign zone, not the context clock.
-    store._data["lists"][0]["options"].insert(2, {
-        "id": "time", "description": "Read the current time in UTC", "action": "tool", "tool": "get_time",
-        "arguments": {"timezone": "UTC"}, "enabled": True, "category": None, "context_source": None,
-    })
+    store._data["lists"][0]["options"].insert(
+        2,
+        {
+            "id": "time",
+            "description": "Read the current time in UTC",
+            "action": "tool",
+            "tool": "get_time",
+            "arguments": {"timezone": "UTC"},
+            "enabled": True,
+            "category": None,
+            "context_source": None,
+        },
+    )
     return store
 
 
@@ -158,7 +167,10 @@ def test_uncertainty_and_typed_ignore_fall_back(store: DecisionListStore, monkey
     assert router.score(store.get().model_copy(update={"strategy": "flat"}), "Do it")["action"] == "assist"
     router, _ = make_router(store, monkeypatch, [0.99, 0.0025, 0.0025, 0.0025, 0.0025])
     assert router.score(store.get().model_copy(update={"strategy": "flat"}), "Someone said hello")["action"] == "assist"
-    assert router.score(store.get().model_copy(update={"strategy": "flat"}), "Someone said hello", spoken=True)["action"] == "ignore"
+    assert (
+        router.score(store.get().model_copy(update={"strategy": "flat"}), "Someone said hello", spoken=True)["action"]
+        == "ignore"
+    )
 
 
 def test_addressed_language_only_guides_spoken_input(store: DecisionListStore, monkeypatch: pytest.MonkeyPatch) -> None:

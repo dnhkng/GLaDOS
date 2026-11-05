@@ -7,10 +7,13 @@ Uses persistent memory to track what's been shown.
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 from loguru import logger
 
-from ...core.llm_decision import LLMConfig, LLMDecisionError, RelevanceDecision, llm_decide_sync
+from ...core.llm_decision import LLMDecisionError, RelevanceDecision, llm_decide_sync
+from ..llm_client import LLMConfig
 from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
@@ -28,7 +31,7 @@ class HackerNewsSubagent(Subagent):
         top_n: int = 5,
         min_score: int = 200,
         llm_config: LLMConfig | None = None,
-        **kwargs,
+        **kwargs: Any,  # noqa: ANN401 - Subagent collaborators are forwarded unchanged.
     ) -> None:
         super().__init__(config, **kwargs)
         self._top_n = top_n
@@ -128,7 +131,7 @@ class HackerNewsSubagent(Subagent):
             raw={"stories": to_report},
         )
 
-    def _fetch_top_stories(self) -> list[dict]:
+    def _fetch_top_stories(self) -> list[dict[str, Any]]:
         """Fetch top N stories from HN API."""
         try:
             resp = httpx.get(
@@ -137,11 +140,11 @@ class HackerNewsSubagent(Subagent):
             )
             resp.raise_for_status()
             top_ids = resp.json()[: self._top_n * 2]  # Fetch extra in case some fail
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
             logger.warning("HN: failed to fetch top stories: {}", exc)
             return []
 
-        stories = []
+        stories: list[dict[str, Any]] = []
         for story_id in top_ids:
             if len(stories) >= self._top_n:
                 break
@@ -151,7 +154,7 @@ class HackerNewsSubagent(Subagent):
 
         return stories
 
-    def _fetch_story(self, story_id: int) -> dict | None:
+    def _fetch_story(self, story_id: int) -> dict[str, Any] | None:
         """Fetch a single story."""
         try:
             resp = httpx.get(
@@ -168,6 +171,6 @@ class HackerNewsSubagent(Subagent):
                 "score": data.get("score", 0),
                 "url": data.get("url", ""),
             }
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
             logger.debug("HN: failed to fetch story {}: {}", story_id, exc)
             return None

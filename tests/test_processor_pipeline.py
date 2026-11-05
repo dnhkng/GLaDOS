@@ -12,18 +12,26 @@ from glados.core.processor_turn import ProcessorTurn
 from tests.test_speech_markup import make_processor
 
 SEARCH_TOOL = {"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}
-CLOCK = {"datetime": "2026-10-07T12:00:00+02:00", "time": "12:00:00", "date": "2026-10-07",
-         "weekday": "Wednesday", "timezone": "CEST", "utc_offset": "+0200"}
+CLOCK = {
+    "datetime": "2026-10-07T12:00:00+02:00",
+    "time": "12:00:00",
+    "date": "2026-10-07",
+    "weekday": "Wednesday",
+    "timezone": "CEST",
+    "utc_offset": "+0200",
+}
 
 
 def configured_processor(monkeypatch):
     monkeypatch.setattr("glados.core.llm_processor.current_time", lambda: CLOCK)
     processor = make_processor()
-    processor._conversation_store = ConversationStore([
-        {"role": "system", "content": "Fixed personality"},
-        {"role": "user", "content": "An earlier question"},
-        {"role": "assistant", "content": "An earlier answer"},
-    ])
+    processor._conversation_store = ConversationStore(
+        [
+            {"role": "system", "content": "Fixed personality"},
+            {"role": "user", "content": "An earlier question"},
+            {"role": "assistant", "content": "An earlier answer"},
+        ]
+    )
     builder = ContextBuilder()
     stable = Mock(return_value="Session instructions")
     live = Mock(return_value="Fresh slot observation")
@@ -41,8 +49,9 @@ def test_draft_and_reply_build_identical_requests(monkeypatch, allow_tools):
     for draft in (True, False):
         processor, stable, live = configured_processor(monkeypatch)
         message = {"role": "user", "content": "What is new today?"}
-        turn = ProcessorTurn(llm_input={**message, "_allow_tools": allow_tools}, llm_message=message,
-                             route={"action": "reply"})
+        turn = ProcessorTurn(
+            llm_input={**message, "_allow_tools": allow_tools}, llm_message=message, route={"action": "reply"}
+        )
         if not draft:
             processor._conversation_store.append(message)
         processor._build_request(turn, draft=draft)
@@ -63,8 +72,12 @@ def test_native_audio_is_attached_only_to_prepared_request(monkeypatch):
     media = [{"type": "input_audio", "input_audio": {"data": "private-audio", "format": "wav"}}]
     processor._conversation_store.append(message)
     saved = deepcopy(processor._conversation_store.snapshot())
-    turn = ProcessorTurn(llm_input={**message, "_native_audio": media}, llm_message=message,
-                         audio_content=media, route={"action": "reply"})
+    turn = ProcessorTurn(
+        llm_input={**message, "_native_audio": media},
+        llm_message=message,
+        audio_content=media,
+        route={"action": "reply"},
+    )
     processor._build_request(turn)
     assert turn.base_messages[-1]["content"] == media
     assert turn.data["chat_template_kwargs"] == {"enable_thinking": False}

@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterator
 import queue
 import threading
+from typing import Any, Self
 
 import requests
 
@@ -14,8 +15,8 @@ class SpeculativeStream:
         self,
         scheduler: InferenceScheduler,
         url: str,
-        headers: dict,
-        data: dict,
+        headers: dict[str, Any],
+        data: dict[str, Any],
         shutdown: threading.Event,
         processing: threading.Event,
         cancelled_if: Callable[[], bool] = lambda: False,
@@ -26,7 +27,7 @@ class SpeculativeStream:
         self.cancelled = threading.Event()
         self.ready = threading.Event()
         self.finished = threading.Event()
-        self.chunks: queue.Queue = queue.Queue(maxsize=2048)
+        self.chunks: queue.Queue[bytes] = queue.Queue(maxsize=2048)
         self.response: requests.Response | None = None
         self.error: Exception | None = None
         self.started = False
@@ -34,8 +35,7 @@ class SpeculativeStream:
         self.text, self.reason = "", ""
 
     def stopped(self) -> bool:
-        return (self.cancelled.is_set() or self.shutdown.is_set() or not self.processing.is_set()
-                or self.cancelled_if())
+        return self.cancelled.is_set() or self.shutdown.is_set() or not self.processing.is_set() or self.cancelled_if()
 
     def start(self) -> None:
         # Called only after the router holds its slot. Speculation never queues ahead of it.
@@ -61,7 +61,7 @@ class SpeculativeStream:
                                 break
                             except queue.Full:
                                 pass
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - stored and re-raised to the reader of the stream
                 self.error = exc
             finally:
                 self.scheduler.release(lease)
@@ -74,7 +74,7 @@ class SpeculativeStream:
         self.cancelled.set()
         # The producer owns/cleans up the HTTP response; no shared engine event is cleared.
 
-    def __enter__(self) -> "SpeculativeStream":
+    def __enter__(self) -> Self:
         while not self.ready.wait(0.05):
             if self.stopped():
                 raise requests.RequestException("Draft cancelled")

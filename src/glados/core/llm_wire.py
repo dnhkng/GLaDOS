@@ -5,6 +5,7 @@ Mixed into :class:`~glados.core.llm_processor.LanguageModelProcessor`.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 from typing import Any, ClassVar
 
@@ -13,6 +14,11 @@ from loguru import logger
 
 class LLMWireFormat:
     """Ollama and OpenAI-compatible message, chunk, tool-call and thinking-block handling."""
+
+    # Backend state provided by the host class (LanguageModelProcessor).
+    _nexus: Callable[[], Any]
+    _remote_backend: bool
+    model_name: str
 
     # Standard thinking tags (GLM-4.7, MiniMax M2.7/M3, DeepSeek, etc.)
     THINKING_OPEN_TAGS: ClassVar[tuple[str, ...]] = ("<think>", "<thinking>", "<reasoning>")
@@ -110,7 +116,7 @@ class LLMWireFormat:
                 f"{line[:100].decode('utf-8', errors='replace')}"
             )  # Log only a part
             return None
-        except Exception as e:
+        except (UnicodeDecodeError, TypeError) as e:
             logger.warning(
                 "LLM Processor: Failed to parse server response: "
                 f"{e} for line: {line[:100].decode('utf-8', errors='replace')}"
@@ -133,7 +139,7 @@ class LLMWireFormat:
                     return None
                 delta = line.get("choices", [{}])[0].get("delta", {})
                 tool_calls = delta.get("tool_calls")
-                if tool_calls:
+                if isinstance(tool_calls, list) and tool_calls:
                     return tool_calls
 
                 content = delta.get("content")
@@ -142,12 +148,12 @@ class LLMWireFormat:
             else:
                 message = line.get("message", {})
                 tool_calls = message.get("tool_calls")
-                if tool_calls:
+                if isinstance(tool_calls, list) and tool_calls:
                     return tool_calls
 
                 content = message.get("content")
                 return content if content else None
-        except Exception as e:
+        except (AttributeError, IndexError, KeyError, TypeError) as e:
             logger.error(f"LLM Processor: Error processing chunk: {e}, chunk: {line}")
             return None
 
@@ -169,8 +175,7 @@ class LLMWireFormat:
                 tool_chunk_index = int(tool_chunk_index)
             except (TypeError, ValueError):
                 tool_chunk_index = 0
-            if tool_chunk_index < 0:
-                tool_chunk_index = 0
+            tool_chunk_index = max(tool_chunk_index, 0)
             while tool_chunk_index >= len(tool_calls_buffer):
                 # we have a new tool call to initialize
                 tool_calls_buffer.append(

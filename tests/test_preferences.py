@@ -138,14 +138,14 @@ class TestPreferencesStore:
             try:
                 for i in range(100):
                     store.set(f"key_{n}_{i}", i)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - collected and asserted on the main thread
                 errors.append(e)
 
         def reader():
             try:
                 for _ in range(100):
                     store.all()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - collected and asserted on the main thread
                 errors.append(e)
 
         threads = [

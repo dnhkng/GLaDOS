@@ -36,8 +36,11 @@ class LatencyTracker:
                 self._turn = {"source": event.source, "start": start, "input": event.timestamp, "asr_ms": asr_ms}
             elif self._turn is None:
                 return
-            elif (event.source == "llm" and event.kind == "first_token"
-                  and event.meta.get("lane", "priority") == "priority"):
+            elif (
+                event.source == "llm"
+                and event.kind == "first_token"
+                and event.meta.get("lane", "priority") == "priority"
+            ):
                 self._turn.setdefault("first_token", event.timestamp)
             elif event.source == "tts" and event.kind == "ready":
                 self._turn.setdefault("ready", event.timestamp)
@@ -46,8 +49,13 @@ class LatencyTracker:
             if finished:
                 self._recent.appendleft(finished)
         if finished:
-            self._bus.emit("latency", "turn", f"Reply started {finished['total_ms']:.0f} ms after the user finished",
-                           level="debug", meta=finished)
+            self._bus.emit(
+                "latency",
+                "turn",
+                f"Reply started {finished['total_ms']:.0f} ms after the user finished",
+                level="debug",
+                meta=finished,
+            )
 
     @staticmethod
     def _finish(turn: dict[str, Any], played: float) -> dict[str, Any]:

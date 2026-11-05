@@ -14,25 +14,35 @@ _CLAUSE = re.compile(r"([^.,;:!?…]+)([.,;:!?…]*)")
 _SENTENCE_END = set(".!?…")
 VOICES = {"fr": "fr-fr"}
 # espeak spells these out letter by letter.
-RESPELLINGS = {"fr": {
-    r"\bGLaDOS\b": "Gladosse", r"\bAperture\b": "Apertchur",
-    r"\b(\d{1,2}) ?h ?(\d{2})\b": r"\1 heures \2", r"\b(\d{1,2}) ?h\b": r"\1 heures",
-}}
+RESPELLINGS = {
+    "fr": {
+        r"\bGLaDOS\b": "Gladosse",
+        r"\bAperture\b": "Apertchur",
+        r"\b(\d{1,2}) ?h ?(\d{2})\b": r"\1 heures \2",
+        r"\b(\d{1,2}) ?h\b": r"\1 heures",
+    }
+}
 
 
 class EspeakPhonemizer:
     def __init__(self, language: str) -> None:
-        self._binary = shutil.which("espeak-ng")
-        if self._binary is None:
+        binary = shutil.which("espeak-ng")
+        if binary is None:
             raise RuntimeError(f"espeak-ng is required for '{language}' speech with the GLaDOS voice")
+        self._binary = binary
         self._voice = VOICES.get(language, language)
-        self._respell = [(re.compile(pattern, re.IGNORECASE), word)
-                         for pattern, word in RESPELLINGS.get(language, {}).items()]
+        self._respell = [
+            (re.compile(pattern, re.IGNORECASE), word) for pattern, word in RESPELLINGS.get(language, {}).items()
+        ]
 
     def _ipa(self, text: str) -> str:
         completed = subprocess.run(
-            [self._binary, "-q", "--ipa", "-v", self._voice], input=text, capture_output=True,
-            text=True, check=True, timeout=10,
+            [self._binary, "-q", "--ipa", "-v", self._voice],
+            input=text,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
         )
         return " ".join(completed.stdout.split())
 

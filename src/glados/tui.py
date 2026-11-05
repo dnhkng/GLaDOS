@@ -1,29 +1,30 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 import math
-from datetime import datetime
 from pathlib import Path
 import re
 import sys
-from typing import ClassVar, cast, Iterable
+from typing import ClassVar, cast
 from urllib.parse import urlparse
 
 from loguru import logger
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult, SystemCommand
-from textual.command import Provider, Hit, Hits, DiscoveryHit
 from textual.binding import Binding
+from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Static
 from textual.worker import Worker, WorkerState
+import yaml
 
 from glados.core.engine import Glados, GladosConfig
 from glados.glados_ui.text_resources import welcome_tips
-from glados.observability import ObservabilityEvent
+from glados.observability import ObservabilityBus, ObservabilityEvent
 from glados.utils.resources import resource_path
 
 # Command Provider for Textual's built-in command palette
@@ -33,7 +34,7 @@ class GladosCommands(Provider):
     """Command provider for GLaDOS TUI command palette."""
 
     # Commands that duplicate TUI features or are irrelevant in TUI
-    _HIDDEN_COMMANDS = {"help", "observe", "slots"}
+    _HIDDEN_COMMANDS: ClassVar[frozenset[str]] = frozenset({"help", "observe", "slots"})
 
     # Display names for commands (command_name -> display_name)
     _DISPLAY_NAMES: ClassVar[dict[str, str]] = {
@@ -60,9 +61,7 @@ class GladosCommands(Provider):
             return False
         if name == "emotion" and not getattr(engine, "_emotion_agent", None):
             return False
-        if name == "agents" and not getattr(engine, "subagent_manager", None):
-            return False
-        return True
+        return not (name == "agents" and not getattr(engine, "subagent_manager", None))
 
     def _get_display_name(self, name: str) -> str:
         """Get display name for a command."""
@@ -159,7 +158,7 @@ class Printer(RichLog):
         "Expanded Security Maintenance",
         "To see these additional updates run:",
         "Learn more about enabling ESM Apps",
-        "Your user’s .npmrc file",
+        "Your user\u2019s .npmrc file",  # Typographic apostrophe, as nvm prints it.
         "Run `nvm use --delete-prefix",
         "(base)",
         "Assistant:",
@@ -277,11 +276,9 @@ class DialogLine:
 class DialogLog(RichLog):
     can_focus = False
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, *, id: str | None = None) -> None:
+        super().__init__(id=id, wrap=True, markup=True)
         self._last_timestamp = 0.0
-        self.wrap = True
-        self.markup = True
 
     def refresh_from_bus(self, events: list[ObservabilityEvent]) -> None:
         new_events = [event for event in events if event.timestamp > self._last_timestamp]
@@ -309,14 +306,10 @@ class DialogLog(RichLog):
 class StatusPanel(Static):
     can_focus = False
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
-        self.markup = True
-
     @staticmethod
     def _volume_bar(level: float, width: int = 18) -> str:
         level = max(0.0, min(1.0, level))
-        filled = int(round(level * width))
+        filled = round(level * width)
         empty = max(0, width - filled)
         return f"[{'#' * filled}{'.' * empty}]"
 
@@ -351,10 +344,6 @@ class StatusPanel(Static):
 class QueuePanel(Static):
     can_focus = False
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
-        self.markup = True
-
     @staticmethod
     def _format_wait(value: float | None) -> str:
         if value is None:
@@ -382,10 +371,6 @@ class QueuePanel(Static):
 class AutonomyPanel(Static):
     can_focus = False
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
-        self.markup = True
-
     def render_autonomy(self, app: "GladosUI") -> None:
         engine = app.glados_engine_instance
         if not engine or not engine.autonomy_config:
@@ -406,10 +391,6 @@ class AutonomyPanel(Static):
 
 class MCPPanel(Static):
     can_focus = False
-
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
-        self.markup = True
 
     def render_mcp(self, app: "GladosUI") -> None:
         engine = app.glados_engine_instance
@@ -451,24 +432,23 @@ class SplashScreen(Screen[None]):
                 - A welcome panel with logo, metadata, and tips
                 - A prompt line and call-to-action
         """
-        with Container(id="welcome_dialog"):
-            with Horizontal(id="welcome_body"):
-                with Vertical(id="welcome_left"):
-                    yield Label("Welcome back!", id="welcome_title")
-                    yield Static(self.WELCOME_ANSI, id="welcome_logo")
-                    yield Static("Model: loading...\nEndpoint: loading...\nPath: loading...", id="welcome_meta")
-                with Vertical(id="welcome_right"):
-                    yield Label("Tips for getting started", id="welcome_tips_title")
-                    yield Static(welcome_tips, id="welcome_tips")
-                    yield Label("Recent activity", id="welcome_recent_title")
-                    yield Static("No recent activity", id="welcome_recent")
+        with Container(id="welcome_dialog"), Horizontal(id="welcome_body"):
+            with Vertical(id="welcome_left"):
+                yield Label("Welcome back!", id="welcome_title")
+                yield Static(self.WELCOME_ANSI, id="welcome_logo")
+                yield Static("Model: loading...\nEndpoint: loading...\nPath: loading...", id="welcome_meta")
+            with Vertical(id="welcome_right"):
+                yield Label("Tips for getting started", id="welcome_tips_title")
+                yield Static(welcome_tips, id="welcome_tips")
+                yield Label("Recent activity", id="welcome_recent_title")
+                yield Static("No recent activity", id="welcome_recent")
         yield Static("Press Ctrl+P for commands, or just ask a question.", id="welcome_prompt")
         yield Static("Initializing systems...", id="welcome_cta")
 
     def on_mount(self) -> None:
         dialog = self.query_one("#welcome_dialog", Container)
         dialog.border_title = GladosUI.TITLE
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         self._load_welcome_meta()
         app = cast(GladosUI, self.app)
         if app.glados_engine_instance is not None:
@@ -490,7 +470,7 @@ class SplashScreen(Screen[None]):
             config = GladosConfig.from_yaml(app._config_paths)
             model = config.llm_model
             endpoint = self._format_endpoint(str(config.completion_url))
-        except Exception as exc:
+        except (OSError, ValueError, yaml.YAMLError) as exc:
             logger.warning("Welcome screen failed to load config: {}", exc)
         meta = f"Model: {model}\nEndpoint: {endpoint}\nPath: {Path.cwd()}"
         self.query_one("#welcome_meta", Static).update(meta)
@@ -582,7 +562,7 @@ class ContextScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#context_dialog")
         dialog.border_title = self.TITLE
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         dialog.border_subtitle = "Press Esc to close"
         self._render_context()
 
@@ -620,7 +600,7 @@ class MessagesScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#messages_dialog")
         dialog.border_title = self.TITLE
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         dialog.border_subtitle = "Press Esc to close"
         self._render_messages()
 
@@ -661,7 +641,7 @@ class InfoScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#info_dialog")
         dialog.border_title = self._title
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         dialog.border_subtitle = "Press Esc to close"
 
 
@@ -683,7 +663,7 @@ class ThemePickerScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#theme_dialog")
         dialog.border_title = self.TITLE
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         option_list = self.query_one("#theme_list", OptionList)
         app = cast(GladosUI, self.app)
         option_list.clear_options()
@@ -726,7 +706,7 @@ class OnOffPickerScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#toggle_dialog")
         dialog.border_title = self._DISPLAY_NAMES.get(self._command, self._command.title())
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         option_list = self.query_one("#toggle_list", OptionList)
         option_list.clear_options()
         option_list.add_options(["on", "off"])
@@ -781,7 +761,7 @@ class ObservabilityScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         dialog = self.query_one("#observability_dialog")
         dialog.border_title = self.TITLE
-        dialog.border_title_align = "center"
+        dialog.styles.border_title_align = "center"
         self._log = self.query_one("#observability_log", RichLog)
         self._log.markup = True
         self._status = self.query_one("#observability_status", Static)
@@ -805,7 +785,7 @@ class ObservabilityScreen(ModalScreen[None]):
             self._write_event(event)
         self._update_status()
 
-    def _get_bus(self):
+    def _get_bus(self) -> ObservabilityBus | None:
         app = cast(GladosUI, self.app)
         if not app.glados_engine_instance:
             return None
@@ -874,7 +854,7 @@ class GladosUI(App[None]):
         Binding("tab", "toggle_info_panels", "Toggle info panels", priority=True),
     ]
     CSS_PATH = "glados_ui/glados.tcss"
-    COMMANDS = {GladosCommands}
+    COMMANDS: ClassVar[set[type[Provider] | Callable[[], type[Provider]]]] = {GladosCommands}
 
     THEMES: ClassVar[tuple[str, ...]] = ("aperture", "ice", "matrix", "mono", "ember")
     THEME_VARIABLES: ClassVar[dict[str, dict[str, str]]] = {
@@ -950,7 +930,7 @@ class GladosUI(App[None]):
         default_config = resource_path("configs/glados_config.yaml")
         if isinstance(config_paths, list):
             # is already list - convert each element to Path
-            self._config_paths = list(Path(p) for p in config_paths)
+            self._config_paths = [Path(p) for p in config_paths]
         elif config_paths is not None:
             # single element - convert to list[Path]
             self._config_paths = [Path(config_paths)]
@@ -985,22 +965,21 @@ class GladosUI(App[None]):
         # https://github.com/Textualize/textual/issues/4666
         yield Header(show_clock=True, classes="-tall")
 
-        with Container(id="body"):
-            with Horizontal():
-                with Vertical(id="left_panel"):
-                    yield Label("[u]D[/u]ialog", id="dialog_title")
-                    yield DialogLog(id="dialog_log")
-                    yield Label("System [u]L[/u]og", id="system_title")
-                    yield Printer(id="log_area")
-                with Vertical(id="right_panel"):
-                    yield Label("[u]S[/u]tatus", id="status_title")
-                    yield StatusPanel(id="status_panel")
-                    yield Label("[u]A[/u]utonomy", id="autonomy_title")
-                    yield AutonomyPanel(id="autonomy_panel")
-                    yield Label("Q[u]u[/u]eues", id="queue_title")
-                    yield QueuePanel(id="queue_panel")
-                    yield Label("[u]M[/u]CP", id="mcp_title")
-                    yield MCPPanel(id="mcp_panel")
+        with Container(id="body"), Horizontal():
+            with Vertical(id="left_panel"):
+                yield Label("[u]D[/u]ialog", id="dialog_title")
+                yield DialogLog(id="dialog_log")
+                yield Label("System [u]L[/u]og", id="system_title")
+                yield Printer(id="log_area")
+            with Vertical(id="right_panel"):
+                yield Label("[u]S[/u]tatus", id="status_title")
+                yield StatusPanel(id="status_panel")
+                yield Label("[u]A[/u]utonomy", id="autonomy_title")
+                yield AutonomyPanel(id="autonomy_panel")
+                yield Label("Q[u]u[/u]eues", id="queue_title")
+                yield QueuePanel(id="queue_panel")
+                yield Label("[u]M[/u]CP", id="mcp_title")
+                yield MCPPanel(id="mcp_panel")
 
         with Container(id="command_bar"):
             yield Input(
@@ -1075,11 +1054,7 @@ class GladosUI(App[None]):
 
     def get_css_variables(self) -> dict[str, str]:
         variables = super().get_css_variables()
-        theme_name = (
-            getattr(self, "_active_theme", None)
-            or getattr(self, "_theme_override", None)
-            or "aperture"
-        )
+        theme_name = getattr(self, "_active_theme", None) or getattr(self, "_theme_override", None) or "aperture"
         theme_vars = self.THEME_VARIABLES.get(theme_name, self.THEME_VARIABLES["aperture"])
         variables.update(theme_vars)
         return variables
@@ -1093,7 +1068,7 @@ class GladosUI(App[None]):
             return "text (TUI)"
         return self._input_mode_override
 
-    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+    def get_system_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
         """Filter out duplicate Help command from system commands."""
         for cmd in super().get_system_commands(screen):
             # Skip the default help command since we have our own
@@ -1287,7 +1262,7 @@ class GladosUI(App[None]):
             config = GladosConfig.from_yaml(self._config_paths)
             if config.tui_theme:
                 return config.tui_theme
-        except Exception as exc:
+        except (OSError, ValueError, yaml.YAMLError) as exc:
             logger.warning("TUI theme load failed: {}", exc)
         return "aperture"
 
@@ -1388,7 +1363,7 @@ class GladosUI(App[None]):
                 logger.info("GLaDOS worker started.")
             else:
                 logger.error("Cannot start GLaDOS worker: glados_engine_instance is None.")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - reported in the TUI log
             logger.opt(exception=True).error(f"Failed to start GLaDOS: {e}")
 
     def instantiate_glados(self) -> None:
@@ -1406,7 +1381,7 @@ class GladosUI(App[None]):
 
         config_paths = self._config_paths
         if not all(p.exists() for p in config_paths):
-            missing = list(p for p in config_paths if not p.exists())
+            missing = [p for p in config_paths if not p.exists()]
             msg = f"GLaDOS config file(s) not found: {missing}"
             logger.error(msg)
             raise FileNotFoundError(msg)
@@ -1466,7 +1441,7 @@ class GladosUI(App[None]):
             if app is not None:
                 app.exit()
             # No explicit sys.exit(0) here; Textual's app.exit() will handle it.
-        except Exception:
+        except Exception:  # noqa: BLE001 - last-resort handler that still attempts a clean shutdown
             logger.opt(exception=True).critical("Unhandled exception in app run:")
             if app is not None:
                 # Attempt a graceful shutdown even on other exceptions

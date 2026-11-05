@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 import threading
 import time
-from typing import ClassVar
+from typing import Any, ClassVar
 import uuid
 
 from pydantic import BaseModel, Field, model_validator
@@ -46,7 +46,7 @@ class InferenceScheduler:
         self._active: dict[int, InferenceRequest] = {}
         self._waiting: list[InferenceRequest] = []
         self._interaction: tuple[int, float] | None = None
-        self._last_release: dict | None = None
+        self._last_release: dict[str, Any] | None = None
 
     def begin_interaction(self, generation: int) -> None:
         with self._condition:
@@ -56,8 +56,11 @@ class InferenceScheduler:
     def end_interaction(self, generation: int, reason: str) -> None:
         with self._condition:
             if self._interaction and self._interaction[0] == generation:
-                self._last_release = {"generation": generation, "reason": reason,
-                                      "duration_s": time.monotonic() - self._interaction[1]}
+                self._last_release = {
+                    "generation": generation,
+                    "reason": reason,
+                    "duration_s": time.monotonic() - self._interaction[1],
+                }
                 self._interaction = None
                 self._condition.notify_all()
 
@@ -71,7 +74,6 @@ class InferenceScheduler:
     def _free_slot(self, lane: str) -> int | None:
         first = 0 if lane in {"router", "priority", "speculative"} else self.config.reserved_interactive
         return next((i for i in range(first, self.config.slots) if i not in self._active), None)
-
 
     def acquire(
         self, owner: str, lane: str, model: str, cancelled: Callable[[], bool] = lambda: False
@@ -125,17 +127,21 @@ class InferenceScheduler:
         finally:
             self.release(request)
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         with self._condition:
             self._expire_interaction()
             return {
-                "interaction_hold": ({"generation": self._interaction[0],
-                                      "age_s": time.monotonic() - self._interaction[1]}
-                                     if self._interaction else None),
+                "interaction_hold": (
+                    {"generation": self._interaction[0], "age_s": time.monotonic() - self._interaction[1]}
+                    if self._interaction
+                    else None
+                ),
                 "last_interaction_release": self._last_release,
                 "capacity": self.config.slots,
                 "reserved_interactive": self.config.reserved_interactive,
                 "active": [asdict(r) for r in self._active.values()],
-                "waiting": [{**asdict(r), "wait_reason": "capacity" if self._eligible(r.lane)
-                             else "user_response"} for r in self._waiting],
+                "waiting": [
+                    {**asdict(r), "wait_reason": "capacity" if self._eligible(r.lane) else "user_response"}
+                    for r in self._waiting
+                ],
             }

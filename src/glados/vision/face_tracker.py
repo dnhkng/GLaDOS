@@ -34,8 +34,8 @@ class FaceTracker:
         self._state: dict[str, Any] = {}
         self._observations: deque[float] = deque(maxlen=60)
         self._error: str | None = None
-        self._cascades = []
-        self._detector = None
+        self._cascades: list[cv2.CascadeClassifier] = []
+        self._detector: cv2.FaceDetectorYN | None = None
         if enabled and backend == "yunet":
             try:
                 model = Path(__file__).parent / "models" / "face_detection_yunet_2023mar.onnx"
@@ -54,7 +54,8 @@ class FaceTracker:
         if enabled and backend == "haar":
             try:
                 for name in ("haarcascade_frontalface_default.xml", "haarcascade_profileface.xml"):
-                    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + name)
+                    # cv2.data is a real runtime module that opencv's bundled stubs omit.
+                    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + name)  # type: ignore[attr-defined]
                     if cascade.empty():
                         raise ValueError("Bundled Haar cascade unavailable")
                     self._cascades.append(cascade)
@@ -99,6 +100,8 @@ class FaceTracker:
             h, w = small.shape[:2]
             with self._detect_lock:
                 if self.backend == "yunet":
+                    if self._detector is None:
+                        raise ValueError("YuNet face detector unavailable")
                     if small.ndim == 2:
                         small = cv2.cvtColor(small, cv2.COLOR_GRAY2BGR)
                     self._detector.setInputSize((w, h))
@@ -119,7 +122,7 @@ class FaceTracker:
                         cv2.flip(gray, 1), scaleFactor=1.1, minNeighbors=3, minSize=(min_side, min_side)
                     )
                     boxes.extend((w - x - bw, y, bw, bh) for x, y, bw, bh in flipped)
-            faces = []
+            faces: list[dict[str, Any]] = []
             for x, y, bw, bh in sorted(boxes, key=lambda b: b[2] * b[3], reverse=True):
                 # Neural boxes may extend outside the frame. Keep every valid face.
                 left, top = max(0.0, float(x)), max(0.0, float(y))
@@ -127,7 +130,7 @@ class FaceTracker:
                 bw, bh = right - left, bottom - top
                 if bw <= 0 or bh <= 0:
                     continue
-                face = {
+                face: dict[str, Any] = {
                     "x": float(2 * (left + bw / 2) / w - 1),
                     "y": float(2 * (top + bh / 2) / h - 1),
                     "bbox": [float(left / w), float(top / h), float(bw / w), float(bh / h)],
@@ -142,7 +145,10 @@ class FaceTracker:
                     continue
                 faces.append(face)
             result: dict[str, Any] = {
-                "available": True, "present": bool(faces), "observed_at": captured_at, "faces": faces,
+                "available": True,
+                "present": bool(faces),
+                "observed_at": captured_at,
+                "faces": faces,
             }
             if faces:
                 # Preserve the largest-face fields for existing preview consumers.

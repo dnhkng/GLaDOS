@@ -2,7 +2,6 @@
 
 import time
 
-
 from glados.autonomy.constitution import (
     Constitution,
     ConstitutionalState,

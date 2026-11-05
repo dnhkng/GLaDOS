@@ -41,9 +41,9 @@ class HealthConfig(BaseModel):
     summary_enabled: bool = True
 
 
-def collect_host_status(log_paths: list[str]) -> dict:
+def collect_host_status(log_paths: list[str]) -> dict[str, Any]:
     """Bounded local probes. Unsupported readings are explicitly unavailable."""
-    result = {"os": platform.system(), "kernel": platform.release(), "cpu_count": os.cpu_count()}
+    result: dict[str, Any] = {"os": platform.system(), "kernel": platform.release(), "cpu_count": os.cpu_count()}
     try:
         result["load"] = list(os.getloadavg())
     except (AttributeError, OSError):
@@ -115,13 +115,13 @@ def collect_host_status(log_paths: list[str]) -> dict:
                 check=True,
             ).stdout
             for line in output.splitlines()[:8]:
-                name, total, used, free, temperature = [v.strip() for v in line.split(",")]
+                gpu, total_mib, used_mib, free_mib, temperature = [v.strip() for v in line.split(",")]
                 result["gpus"].append(
                     {
-                        "name": name[:100],
-                        "total_mib": int(total),
-                        "used_mib": int(used),
-                        "free_mib": int(free),
+                        "name": gpu[:100],
+                        "total_mib": int(total_mib),
+                        "used_mib": int(used_mib),
+                        "free_mib": int(free_mib),
                         "temperature_c": float(temperature) if temperature != "[N/A]" else None,
                     }
                 )
@@ -148,8 +148,8 @@ class HealthAgent(Subagent):
         self,
         health_config: HealthConfig,
         completion_url: str,
-        runtime_status: Callable[[], dict],
-        host_status: Callable[[], dict] | None = None,
+        runtime_status: Callable[[], dict[str, Any]],
+        host_status: Callable[[], dict[str, Any]] | None = None,
         clock: Callable[[], float] = time.time,
         llm_config: LLMConfig | None = None,
         interactive_busy: Callable[[], bool] = lambda: False,
@@ -168,12 +168,12 @@ class HealthAgent(Subagent):
         self._clock = clock
         self._started_at = clock()
         self._state_lock = threading.Lock()
-        self._state: dict = {}
+        self._state: dict[str, Any] = {}
         self._alerts: dict[str, str] = {}
         self._alert_occurrences: dict[str, str] = {}
         self.llm = llm_config
         self._interactive_busy = interactive_busy
-        self._samples: deque = deque(maxlen=12)
+        self._samples: deque[dict[str, Any]] = deque(maxlen=12)
         self._last_summary_attempt: float | None = None
         self._comment: str | None = None
         self._comment_at: float | None = None
@@ -198,7 +198,7 @@ class HealthAgent(Subagent):
             elif url.path.rstrip("/").endswith("/api/chat"):
                 self._health_url = urlunsplit((url.scheme, url.netloc, "/api/version", "", ""))
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         with self._state_lock:
             result = deepcopy(self._state)
         if result:
@@ -282,15 +282,15 @@ class HealthAgent(Subagent):
 
     def run(self, runtime: MindRuntime) -> SubagentOutput:
         host = self._host_status()
-        runtime = self._runtime_status()
+        status = self._runtime_status()
         now = self._clock()
         if self._health_url:
             try:
                 response = requests.get(self._health_url, timeout=1, headers=self.llm.headers if self.llm else {})
-                runtime["model"] = "ready" if response.status_code == 200 else f"HTTP {response.status_code}"
+                status["model"] = "ready" if response.status_code == 200 else f"HTTP {response.status_code}"
                 response.close()
             except requests.RequestException:
-                runtime["model"] = "unreachable"
+                status["model"] = "unreachable"
         alerts = {}
         ram = host.get("ram")
         if ram and ram["used_percent"] >= self.settings.ram_warning_percent:
@@ -312,15 +312,15 @@ class HealthAgent(Subagent):
             if log["bytes"] > self.settings.log_warning_mib * 1024**2:
                 alerts[f"log_{index}"] = f"Log family {log['name']} exceeds {self.settings.log_warning_mib} MiB"
         if now - self._started_at >= self.settings.startup_grace_s:
-            if runtime.get("model") not in {None, "ready"}:
-                alerts["model"] = f"Model server is {runtime['model']}"
-            for server in runtime.get("mcp", [])[:16]:
+            if status.get("model") not in {None, "ready"}:
+                alerts["model"] = f"Model server is {status['model']}"
+            for server in status.get("mcp", [])[:16]:
                 if not server["connected"]:
                     alerts["mcp_" + server["name"]] = f"MCP {server['name']} is disconnected"
-            capture = runtime.get("audio")
+            capture = status.get("audio")
             if capture and capture.get("expected", capture.get("enabled")) and not capture.get("connected"):
                 alerts["audio"] = "Requested microphone capture is disconnected"
-        if runtime.get("inference", {}).get("oldest_wait_s", 0) > self.settings.queue_warning_s:
+        if status.get("inference", {}).get("oldest_wait_s", 0) > self.settings.queue_warning_s:
             alerts["queue"] = f"Inference queue wait exceeds {self.settings.queue_warning_s}s"
         # Compare condition identities, not fluctuating readings: no repeated warnings each tick.
         new = {key: value for key, value in alerts.items() if key not in self._alerts}
@@ -344,15 +344,15 @@ class HealthAgent(Subagent):
                     {"free_mib": g["free_mib"], "temperature_c": g.get("temperature_c")} for g in host.get("gpus", [])
                 ],
                 "alerts": list(alerts.values()),
-                "inference": runtime.get("inference"),
-                "model": runtime.get("model"),
+                "inference": status.get("inference"),
+                "model": status.get("model"),
             }
         )
         with self._state_lock:
             self._state = {
                 "observed_at": now,
                 "host": host,
-                "runtime": runtime,
+                "runtime": status,
                 "alerts": list(alerts.values()),
                 "comment": self._comment,
                 "comment_at": self._comment_at,
@@ -389,10 +389,10 @@ class HealthAgent(Subagent):
             attention_key="|".join(self._alert_occurrences[key] for key in sorted(alerts)) or None,
         )
 
-    def _summarize(self, samples: list[dict]) -> None:
-        if self.llm:
+    def _summarize(self, samples: list[dict[str, Any]]) -> None:
+        if llm := self.llm:
             config = replace(
-                self.llm,
+                llm,
                 owner="Health",
                 lane="autonomy",
                 request_options={
@@ -402,7 +402,7 @@ class HealthAgent(Subagent):
                     "chat_template_kwargs": {"enable_thinking": False},
                 },
                 timeout=10,
-                cancelled=lambda: self.llm.cancelled() or self.paused or self._interactive_busy(),
+                cancelled=lambda: llm.cancelled() or self.paused or self._interactive_busy(),
             )
             comment = llm_call(
                 config,

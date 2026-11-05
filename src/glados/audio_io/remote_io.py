@@ -114,8 +114,11 @@ class RemoteSwitchAudioIO(AudioIO):
     def remote_status(self) -> dict[str, Any]:
         with self._lock:
             client = self._client
-            return {"active": client is not None, "label": client.label if client else None,
-                    "since": client.since if client else None}
+            return {
+                "active": client is not None,
+                "label": client.label if client else None,
+                "since": client.since if client else None,
+            }
 
     # ------------------------------------------------------------- AudioIO API
     def start_listening(self) -> None:
@@ -126,8 +129,9 @@ class RemoteSwitchAudioIO(AudioIO):
         self._listening = False
         self.local.stop_listening()
 
-    def start_speaking(self, audio_data: NDArray[np.float32], sample_rate: int | None = None,
-                       text: str = "", **kwargs: object) -> None:
+    def start_speaking(
+        self, audio_data: NDArray[np.float32], sample_rate: int | None = None, text: str = "", **kwargs: object
+    ) -> None:
         with self._lock:
             client = self._client
             if client is None:

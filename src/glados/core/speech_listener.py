@@ -6,20 +6,21 @@ voice activity detection, speech recognition, and wake word detection.
 """
 
 from collections import deque
+from collections.abc import Callable
 import queue
 import threading
 import time
+from typing import Any
 import uuid
-from typing import Any, Callable
 
 from Levenshtein import distance
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
 
-from ..autonomy.interaction_state import InteractionState
 from ..ASR import TranscriberProtocol
 from ..audio_io import AudioProtocol
+from ..autonomy.interaction_state import InteractionState
 from ..observability import ObservabilityBus, trim_message
 from .audio_state import AudioState
 from .native_audio import NativeAudioInput
@@ -150,7 +151,9 @@ class SpeechListener:
                     if discontinuity and discontinuity() is True:
                         self.reset()
                         if self._observability_bus:
-                            self._observability_bus.emit("audio", "gap", "Microphone gap; discarded incomplete speech", level="warning")
+                            self._observability_bus.emit(
+                                "audio", "gap", "Microphone gap; discarded incomplete speech", level="warning"
+                            )
                         continue
                     if self._asr_muted_event and self._asr_muted_event.is_set():
                         if self._recording_started or self._samples or self._buffer or self._pending_voice:
@@ -215,8 +218,11 @@ class SpeechListener:
         with self._continuation_lock:
             if self._pending_voice:
                 _, generation, _, submitted = self._pending_voice
-                if (time.monotonic() - submitted > 30 or self.currently_speaking_event.is_set()
-                        or (generation is not None and not self._turn_is_current(generation))):
+                if (
+                    time.monotonic() - submitted > 30
+                    or self.currently_speaking_event.is_set()
+                    or (generation is not None and not self._turn_is_current(generation))
+                ):
                     self._pending_voice = None
         self._buffer.append(sample)  # Automatically handles overflow
         self._speech_onset = self._speech_onset + 1 if vad_confidence else 0
@@ -226,7 +232,7 @@ class SpeechListener:
         onset_frames = 5 if self.currently_speaking_event.is_set() else 3
         if self._speech_onset >= onset_frames:
             if not self.interruptible and self.currently_speaking_event.is_set():
-                logger.debug(f"Detected voice activity but interruptibility is disabled: {self.interruptible=}, {self.currently_speaking_event.is_set()=}")
+                logger.debug("Detected voice activity but interruptibility is disabled while speaking")
                 return
 
             # Check if this is an interrupt (user speaking while GLaDOS was speaking)
@@ -238,12 +244,14 @@ class SpeechListener:
             self._turn_generation = self._begin_user_turn() if self._begin_user_turn else None
             with self._continuation_lock:
                 pending, self._pending_voice = self._pending_voice, None
-                self._voice_continuation = pending is not None and not was_speaking
-                self._voice_turn_id = pending[2] if self._voice_continuation else uuid.uuid4().hex
-                self._samples = (list(pending[0]) if self._voice_continuation else []) + list(self._buffer)
+                continued = pending if not was_speaking else None
+                self._voice_continuation = continued is not None
+                self._voice_turn_id = continued[2] if continued else uuid.uuid4().hex
+                self._samples = (list(continued[0]) if continued else []) + list(self._buffer)
             if self._voice_continuation and self._observability_bus:
-                self._observability_bus.emit("audio", "continuation",
-                                            "Resumed speech; replaced unanswered turn with combined audio")
+                self._observability_bus.emit(
+                    "audio", "continuation", "Resumed speech; replaced unanswered turn with combined audio"
+                )
             self._recording_started = True
 
             if was_speaking and self._on_interrupt:
@@ -354,7 +362,7 @@ class SpeechListener:
         if self._audio_state is not None:
             self._audio_state.reset()
 
-    def response_started(self, generation: int) -> None:
+    def response_started(self, generation: int | None) -> None:
         """Playback (or a text-only delivered response) seals the pending voice turn."""
         with self._continuation_lock:
             if self._pending_voice and self._pending_voice[1] == generation:
@@ -365,8 +373,11 @@ class SpeechListener:
         self._voice_turn_id = self._voice_turn_id or uuid.uuid4().hex
         max_samples = int((self._native_audio.config.max_duration_s if self._native_audio else 30) * 16000)
         with self._continuation_lock:
-            self._pending_voice = ((list(self._samples), self._turn_generation, self._voice_turn_id, time.monotonic())
-                                   if sum(len(s) for s in self._samples) <= max_samples else None)
+            self._pending_voice = (
+                (list(self._samples), self._turn_generation, self._voice_turn_id, time.monotonic())
+                if sum(len(s) for s in self._samples) <= max_samples
+                else None
+            )
         return {"_voice_turn_id": self._voice_turn_id, "_voice_continuation": self._voice_continuation}
 
     def _process_detected_audio(self) -> None:
@@ -410,8 +421,9 @@ class SpeechListener:
                     if self._interaction_state:
                         self._interaction_state.mark_user()
                     if self._observability_bus:
-                        self._observability_bus.emit("audio", "user_input", "Voice input received",
-                                                     meta={"generation": self._turn_generation})
+                        self._observability_bus.emit(
+                            "audio", "user_input", "Voice input received", meta={"generation": self._turn_generation}
+                        )
                     self.llm_queue.put(message)
             finally:
                 self.reset(preserve_pending=True)

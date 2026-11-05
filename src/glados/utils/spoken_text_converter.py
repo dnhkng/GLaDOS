@@ -502,9 +502,11 @@ class SpokenTextConverter:
     def _convert_mathematical_notation(self, text: str) -> str:
         if "^" in text:
             text = _POWER.sub(
-                lambda m: (m[1] if m[1].isalpha() else self._number_to_words(m[1]))
-                + " to the power of "
-                + self._number_to_words(m[2]),
+                lambda m: (
+                    (m[1] if m[1].isalpha() else self._number_to_words(m[1]))
+                    + " to the power of "
+                    + self._number_to_words(m[2])
+                ),
                 text,
             )
         if "√" in text or "∛" in text:

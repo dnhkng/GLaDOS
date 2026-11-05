@@ -106,12 +106,12 @@ def default_list(include_commands: bool = False) -> DecisionList:
 
 class DecisionListStore:
     def __init__(
-        self, path: Path, tools: Callable[[], list[dict]], enabled: bool = True, backend_key: str = ""
+        self, path: Path, tools: Callable[[], list[dict[str, Any]]], enabled: bool = True, backend_key: str = ""
     ) -> None:
         self.path, self.tools = path, tools
         self._backend_enabled = enabled
         self._lock = threading.RLock()
-        self._data = {
+        self._data: dict[str, Any] = {
             "backend_key": backend_key,
             "revision": 1,
             "enabled": enabled,
@@ -125,6 +125,8 @@ class DecisionListStore:
         source = settings_source(path)
         if source.exists():
             data = read_settings(path)
+            if not isinstance(data, dict) or not isinstance(data.get("lists"), list):
+                raise ValueError("Invalid stored decision settings")
             lists = [DecisionList.model_validate(row).model_dump() for row in data["lists"]]
             if len({row["id"] for row in lists}) != len(lists):
                 raise ValueError("Duplicate stored decision lists")
@@ -139,7 +141,8 @@ class DecisionListStore:
             for option in row["options"]:
                 args = option["arguments"]
                 obsolete_clock = option.get("context_source") == "clock" or (
-                    option["action"] == "tool" and (
+                    option["action"] == "tool"
+                    and (
                         (option["tool"] == "get_time" and not args.get("timezone"))
                         or (option["tool"] == "run_safe_command" and args.get("task") == "time")
                     )
@@ -154,12 +157,16 @@ class DecisionListStore:
             if changed:
                 while sum(o["enabled"] for o in retained) < 2:
                     has_reply = any(o["enabled"] and o["action"] == "reply" for o in retained)
-                    retained.append(DecisionOption(
-                        description=("Ask for missing information when the request is ambiguous"
-                                     if has_reply else "Ordinary conversation or question addressed to GLaDOS; "
-                                     "use the supplied context"),
-                        action="clarify" if has_reply else "reply",
-                    ).model_dump())
+                    retained.append(
+                        DecisionOption(
+                            description=(
+                                "Ask for missing information when the request is ambiguous"
+                                if has_reply
+                                else "Ordinary conversation or question addressed to GLaDOS; use the supplied context"
+                            ),
+                            action="clarify" if has_reply else "reply",
+                        ).model_dump()
+                    )
                 row["options"] = retained
                 row["revision"] += 1
         self._ensure_active_list(self._data)
@@ -169,10 +176,10 @@ class DecisionListStore:
         elif path.suffix in {".yaml", ".yml"} and not path.exists():
             self._persist(self._data)
 
-    def _persist(self, data: dict) -> None:
+    def _persist(self, data: dict[str, Any]) -> None:
         write_settings(self.path, data)
 
-    def _ensure_active_list(self, data: dict) -> None:
+    def _ensure_active_list(self, data: dict[str, Any]) -> None:
         active = next((row for row in data["lists"] if row["id"] == data["active_list"] and row["enabled"]), None)
         if active is None:
             active = next((row for row in data["lists"] if row["enabled"]), None)
@@ -185,7 +192,7 @@ class DecisionListStore:
             data["lists"].append(active)
         data["active_list"], data["enabled"] = active["id"], self._backend_enabled
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return deepcopy(self._data)
 
@@ -219,7 +226,7 @@ class DecisionListStore:
 
             current_time(option.arguments.get("timezone"))
 
-    def mutate(self, body: dict) -> dict:
+    def mutate(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             if body.get("revision") != self._data["revision"]:
                 raise ValueError("Settings changed; reload before saving")
@@ -242,10 +249,10 @@ class DecisionListStore:
                     raise ValueError("Decision list not found")
                 data["lists"] = [r for r in data["lists"] if r["id"] != body["id"]]
             elif action == "activate":
-                row = next((r for r in data["lists"] if r["id"] == body.get("id")), None)
-                if row is None or not row["enabled"]:
+                chosen = next((r for r in data["lists"] if r["id"] == body.get("id")), None)
+                if chosen is None or not chosen["enabled"]:
                     raise ValueError("Select an enabled decision list")
-                data["active_list"] = row["id"]
+                data["active_list"] = chosen["id"]
             else:
                 raise ValueError("Unknown settings action")
             self._ensure_active_list(data)
@@ -254,7 +261,7 @@ class DecisionListStore:
             self._data = data
             return deepcopy(data)
 
-    def authorize_scope(self, permit: dict, tool: str | None = None) -> bool:
+    def authorize_scope(self, permit: dict[str, Any], tool: str | None = None) -> bool:
         """Recheck a generated call against its selected branch and current settings."""
         with self._lock:
             row = self.get(permit.get("list_id"), active=True)
@@ -271,7 +278,7 @@ class DecisionListStore:
                 tool in scope and tool in available if tool else bool(set(scope) & available)
             )
 
-    def authorize(self, permit: dict) -> bool:
+    def authorize(self, permit: dict[str, Any]) -> bool:
         with self._lock:
             row = self.get(permit.get("list_id"), active=True)
             if row is None or self._data["active_list"] != row.id or row.revision != permit.get("revision"):

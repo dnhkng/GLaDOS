@@ -18,7 +18,7 @@ def test_emotion_registration_is_independent(
     monkeypatch: pytest.MonkeyPatch, autonomy: bool, jobs: bool, emotion: bool, vision_enabled: bool | None
 ) -> None:
     factory = Mock(return_value=SimpleNamespace(agent_id="emotion"))
-    monkeypatch.setattr("glados.core.engine.EmotionAgent", factory)
+    monkeypatch.setattr("glados.core.background_cores.EmotionAgent", factory)
     manager = Mock()
     config = AutonomyConfig(enabled=autonomy)
     config.jobs.enabled = jobs
@@ -63,8 +63,14 @@ def test_emotion_registration_is_independent(
         assert engine._emotion_agent is factory.return_value
         settings = factory.call_args.kwargs
         assert settings["llm_config"].model == engine.llm_model
-        assert next(call.args[1].delay() for call in manager.register.call_args_list
-                    if call.args[0] is engine._emotion_agent) == 5.0
+        assert (
+            next(
+                call.args[1].delay()
+                for call in manager.register.call_args_list
+                if call.args[0] is engine._emotion_agent
+            )
+            == 5.0
+        )
         assert settings["llm_config"].request_options == engine.llm_request_options
     else:
         factory.assert_not_called()

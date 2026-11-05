@@ -71,6 +71,7 @@ def test_process_log_rotation_and_exit_status(tmp_path: Path) -> None:
         ],
         capture_output=True,
         timeout=10,
+        check=False,
     )
     assert result.returncode == 7, result.stderr
     files = list(tmp_path.glob("capture.log*"))

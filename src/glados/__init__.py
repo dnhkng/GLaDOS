@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .core.engine import Glados, GladosConfig
 
 __version__ = "0.1.0"
 __all__ = ["Glados", "GladosConfig"]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> type:
     if name in {"Glados", "GladosConfig"}:
         from .core.engine import Glados, GladosConfig
 

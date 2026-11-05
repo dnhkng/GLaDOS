@@ -13,8 +13,8 @@ from ..utils import spoken_text_converter as stc
 from .audio_data import AudioMessage
 from .speech_markup import SpeechMarkupParser, SpeechText
 
-
 _EMOJI = regex.compile(r"[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]+")
+
 
 class TextToSpeechSynthesizer:
     """
@@ -80,21 +80,29 @@ class TextToSpeechSynthesizer:
             try:
                 text_to_speak = self.tts_input_queue.get(timeout=self.pause_time)
 
-                generation = getattr(text_to_speak, "generation", None)
+                tagged = getattr(text_to_speak, "generation", None)
                 autonomy_epoch = getattr(text_to_speak, "autonomy_generation", None)
                 autonomy_cycle = getattr(text_to_speak, "autonomy_cycle", None)
-                if generation is None:
-                    generation = self._quiet_generation()
-                if (self._quiet_mode() or generation != self._quiet_generation()
-                        or not self._autonomy_current(autonomy_epoch)):
+                generation = self._quiet_generation() if tagged is None else tagged
+                if (
+                    self._quiet_mode()
+                    or generation != self._quiet_generation()
+                    or not self._autonomy_current(autonomy_epoch)
+                ):
                     continue
                 if text_to_speak == "<EOS>" or (
                     isinstance(text_to_speak, SpeechText) and text_to_speak.text == "<EOS>"
                 ):
                     logger.debug("TTS Synthesizer: Received EOS token.")
                     self.audio_output_queue.put(
-                        AudioMessage(audio=np.array([], dtype=np.float32), text="", is_eos=True, generation=generation,
-                                     autonomy_generation=autonomy_epoch, autonomy_cycle=autonomy_cycle)
+                        AudioMessage(
+                            audio=np.array([], dtype=np.float32),
+                            text="",
+                            is_eos=True,
+                            generation=generation,
+                            autonomy_generation=autonomy_epoch,
+                            autonomy_cycle=autonomy_cycle,
+                        )
                     )
 
                 else:
@@ -104,8 +112,11 @@ class TextToSpeechSynthesizer:
                         else SpeechMarkupParser().feed(text_to_speak, final=True)
                     )
                     for segment in segments:
-                        if (self._quiet_mode() or generation != self._quiet_generation()
-                                or not self._autonomy_current(autonomy_epoch)):
+                        if (
+                            self._quiet_mode()
+                            or generation != self._quiet_generation()
+                            or not self._autonomy_current(autonomy_epoch)
+                        ):
                             break
                         if not segment.text.strip():
                             continue
@@ -124,8 +135,11 @@ class TextToSpeechSynthesizer:
                             audio_data = np.array([], dtype=np.float32)
                         else:
                             audio_data = self.tts_model.generate_speech_audio(spoken_text_variant)
-                        if (self._quiet_mode() or generation != self._quiet_generation()
-                                or not self._autonomy_current(autonomy_epoch)):
+                        if (
+                            self._quiet_mode()
+                            or generation != self._quiet_generation()
+                            or not self._autonomy_current(autonomy_epoch)
+                        ):
                             break
                         processing_time = time.time() - start_time
 
@@ -151,18 +165,23 @@ class TextToSpeechSynthesizer:
 
                         # Even if audio_data is empty, send the message so AudioPlayer can log/handle it
                         self.audio_output_queue.put(
-                            AudioMessage(audio=audio_data, text=spoken_text_variant, emotion=segment.emotion,
-                                         generation=generation, autonomy_generation=autonomy_epoch,
-                                         autonomy_cycle=autonomy_cycle)
+                            AudioMessage(
+                                audio=audio_data,
+                                text=spoken_text_variant,
+                                emotion=segment.emotion,
+                                generation=generation,
+                                autonomy_generation=autonomy_epoch,
+                                autonomy_cycle=autonomy_cycle,
+                            )
                         )
                         if autonomy_epoch is None:
                             self._on_response_ready(generation, "first_response_ready")
             except queue.Empty:
                 pass  # Normal, no text to process
-            except Exception as e:
+            except Exception:
                 if autonomy_epoch is None:
                     self._on_response_ready(generation, "synthesis_error")
-                logger.exception(f"TextToSpeechSynthesizer: Unexpected error in run loop: {e}")
+                logger.exception("TextToSpeechSynthesizer: Unexpected error in run loop")
                 # Potentially add a small sleep here
                 time.sleep(self.pause_time)
 

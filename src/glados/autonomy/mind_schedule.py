@@ -64,7 +64,8 @@ class RandomAdaptive:
         weight = max(0.0, min(1.0, self.activity()))
         quiet = self.quantile**0.25
         active = 1 - (1 - self.quantile) ** 0.25
-        return minimum + (maximum - minimum) * (quiet * (1 - weight) + active * weight)
+        # float ** float is typed as possibly complex; both bases here are in [0, 1].
+        return float(minimum + (maximum - minimum) * (quiet * (1 - weight) + active * weight))
 
 
 class AdaptiveInterval:

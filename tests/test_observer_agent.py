@@ -16,7 +16,6 @@ def make_config() -> SubagentConfig:
         agent_id="test_observer",
         title="Test Observer",
         role="meta_supervision",
-
     )
 
 

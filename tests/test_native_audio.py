@@ -45,15 +45,22 @@ def test_transcript_stream_cancel_closes_request_and_discards_partial_text(monke
     response = MagicMock()
     response.__enter__.return_value = response
     cancel = threading.Event()
+
     def lines(**kwargs: object) -> Iterator[bytes]:
         yield b'data: {"choices":[{"delta":{"content":"Partial"}}]}'
         cancel.set()
         yield b'data: {"choices":[{"delta":{"content":" transcript"}}]}'
+
     response.iter_lines.side_effect = lines
     monkeypatch.setattr("glados.core.native_audio.requests.post", MagicMock(return_value=response))
     with pytest.raises(InferenceCancelledError):
-        native.transcribe([{"type": "text"}, {"type": "input_audio"}], "http://localhost/v1/chat/completions",
-                          "E4B", {}, cancelled=cancel.is_set)
+        native.transcribe(
+            [{"type": "text"}, {"type": "input_audio"}],
+            "http://localhost/v1/chat/completions",
+            "E4B",
+            {},
+            cancelled=cancel.is_set,
+        )
     assert response.__exit__.call_args.args[0] is InferenceCancelledError
 
 
@@ -84,18 +91,23 @@ def test_listener_queues_audio_without_asr_and_caps_turns() -> None:
 
 def test_listener_recovers_capture_even_when_no_samples_arrive() -> None:
     from types import SimpleNamespace
+
     from glados.observability import ObservabilityBus
+
     shutdown = threading.Event()
     samples = queue.Queue()
     recovered = []
+
     def ensure():
         recovered.append(True)
         shutdown.set()
         return True
+
     audio = SimpleNamespace(get_sample_queue=lambda: samples, ensure_listening=ensure, stop_listening=lambda: None)
     bus = ObservabilityBus()
-    listener = SpeechListener(audio, queue.Queue(), shutdown, threading.Event(), threading.Event(), None, None, .001,
-                              observability_bus=bus)
+    listener = SpeechListener(
+        audio, queue.Queue(), shutdown, threading.Event(), threading.Event(), None, None, 0.001, observability_bus=bus
+    )
     listener._samples = [np.ones(512, dtype=np.float32)]
     listener._recording_started = True
     listener.run()
@@ -111,9 +123,19 @@ def test_listener_confirms_speech_before_barge_in_and_tags_the_turn() -> None:
     active.set()
     begin = MagicMock(return_value=7)
     audio = MagicMock()
-    listener = SpeechListener(audio, pending, threading.Event(), speaking, active, None, None, .001,
-                              native_audio=native, begin_user_turn=begin)
-    sample = np.full(512, .1, dtype=np.float32)
+    listener = SpeechListener(
+        audio,
+        pending,
+        threading.Event(),
+        speaking,
+        active,
+        None,
+        None,
+        0.001,
+        native_audio=native,
+        begin_user_turn=begin,
+    )
+    sample = np.full(512, 0.1, dtype=np.float32)
     listener._handle_audio_sample(sample, True)
     listener._handle_audio_sample(sample, False)
     audio.stop_speaking.assert_not_called()
@@ -180,7 +202,7 @@ def test_llm_receives_audio_but_history_keeps_only_optional_transcript(
         response.__enter__.return_value = response
         response.iter_lines.return_value = [
             b'data: {"choices":[{"delta":{"content":"[emotion:smug]Hello human."}}]}',
-            b'data: [DONE]',
+            b"data: [DONE]",
         ]
         return response
 
@@ -208,6 +230,7 @@ def test_llm_receives_audio_but_history_keeps_only_optional_transcript(
     )
     if transcripts is True:
         from types import SimpleNamespace
+
         processor.router = MagicMock()
         processor.router.store.get.return_value = SimpleNamespace(strategy="hierarchical")
         processor.router.score.return_value = {"action": "reply"}

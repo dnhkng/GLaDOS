@@ -26,7 +26,7 @@ def test_wheel_matches_rocm_release(version, monkeypatch):
     monkeypatch.setattr(installer.platform, "system", lambda: "Linux")
     monkeypatch.setattr(installer.platform, "machine", lambda: "x86_64")
     url = installer.amd_wheel_url(version)
-    release = version[:-2] if version.endswith(".0") else version
+    release = version.removesuffix(".0")
     assert f"/rocm-rel-{release}/" in url
     assert url.startswith("https://repo.radeon.com/")
     assert "cp312-cp312" in url
@@ -133,7 +133,7 @@ def test_amd_interpreter_compatibility(implementation, version, compatible, monk
     if compatible:
         installer.validate_amd_python("/selected/.venv/bin/python", env)
     else:
-        with pytest.raises(ValueError, match="AMD wheels require CPython 3.12"):
+        with pytest.raises(ValueError, match=r"AMD wheels require CPython 3\.12"):
             installer.validate_amd_python("/selected/.venv/bin/python", env)
 
 

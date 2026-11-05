@@ -223,9 +223,11 @@ def test_error_is_isolated_and_progress_and_result_share_slot(scheduler: Schedul
     scheduler.register(Worker("good", store, working), OnDemand())
     scheduler.start_all()
     wait_until(
-        lambda: store.get_slot("bad") is not None
-        and store.get_slot("good") is not None
-        and store.get_slot("good").status == "done"
+        lambda: (
+            store.get_slot("bad") is not None
+            and store.get_slot("good") is not None
+            and store.get_slot("good").status == "done"
+        )
     )
     assert store.get_slot("bad").status == "error"
     assert store.get_slot("good").report == "Details"
@@ -297,7 +299,8 @@ def test_failed_live_signal_does_not_kill_other_minds(scheduler: SchedulerFixtur
 
 @pytest.mark.parametrize("failure", ["reset", "delay"])
 def test_resume_policy_failure_preserves_error_and_restores_other_minds(
-    scheduler: SchedulerFixture, failure: str,
+    scheduler: SchedulerFixture,
+    failure: str,
 ) -> None:
     scheduler, store, registry = scheduler
     policy = Mock()

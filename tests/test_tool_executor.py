@@ -60,7 +60,9 @@ def test_tool_call_discarded_if_processing_inactive(mocker, caplog):
     tool.assert_not_called()
 
 
-@pytest.mark.parametrize("arguments, expected", [(json.dumps({"key": "value"}), {"key": "value"}), ("invalid_json", {})])
+@pytest.mark.parametrize(
+    "arguments, expected", [(json.dumps({"key": "value"}), {"key": "value"}), ("invalid_json", {})]
+)
 def test_process_tool_arguments(mocker, caplog, arguments, expected):
     completed = threading.Event()
     instance = Mock()
@@ -103,12 +105,14 @@ def test_unknown_tool(mocker, caplog):
 
 def test_timed_out_tool_does_not_block_next_call_or_publish_late_result(monkeypatch):
     import glados.core.tool_executor as module
+
     released = threading.Event()
     finished = threading.Event()
 
     class Tool:
         def __init__(self, llm_queue, tool_config):
             self.queue = llm_queue
+
         def run(self, call_id, args):
             if call_id == "slow":
                 released.wait(2)
@@ -119,12 +123,14 @@ def test_timed_out_tool_does_not_block_next_call_or_publish_late_result(monkeypa
     monkeypatch.setattr(module, "all_tools", ["test"])
     monkeypatch.setattr(module, "tool_classes", {"test": Tool})
     executor = make_executor()
-    executor.tool_timeout = .03
+    executor.tool_timeout = 0.03
     executor.processing_active_event.set()
     worker = threading.Thread(target=executor.run)
     worker.start()
+
     def submit(call_id):
         executor.tool_calls_queue.put({"id": call_id, "function": {"name": "test", "arguments": {}}})
+
     try:
         submit("slow")
         timeout = executor.llm_queue_priority.get(timeout=1)
@@ -143,18 +149,22 @@ def test_timed_out_tool_does_not_block_next_call_or_publish_late_result(monkeypa
 
 def test_hung_tools_have_bounded_admission(monkeypatch):
     import glados.core.tool_executor as module
+
     released = threading.Event()
     started = []
+
     class Tool:
         def __init__(self, **kwargs):
             pass
+
         def run(self, call_id, args):
             started.append(call_id)
             released.wait(2)
+
     monkeypatch.setattr(module, "all_tools", ["test"])
     monkeypatch.setattr(module, "tool_classes", {"test": Tool})
     executor = make_executor()
-    executor.tool_timeout = .02
+    executor.tool_timeout = 0.02
     executor.processing_active_event.set()
     worker = threading.Thread(target=executor.run)
     worker.start()

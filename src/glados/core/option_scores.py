@@ -1,10 +1,16 @@
 """Shared one-token option scoring for routing and background PAD decisions."""
 
+from collections.abc import Sequence
 import math
+from typing import Any
+
 import requests
 
 
-def token_ids(base_url, headers, labels, cache, timeout):
+def token_ids(
+    base_url: str, headers: dict[str, str], labels: Sequence[str], cache: dict[str, int], timeout: float
+) -> dict[str, int]:
+    """Each label's single token id, asked of the server once and then cached."""
     for label in labels:
         if label not in cache:
             response = requests.post(
@@ -18,7 +24,8 @@ def token_ids(base_url, headers, labels, cache, timeout):
     return {label: cache[label] for label in labels}
 
 
-def option_request(model, messages, ids):
+def option_request(model: str, messages: list[dict[str, Any]], ids: dict[str, int]) -> dict[str, Any]:
+    """A one-token completion constrained to the option tokens, reporting every option's probability."""
     return {
         "model": model,
         "messages": messages,
@@ -40,7 +47,10 @@ def option_request(model, messages, ids):
     }
 
 
-def request_scores(url, headers, data, ids, timeout):
+def request_scores(
+    url: str, headers: dict[str, str], data: dict[str, Any], ids: dict[str, int], timeout: float
+) -> list[float]:
+    """The options' probabilities, in ``ids`` order and normalised to sum to 1."""
     response = requests.post(url, headers=headers, json=data, timeout=timeout)
     response.raise_for_status()
     result = response.json()
@@ -48,9 +58,12 @@ def request_scores(url, headers, data, ids, timeout):
     if entries is None:
         raise ValueError("Server does not expose untruncated post-sampling option scores")
     scores = {entry["id"]: entry["prob"] for entry in entries}
-    values = [scores.get(token) for token in ids.values()]
-    if any(v is None or not math.isfinite(v) or v < 0 for v in values):
-        raise ValueError("Incomplete option scores; no decision authorized")
+    values: list[float] = []
+    for token in ids.values():
+        value = scores.get(token)
+        if value is None or not math.isfinite(value) or value < 0:
+            raise ValueError("Incomplete option scores; no decision authorized")
+        values.append(value)
     total = sum(values)
     if total <= 0:
         raise ValueError("Empty option distribution")

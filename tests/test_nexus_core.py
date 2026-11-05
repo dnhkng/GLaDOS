@@ -21,10 +21,16 @@ LOCAL = {"url": "http://localhost:11434/api/chat", "model": "qwen3:4b", "headers
 
 def reply(content: object, status: int = 200, usage: dict | None = None) -> Mock:
     text = content if isinstance(content, str) else json.dumps(content)
-    return Mock(status_code=status, json=Mock(return_value={
-        "choices": [{"message": {"content": text}}],
-        "usage": usage or {"prompt_tokens": 1000, "completion_tokens": 500},
-    }), raise_for_status=Mock())
+    return Mock(
+        status_code=status,
+        json=Mock(
+            return_value={
+                "choices": [{"message": {"content": text}}],
+                "usage": usage or {"prompt_tokens": 1000, "completion_tokens": 500},
+            }
+        ),
+        raise_for_status=Mock(),
+    )
 
 
 ADVICE = {"answer": "About 4.24 years.", "confidence": "high", "caveats": []}
@@ -45,9 +51,15 @@ def install(monkeypatch: pytest.MonkeyPatch, *responses: Mock) -> Mock:
 
 
 def test_dispatcher_choice_is_used_and_the_answer_is_reported_with_its_cost(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
-    post = install(monkeypatch, reply({"model": "gpt-5-mini", "reasoning_effort": "low", "max_output_tokens": 400,
-                                       "reason": "simple astronomy"}), reply(ADVICE))
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    post = install(
+        monkeypatch,
+        reply(
+            {"model": "gpt-5-mini", "reasoning_effort": "low", "max_output_tokens": 400, "reason": "simple astronomy"}
+        ),
+        reply(ADVICE),
+    )
     report = json.loads(agent.consult({"need": "Distance check", "question": "Light time to Proxima?"}))
     assert report["status"] == "done" and report["model"] == "gpt-5-mini"
     assert report["answer"] == ADVICE["answer"] and report["reason"] == "simple astronomy"
@@ -62,9 +74,15 @@ def test_dispatcher_choice_is_used_and_the_answer_is_reported_with_its_cost(
 
 
 def test_unknown_model_falls_back_to_the_cheapest_and_failures_choose_another(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
-    post = install(monkeypatch, reply({"model": "gpt-99"}), reply("", status=500),
-                   reply({"model": "gpt-5", "reason": "the cheap model failed"}), reply(ADVICE))
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    post = install(
+        monkeypatch,
+        reply({"model": "gpt-99"}),
+        reply("", status=500),
+        reply({"model": "gpt-5", "reason": "the cheap model failed"}),
+        reply(ADVICE),
+    )
     report = json.loads(agent.consult({"question": "Hard proof"}))
     assert report["status"] == "done" and report["model"] == "gpt-5"
     assert report["failed_attempts"] == [{"model": "gpt-5-nano", "error": "gpt-5-nano returned HTTP 500"}]
@@ -73,7 +91,8 @@ def test_unknown_model_falls_back_to_the_cheapest_and_failures_choose_another(
 
 
 def test_missing_key_budget_and_inactive_consultation_make_no_paid_request(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
     post = install(monkeypatch)
     monkeypatch.delenv("OPENAI_API_KEY")
     assert "OPENAI_API_KEY" in json.loads(agent.consult({"question": "Q"}))["error"]
@@ -115,17 +134,20 @@ def test_slow_local_replies_move_central_to_the_api_and_failures_bring_it_back(a
 
 
 def test_probe_switches_when_local_server_is_unreachable_or_slow(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
     switched = []
     agent._set_backend = switched.append
-    monkeypatch.setattr("glados.autonomy.agents.nexus_agent.requests.post",
-                        Mock(side_effect=requests.ConnectionError()))
+    monkeypatch.setattr(
+        "glados.autonomy.agents.nexus_agent.requests.post", Mock(side_effect=requests.ConnectionError())
+    )
     agent._update_base()
     assert switched[-1]["remote"] and "unreachable" in agent.status()["base_reason"]
 
 
 def test_without_api_key_the_base_stays_local_and_is_not_probed(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
     post = install(monkeypatch)
     monkeypatch.delenv("OPENAI_API_KEY")
     agent._update_base()
@@ -145,7 +167,8 @@ def test_forced_local_mode_never_switches(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_consultation_runs_in_background_and_goes_straight_to_central(
-        agent: NexusAgent, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent: NexusAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
     release = threading.Event()
 
     def post(*args: object, **kwargs: object) -> Mock:
@@ -162,10 +185,18 @@ def test_consultation_runs_in_background_and_goes_straight_to_central(
     tasks = TaskManager(slots, bus)
     calls, replies, active, shutdown = queue.Queue(), queue.Queue(), threading.Event(), threading.Event()
     active.set()
-    executor = ToolExecutor(replies, queue.Queue(), calls, active, shutdown,
-                            tool_config={"task_manager": tasks, "nexus_agent": agent})
-    calls.put({"id": "n1", "function": {"name": "nexus_consult",
-                                        "arguments": {"need": "Distance", "question": "Light time to Proxima?"}}})
+    executor = ToolExecutor(
+        replies, queue.Queue(), calls, active, shutdown, tool_config={"task_manager": tasks, "nexus_agent": agent}
+    )
+    calls.put(
+        {
+            "id": "n1",
+            "function": {
+                "name": "nexus_consult",
+                "arguments": {"need": "Distance", "question": "Light time to Proxima?"},
+            },
+        }
+    )
     thread = threading.Thread(target=executor.run)
     thread.start()
     try:
@@ -194,8 +225,9 @@ def test_inactive_nexus_rejects_consultation_without_a_task(agent: NexusAgent) -
     tasks = TaskManager(TaskSlotStore(), Mock())
     replies, calls, active, shutdown = queue.Queue(), queue.Queue(), threading.Event(), threading.Event()
     active.set()
-    executor = ToolExecutor(replies, queue.Queue(), calls, active, shutdown,
-                            tool_config={"task_manager": tasks, "nexus_agent": agent})
+    executor = ToolExecutor(
+        replies, queue.Queue(), calls, active, shutdown, tool_config={"task_manager": tasks, "nexus_agent": agent}
+    )
     calls.put({"id": "n1", "function": {"name": "nexus_consult", "arguments": {"question": "Q"}}})
     thread = threading.Thread(target=executor.run)
     thread.start()
@@ -222,8 +254,15 @@ def test_central_switches_backend_between_turns_and_hides_nexus_tools_until_need
 
     processor._request_options = {"think": False}
     processor._local_backend["request_options"] = {"think": False}
-    processor.set_backend({"url": "https://api.example/v1/chat/completions", "model": "gpt-5-nano",
-                           "headers": {"Authorization": "Bearer sk"}, "request_options": {"x": 1}, "remote": True})
+    processor.set_backend(
+        {
+            "url": "https://api.example/v1/chat/completions",
+            "model": "gpt-5-nano",
+            "headers": {"Authorization": "Bearer sk"},
+            "request_options": {"x": 1},
+            "remote": True,
+        }
+    )
     assert processor.model_name == "test", "A switch never changes a request already in progress"
     processor._apply_backend()
     assert processor.model_name == "gpt-5-nano" and processor._remote_backend
@@ -299,4 +338,3 @@ def test_tool_hierarchy_respects_lsp() -> None:
     assert issubclass(NexusControl, _BaseNexusTool)
     assert issubclass(NexusConsult, _BaseNexusTool)
     assert not issubclass(NexusConsult, NexusControl)
-

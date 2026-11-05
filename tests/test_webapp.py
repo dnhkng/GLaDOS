@@ -2,9 +2,9 @@
 
 import http.client
 import json
-import ssl
 from pathlib import Path
 import shutil
+import ssl
 import subprocess
 import threading
 import time
@@ -123,8 +123,11 @@ class _FakeQueue:
 
 
 def test_serialize_event() -> None:
-    ev = type("E", (), {"timestamp": 1, "source": "llm", "kind": "queue",
-                        "level": "info", "message": "hi", "meta": {"slot": "s1"}})()
+    ev = type(
+        "E",
+        (),
+        {"timestamp": 1, "source": "llm", "kind": "queue", "level": "info", "message": "hi", "meta": {"slot": "s1"}},
+    )()
     out = serialize_event(ev)
     assert out["source"] == "llm"
     assert out["meta"]["slot"] == "s1"
@@ -193,10 +196,15 @@ def test_network_clients_must_pair_before_reaching_the_console() -> None:
     server = WebappServer(_FakeEngine(), host="127.0.0.1", port=0, token=token, trust_loopback=False)
     server.start()
     try:
+
         def request(method: str, path: str, headers: dict[str, str] | None = None) -> http.client.HTTPResponse:
             conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
-            conn.request(method, path, body=b"{}" if method == "POST" else None,
-                         headers={"Content-Type": "application/json", **(headers or {})})
+            conn.request(
+                method,
+                path,
+                body=b"{}" if method == "POST" else None,
+                headers={"Content-Type": "application/json", **(headers or {})},
+            )
             return conn.getresponse()
 
         assert request("GET", "/api/snapshot").status == 401
@@ -219,8 +227,12 @@ def test_network_clients_must_pair_before_reaching_the_console() -> None:
         [device] = listing["devices"]
         assert listing["current"] == device["id"] and device["address"] == "127.0.0.1"
         conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
-        conn.request("POST", "/api/pairing", body=json.dumps({"action": "revoke", "id": device["id"]}),
-                     headers={"Content-Type": "application/json", **session})
+        conn.request(
+            "POST",
+            "/api/pairing",
+            body=json.dumps({"action": "revoke", "id": device["id"]}),
+            headers={"Content-Type": "application/json", **session},
+        )
         assert json.loads(conn.getresponse().read())["revoked"] == 1
         assert request("GET", "/api/snapshot", session).status == 401
     finally:
@@ -230,8 +242,9 @@ def test_network_clients_must_pair_before_reaching_the_console() -> None:
 def test_certificate_authority_is_downloadable_before_pairing(tmp_path: Path) -> None:
     authority = tmp_path / "ca.pem"
     authority.write_text("-----BEGIN CERTIFICATE-----\n")
-    server = WebappServer(_FakeEngine(), host="127.0.0.1", port=0, token="t" * 43, trust_loopback=False,
-                          authority=authority)
+    server = WebappServer(
+        _FakeEngine(), host="127.0.0.1", port=0, token="t" * 43, trust_loopback=False, authority=authority
+    )
     server.start()
     try:
         conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=5)
@@ -423,8 +436,9 @@ class _LauncherEngine:
 class _FakeServer:
     """Stub WebappServer that records start/stop without binding a socket."""
 
-    def __init__(self, engine, host: str, port: int, allowed_hosts=None, tls=None, token=None, sessions=None,
-                 authority=None) -> None:
+    def __init__(
+        self, engine, host: str, port: int, allowed_hosts=None, tls=None, token=None, sessions=None, authority=None
+    ) -> None:
         self.engine = engine
         self.host = host
         self.port = port
@@ -451,9 +465,7 @@ def test_run_webapp_refuses_when_disabled(monkeypatch) -> None:
     """A disabled webapp aborts the launcher without building the engine."""
     from glados import cli
 
-    monkeypatch.setattr(
-        cli.GladosConfig, "from_yaml", lambda *a, **k: _fake_glados_config(enabled=False)
-    )
+    monkeypatch.setattr(cli.GladosConfig, "from_yaml", lambda *a, **k: _fake_glados_config(enabled=False))
     monkeypatch.setattr(
         cli.Glados,
         "from_config",
@@ -477,9 +489,7 @@ def test_run_webapp_starts_server_then_shuts_down(monkeypatch) -> None:
         created.append(server)
         return server
 
-    monkeypatch.setattr(
-        cli.GladosConfig, "from_yaml", lambda *a, **k: _fake_glados_config(enabled=True)
-    )
+    monkeypatch.setattr(cli.GladosConfig, "from_yaml", lambda *a, **k: _fake_glados_config(enabled=True))
     monkeypatch.setattr(cli.Glados, "from_config", lambda c: engine)
     monkeypatch.setattr(cli, "WebappServer", _server_factory)
 
@@ -527,7 +537,12 @@ def test_browser_renders_server_payload_and_stream_updates() -> None:
     result = subprocess.run(
         [node, str(Path(__file__).with_name("webapp_client.cjs"))],
         input=json.dumps(build_snapshot(engine)),
-        text=True, capture_output=True, timeout=15,
+        text=True,
+        check=False,  # The return code is asserted with the client's output for context.
+        capture_output=True,
+        # The client drives ~400 camera frames through the real canvas code (~15 s of CPU);
+        # this bounds a hang, not speed, so it must not fail on a busy machine.
+        timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -564,7 +579,7 @@ def test_stream_refreshes_state_and_snapshot_during_continuous_events() -> None:
                 elif event_type == "snapshot":
                     snapshots.append(payload)
                     engine.vision_state = SimpleNamespace(snapshot=lambda: "updated scene")
-                    engine.mind_registry = SimpleNamespace(snapshot=lambda: [])
+                    engine.mind_registry = SimpleNamespace(snapshot=list)
         assert len(states) >= 3
         assert len(snapshots) == 2
         assert events
@@ -585,10 +600,14 @@ def test_stream_pushes_fast_camera_updates_without_rebuilding_full_state() -> No
 
     def tracking() -> dict:
         calls["tracking"] += 1
-        return {"paused": False, "camera": {
-            "enabled": True, "connected": True,
-            "face": {"observed_at": time.time(), "present": True, "x": 0.25, "y": -0.1},
-        }}
+        return {
+            "paused": False,
+            "camera": {
+                "enabled": True,
+                "connected": True,
+                "face": {"observed_at": time.time(), "present": True, "x": 0.25, "y": -0.1},
+            },
+        }
 
     def snapshot() -> dict:
         calls["snapshot"] += 1

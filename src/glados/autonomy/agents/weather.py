@@ -6,10 +6,13 @@ Periodically fetches weather data and alerts on significant changes.
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 from loguru import logger
 
-from ...core.llm_decision import LLMConfig, LLMDecisionError, UrgencyDecision, llm_decide_sync
+from ...core.llm_decision import LLMDecisionError, UrgencyDecision, llm_decide_sync
+from ..llm_client import LLMConfig
 from ..mind_runtime import MindRuntime
 from ..subagent import Subagent, SubagentConfig, SubagentOutput
 
@@ -57,7 +60,7 @@ class WeatherSubagent(Subagent):
         temp_change_c: float = 4.0,
         wind_alert_kmh: float = 40.0,
         llm_config: LLMConfig | None = None,
-        **kwargs,
+        **kwargs: Any,  # noqa: ANN401 - Subagent collaborators are forwarded unchanged.
     ) -> None:
         super().__init__(config, **kwargs)
         self._latitude = latitude
@@ -150,8 +153,8 @@ class WeatherSubagent(Subagent):
 
     def _generate_report(
         self,
-        data: dict,
-        current: dict,
+        data: dict[str, Any],
+        current: dict[str, Any],
         temp: float,
         wind: float,
         humidity: float,
@@ -202,7 +205,7 @@ class WeatherSubagent(Subagent):
         if daily_max and daily_min and len(daily_max) >= 3:
             lines.append("### 3-Day Outlook")
             for i in range(min(3, len(daily_max))):
-                date_str = daily_dates[i] if i < len(daily_dates) else f"Day {i+1}"
+                date_str = daily_dates[i] if i < len(daily_dates) else f"Day {i + 1}"
                 d_max = daily_max[i]
                 d_min = daily_min[i]
                 d_code = daily_codes[i] if i < len(daily_codes) else -1
@@ -211,7 +214,7 @@ class WeatherSubagent(Subagent):
 
         return "\n".join(lines)
 
-    def _fetch_weather(self) -> dict[str, object] | None:
+    def _fetch_weather(self) -> dict[str, Any] | None:
         """Fetch current weather from Open-Meteo API."""
         params = {
             "latitude": self._latitude,
@@ -229,8 +232,9 @@ class WeatherSubagent(Subagent):
                 timeout=8.0,
             )
             response.raise_for_status()
-            return response.json()
-        except Exception as exc:
+            payload = response.json()
+            return payload if isinstance(payload, dict) else None
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("WeatherSubagent: failed to fetch weather: {}", exc)
             return None
 

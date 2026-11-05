@@ -7,20 +7,36 @@ from jsonschema import ValidationError, validate
 
 
 def decision_schema(slot_ids: set[str]) -> dict[str, Any]:
-    no_action = {"type": "object", "properties": {"action": {"const": "null"}},
-                 "required": ["action"], "additionalProperties": False}
+    no_action = {
+        "type": "object",
+        "properties": {"action": {"const": "null"}},
+        "required": ["action"],
+        "additionalProperties": False,
+    }
     if not slot_ids:
         return no_action
-    return {"anyOf": [
-        no_action,
-        {"type": "object", "properties": {
-            "action": {"const": "prompt"},
-            "instruction": {"type": "string", "minLength": 1, "maxLength": 480},
-            "slot_ids": {"type": "array", "items": {"type": "string", "enum": sorted(slot_ids)},
-                         "minItems": 1, "maxItems": 8, "uniqueItems": True},
-            "reason": {"type": "string", "minLength": 1, "maxLength": 240},
-        }, "required": ["action", "instruction", "slot_ids", "reason"], "additionalProperties": False},
-    ]}
+    return {
+        "anyOf": [
+            no_action,
+            {
+                "type": "object",
+                "properties": {
+                    "action": {"const": "prompt"},
+                    "instruction": {"type": "string", "minLength": 1, "maxLength": 480},
+                    "slot_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": sorted(slot_ids)},
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "uniqueItems": True,
+                    },
+                    "reason": {"type": "string", "minLength": 1, "maxLength": 240},
+                },
+                "required": ["action", "instruction", "slot_ids", "reason"],
+                "additionalProperties": False,
+            },
+        ]
+    }
 
 
 def decision_prompt() -> str:
@@ -78,9 +94,9 @@ def decision_prompt() -> str:
     )
 
 
-def parse_decision(text: str, slot_ids: set[str]) -> dict | None:
+def parse_decision(text: str, slot_ids: set[str]) -> dict[str, Any] | None:
     try:
-        decision = json.loads(text)
+        decision: dict[str, Any] | None = json.loads(text)
         if decision is None:  # Accept literal null from unconstrained/custom endpoints too.
             return None
         validate(decision, decision_schema(slot_ids))

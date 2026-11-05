@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
-from typing import Any
-
 import logging
+from pathlib import Path
+import shutil
+from typing import Any
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -37,7 +36,7 @@ def disk_usage(path: str = "/") -> str:
         stats = usage.stat()
         _ = stats  # ensure path exists
         total, used, free = shutil.disk_usage(path)
-    except Exception as exc:
+    except OSError as exc:
         return json.dumps({"error": str(exc)})
     percent = round((used / total * 100.0) if total else 0.0, 2)
     return json.dumps(

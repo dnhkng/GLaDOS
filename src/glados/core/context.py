@@ -21,6 +21,7 @@ ContextSource = Callable[[], str | None]
 @dataclass
 class ContextEntry:
     """A registered context source."""
+
     name: str
     source: ContextSource
     priority: int = 0  # Higher = earlier within the same stability class.
@@ -82,7 +83,6 @@ class ContextBuilder:
             self._sources = [s for s in self._sources if s.name != name]
             return len(self._sources) < before
 
-
     def build_system_entries(self) -> list[dict[str, Any]]:
         """Resolve sources once, retaining provenance outside the model messages."""
         with self._lock:
@@ -93,13 +93,17 @@ class ContextBuilder:
             try:
                 content = entry.source()
                 if content:
-                    messages.append({"source": entry.name, "volatile": entry.volatile,
-                                     "message": {"role": "system", "content": content}})
-            except Exception:
+                    messages.append(
+                        {
+                            "source": entry.name,
+                            "volatile": entry.volatile,
+                            "message": {"role": "system", "content": content},
+                        }
+                    )
+            except Exception:  # noqa: BLE001 - one broken context source must not block the turn
                 # One broken source must not block the turn, but it should not vanish unnoticed.
                 logger.opt(exception=True).warning("Context source {} failed; omitting it", entry.name)
         return messages
-
 
     def __len__(self) -> int:
         with self._lock:

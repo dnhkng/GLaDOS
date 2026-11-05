@@ -29,7 +29,7 @@ def laplacian_variance(gray: NDArray[np.uint8]) -> float:
             value = 4.0 * gray[y, x] - gray[y - 1, x] - gray[y + 1, x] - gray[y, x - 1] - gray[y, x + 1]
             total += value
             squared += value * value
-    return max(0.0, squared / count - (total / count) ** 2)
+    return float(max(0.0, squared / count - (total / count) ** 2))
 
 
 def focus_score(frame: NDArray[np.uint8]) -> float:
@@ -37,10 +37,13 @@ def focus_score(frame: NDArray[np.uint8]) -> float:
     height, width = frame.shape[:2]
     scale = min(1.0, 320 / max(height, width))
     if scale < 1:
-        frame = cv2.resize(
-            frame, (max(3, round(width * scale)), max(3, round(height * scale))), interpolation=cv2.INTER_AREA
+        frame = np.asarray(
+            cv2.resize(
+                frame, (max(3, round(width * scale)), max(3, round(height * scale))), interpolation=cv2.INTER_AREA
+            ),
+            dtype=np.uint8,
         )
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+    gray = np.asarray(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), dtype=np.uint8) if frame.ndim == 3 else frame
     return float(laplacian_variance(gray))
 
 
@@ -71,13 +74,13 @@ class MotionTracker:
     def update(self, image: NDArray[np.uint8], captured_at: float) -> None:
         small = cv2.resize(image, (96, 72), interpolation=cv2.INTER_AREA)
         gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY) if small.ndim == 3 else small
-        gray = cv2.GaussianBlur(gray, (3, 3), 0).astype(np.int16)
+        blurred: NDArray[np.int16] = np.asarray(cv2.GaussianBlur(gray, (3, 3), 0), dtype=np.int16)
         with self._lock:
             elapsed = captured_at - self._observed_at
             if self._previous is None or not 0 < elapsed <= 1:
                 self._activity = 0.0
             else:
-                delta = gray - self._previous
+                delta = blurred - self._previous
                 # A uniform exposure shift is not scene motion.
                 delta = delta - np.median(delta)
                 changed_fraction = float(np.mean(np.abs(delta) > 12))
@@ -85,7 +88,7 @@ class MotionTracker:
                 smoothing_s = 0.15 if activity > self._activity else 0.8
                 weight = 1 - math.exp(-elapsed / smoothing_s)
                 self._activity += weight * (activity - self._activity)
-            self._previous = gray
+            self._previous = blurred
             self._observed_at = captured_at
 
     def snapshot(self) -> dict[str, float]:
@@ -265,7 +268,7 @@ class CameraSampler:
                     if isinstance(camera, int) or str(camera).startswith("/dev/video"):
                         # USB webcams often deliver raw YUYV below the requested
                         # frame rate; prefer their compressed 30 fps mode.
-                        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
                     capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                     capture.set(cv2.CAP_PROP_FPS, self.fps)
@@ -273,7 +276,8 @@ class CameraSampler:
                     # a single V4L2 buffer misses alternate sensor frames.
                     capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
                 cycle_started = time.perf_counter()
-                ok, image = capture.read()
+                ok, raw = capture.read()
+                image = None if raw is None else np.asarray(raw, dtype=np.uint8)
                 with self._lock:
                     if capture_revision != self._camera_revision:
                         continue

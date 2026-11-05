@@ -1,8 +1,9 @@
-import queue
 from typing import Any
 
 from loguru import logger
 import soundfile as sf
+
+from .protocol import MessageSink
 
 tool_definition = {
     "type": "function",
@@ -11,21 +12,17 @@ tool_definition = {
         "description": "Performs a slow clap.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "claps": {
-                    "type": "number",
-                    "description": "The number of slow claps to perform."
-                }
-            },
-            "required": ["claps"]
-        }
-    }
+            "properties": {"claps": {"type": "number", "description": "The number of slow claps to perform."}},
+            "required": ["claps"],
+        },
+    },
 }
+
 
 class SlowClap:
     def __init__(
         self,
-        llm_queue: queue.Queue[dict[str, Any]],
+        llm_queue: MessageSink,
         tool_config: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -58,7 +55,7 @@ class SlowClap:
 
             # Loading PortAudio at module import prevents non-audio commands
             # (including config validation) from running on headless systems.
-            import sounddevice as sd  # type: ignore
+            import sounddevice as sd
 
             for _ in range(claps):
                 sd.play(data, sample_rate)

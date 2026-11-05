@@ -1,7 +1,8 @@
 """Read a camera overview or ask E4B a question about a fresh frame."""
 
-import queue
 from typing import Any
+
+from .protocol import MessageSink
 
 tool_definition = {
     "type": "function",
@@ -28,7 +29,7 @@ tool_definition = {
 
 
 class VisionLook:
-    def __init__(self, llm_queue: queue.Queue[dict[str, Any]], tool_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, llm_queue: MessageSink, tool_config: dict[str, Any] | None = None) -> None:
         self.llm_queue = llm_queue
         self._mind = (tool_config or {}).get("vision_agent")
 

@@ -167,11 +167,11 @@ def test_bundled_sentence_reaches_tts_before_stream_finishes(monkeypatch: pytest
 
     def lines(*, chunk_size: int) -> Iterator[bytes]:
         assert chunk_size == 1
-        yield b'data: ' + json.dumps({"choices": [{"delta": {"content": "[emotion:smug]It works. More"}}]}).encode()
+        yield b"data: " + json.dumps({"choices": [{"delta": {"content": "[emotion:smug]It works. More"}}]}).encode()
         spoken = list(processor.tts_input_queue.queue)
         assert any(isinstance(item, SpeechText) and item.text.strip() == "It works." for item in spoken)
         assert not any(isinstance(item, SpeechText) and "More" in item.text for item in spoken)
-        yield b'data: ' + json.dumps({"choices": [{"delta": {"content": " words."}}]}).encode()
+        yield b"data: " + json.dumps({"choices": [{"delta": {"content": " words."}}]}).encode()
         processor.shutdown_event.set()
 
     response = MagicMock(status_code=200)
@@ -179,20 +179,27 @@ def test_bundled_sentence_reaches_tts_before_stream_finishes(monkeypatch: pytest
     response.iter_lines.side_effect = lines
     monkeypatch.setattr("glados.core.llm_processor.requests.post", lambda *args, **kwargs: response)
     processor.run()
-    speech = [item.text.strip() for item in processor.tts_input_queue.queue
-              if isinstance(item, SpeechText) and item.text.strip() and item.text != "<EOS>"]
+    speech = [
+        item.text.strip()
+        for item in processor.tts_input_queue.queue
+        if isinstance(item, SpeechText) and item.text.strip() and item.text != "<EOS>"
+    ]
     assert speech == ["It works.", "More words."]
 
 
-@pytest.mark.parametrize("text, clauses, remainder", [
-    ("Yes. Next", ["Yes."], " Next"),
-    ("Done! Really?", ["Done!", " Really?"], ""),
-    ("It is 3.", [], "It is 3."),
-    ("It is 3.14 volts. Next", ["It is 3.14 volts."], " Next"),
-    ("At 12:30 today.", ["At 12:30 today."], ""),
-    ("See https://example.com/path. Later.", ["See https://example.com/path. Later."], ""),
-    ('He said “done.” Next', ['He said “done.”'], ' Next'),
-])
+@pytest.mark.parametrize(
+    "text, clauses, remainder",
+    [
+        ("Yes. Next", ["Yes."], " Next"),
+        ("Done! Really?", ["Done!", " Really?"], ""),
+        ("It is 3.", [], "It is 3."),
+        ("It is 3.14 volts. Next", ["It is 3.14 volts."], " Next"),
+        ("At 12:30 today.", ["At 12:30 today."], ""),
+        ("See https://example.com/path. Later.", ["See https://example.com/path. Later."], ""),
+        ("He said “done.” Next", ["He said “done.”"], " Next"),
+    ],
+)
 def test_speech_clauses(text: str, clauses: list[str], remainder: str) -> None:
     from glados.core.speech_chunking import split_speech_clauses
+
     assert split_speech_clauses(text) == (clauses, remainder)

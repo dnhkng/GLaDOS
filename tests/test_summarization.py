@@ -1,6 +1,5 @@
 """Tests for summarization utilities."""
 
-
 from glados.autonomy.summarization import (
     estimate_tokens,
 )
@@ -30,7 +29,7 @@ class TestEstimateTokens:
                 "content": [
                     {"type": "text", "text": "Hello"},  # 5 chars
                     {"type": "text", "text": "World"},  # 5 chars
-                ]
+                ],
             }
         ]
         # 10 chars / 4 = 2 tokens

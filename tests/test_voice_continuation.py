@@ -5,13 +5,14 @@ import io
 import queue
 import threading
 from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 import soundfile as sf
 
+from glados.core.conversation_store import ConversationStore
 from glados.core.native_audio import NativeAudioConfig, NativeAudioInput
 from glados.core.speech_listener import SpeechListener
-from glados.core.conversation_store import ConversationStore
 
 
 def listener(native=True, max_duration=30):
@@ -203,8 +204,8 @@ def test_processor_withdraws_partial_voice_input_before_building_request(monkeyp
 
 @pytest.mark.parametrize("cancelled", [False, True])
 def test_playback_boundary_acknowledges_only_current_generation(cancelled):
-    from glados.core.speech_player import SpeechPlayer
     from glados.core.audio_data import AudioMessage
+    from glados.core.speech_player import SpeechPlayer
 
     entered, shutdown = threading.Event(), threading.Event()
     lock = threading.RLock()

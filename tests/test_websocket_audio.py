@@ -205,7 +205,7 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
 
         def reset_states(self) -> None:
             """Satisfy the VAD reset interface."""
-            return None
+            return
 
     class FakeWebsocket:
         """Hold one microphone connection open after its first frame."""
@@ -218,7 +218,7 @@ def test_default_mode_accepts_only_one_microphone(monkeypatch: pytest.MonkeyPatc
 
         async def send(self, _message: str) -> None:
             """Accept the server sample-rate announcement."""
-            return None
+            return
 
         async def recv(self) -> bytes:
             """Return one frame, then wait for the simulated disconnect."""
@@ -283,7 +283,7 @@ def test_stop_start_releases_idle_microphone_owner(monkeypatch: pytest.MonkeyPat
 
         def reset_states(self) -> None:
             """Satisfy the VAD reset interface."""
-            return None
+            return
 
     monkeypatch.setattr("glados.audio_io.websocket_io.VAD", FakeVAD)
     port = _unused_port()

@@ -8,12 +8,28 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from typing import Any, BinaryIO
 
-_WINDOWS = sys.platform == "win32"
-if _WINDOWS:
+# The lock strategy is chosen once at import, under sys.platform so type checkers see which module exists.
+if sys.platform == "win32":
     import msvcrt
+
+    def _lock(handle: BinaryIO) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+
+    def _unlock(handle: BinaryIO) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
 else:
     import fcntl
+
+    def _lock(handle: BinaryIO) -> None:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+
+    def _unlock(handle: BinaryIO) -> None:
+        fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def revision(content: str) -> str:
@@ -24,27 +40,18 @@ def revision(content: str) -> str:
 def locked(directory: Path) -> Iterator[None]:
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / ".memory.lock").open("a+b") as lock:
-        if _WINDOWS:
-            lock.seek(0)
-            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        _lock(lock)
         try:
             yield
         finally:
-            if _WINDOWS:
-                lock.seek(0)
-                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+            _unlock(lock)
 
 
-def append_record(path: Path, record: dict) -> None:
-    with locked(path.parent):
-        with path.open("a") as stream:
-            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+def append_record(path: Path, record: dict[str, Any]) -> None:
+    with locked(path.parent), path.open("a") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def edit_record(path: Path, entry_id: str, expected_revision: str, content: str | None) -> None:

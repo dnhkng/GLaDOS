@@ -55,6 +55,6 @@ def resolve_relative_dates(text: str, reading: dict[str, str]) -> tuple[str, lis
         return day.strftime("%A") + " " + day.isoformat()
 
     resolved = re.sub(
-        r"\b(?:day after tomorrow|tomorrow|next day|today|tonight|yesterday)\b", replace_day, text, flags=re.I
+        r"\b(?:day after tomorrow|tomorrow|next day|today|tonight|yesterday)\b", replace_day, text, flags=re.IGNORECASE
     )
     return resolved, dates

@@ -51,15 +51,22 @@ class WebappConfig(BaseModel):
     )
     host: str = Field(default="127.0.0.1", description="Listen address.")
     port: int = Field(default=8050, description="Listen port.")
-    allowed_hosts: list[str] = Field(default_factory=list, description=(
-        "Additional HTTP Host names, without ports. \"auto\" accepts this machine's current LAN address."))
+    allowed_hosts: list[str] = Field(
+        default_factory=list,
+        description=('Additional HTTP Host names, without ports. "auto" accepts this machine\'s current LAN address.'),
+    )
     tls: bool = Field(default=False, description="Serve over HTTPS; phones need it for microphone access.")
     tls_cert: str | None = Field(default=None, description="PEM certificate; a self-signed one is generated if unset.")
     tls_key: str | None = Field(default=None, description="PEM private key matching tls_cert.")
     remote_audio: bool = Field(default=True, description="Let a connected browser take over microphone and speaker.")
-    access_token: str | None = Field(default=None, min_length=32, description=(
-        "Secret other devices must pair with. Generated in data/webapp_token when the console listens beyond "
-        "localhost; requests from this machine never need it."))
+    access_token: str | None = Field(
+        default=None,
+        min_length=32,
+        description=(
+            "Secret other devices must pair with. Generated in data/webapp_token when the console listens beyond "
+            "localhost; requests from this machine never need it."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_hosts(self) -> WebappConfig:

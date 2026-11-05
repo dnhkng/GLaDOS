@@ -31,16 +31,20 @@ class TaskHandle:
     id: str
     title: str
     group: str
-    future: Future = field(default_factory=Future)
+    future: Future[TaskResult] = field(default_factory=Future)
     cancelled: threading.Event = field(default_factory=threading.Event)
-    execution: Future | None = None
+    execution: Future[None] | None = None
     status: str = "queued"
     started_at: float | None = None
 
 
 class TaskManager:
     def __init__(
-        self, slot_store: TaskSlotStore, event_bus: EventBus, max_workers: int = 2, progress_interval_s: float = 5.0,
+        self,
+        slot_store: TaskSlotStore,
+        event_bus: EventBus,
+        max_workers: int = 2,
+        progress_interval_s: float = 5.0,
         nexus_workers: int = 3,
     ) -> None:
         self._slot_store = slot_store
@@ -101,8 +105,8 @@ class TaskManager:
             )
         rows = []
         for handle in active:
-            slot = self._slot_store.get_slot(handle.id)
-            rows.append(f"[{handle.id}] {handle.title[:100]}: {slot.status}; {slot.summary[:180]}")
+            if slot := self._slot_store.get_slot(handle.id):
+                rows.append(f"[{handle.id}] {handle.title[:100]}: {slot.status}; {slot.summary[:180]}")
         self._slot_store.update_slot(
             "search",
             "Search Core",
@@ -110,6 +114,12 @@ class TaskManager:
             "\n".join(rows) if rows else "Ready for requested research; no queued searches",
             update_priority="regular",
         )
+
+    def mark_delivered(self, slot_id: str) -> None:
+        """The caller relayed this task's result itself, so Autonomy must not announce it again."""
+        slot = self._slot_store.get_slot(slot_id)
+        if slot is not None:
+            self._slot_store.mark_handled(slot_id, slot.revision)
 
     def cancel(self, slot_id: str) -> bool:
         with self._lock:
@@ -146,19 +156,26 @@ class TaskManager:
             handle.future.set_result(result)
             self._publish_group(handle.group)
 
-    def _run_task(self, handle, runner, notify_user, progress):
+    def _run_task(
+        self,
+        handle: TaskHandle,
+        runner: Callable[[], str | TaskResult],
+        notify_user: bool,
+        progress: Callable[[], str] | None,
+    ) -> None:
         with self._lock:
             if handle.cancelled.is_set():
                 self._finish(handle, TaskResult("cancelled", "Request cancelled"))
                 return
-            handle.status, handle.started_at = "running", time.monotonic()
+            started = time.monotonic()
+            handle.status, handle.started_at = "running", started
             self._slot_store.update_slot(
                 handle.id, handle.title, "running", "Working...", update_priority="regular", owner_id=handle.group
             )
             self._publish_group(handle.group)
         finished = threading.Event()
 
-        def heartbeat():
+        def heartbeat() -> None:
             while not finished.wait(self._progress_interval_s):
                 try:
                     detail = progress()[:240] if progress else "Working"
@@ -167,12 +184,12 @@ class TaskManager:
                             handle.id,
                             handle.title,
                             "running",
-                            f"{time.monotonic() - handle.started_at:.0f}s elapsed: {detail}",
+                            f"{time.monotonic() - started:.0f}s elapsed: {detail}",
                             update_priority="regular",
                             owner_id=handle.group,
                         )
                         self._publish_group(handle.group)
-                except Exception:
+                except Exception:  # noqa: BLE001 - a progress callback must not stop the heartbeat
                     logger.opt(exception=True).debug("Task heartbeat for {} failed", handle.id)
 
         thread = threading.Thread(target=heartbeat, daemon=True, name="TaskProgress")
@@ -184,7 +201,7 @@ class TaskManager:
                 if isinstance(value, TaskResult)
                 else TaskResult("done", "Completed", notify_user, report=str(value))
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failing task becomes an error result
             result = TaskResult("error", "Task failed", notify_user, report=str(exc))
         finally:
             finished.set()
@@ -198,7 +215,7 @@ class TaskManager:
         for slot_id in ids:
             self.cancel(slot_id)
 
-        def close():
+        def close() -> None:
             self._executor.shutdown(wait=wait, cancel_futures=True)
             self._search_executor.shutdown(wait=wait, cancel_futures=True)
             self._nexus_executor.shutdown(wait=wait, cancel_futures=True)

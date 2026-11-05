@@ -2,18 +2,20 @@
 
 import json
 from pathlib import Path
-import re
-from typing import ClassVar
+from typing import Any
 
 import yaml
 
 
 class _SettingsLoader(yaml.SafeLoader):
-    # Settings are also used in JSON tool/API messages: retain calendar values as strings.
-    yaml_implicit_resolvers: ClassVar[dict[str | None, list[tuple[str, re.Pattern[str]]]]] = {
-        key: [(tag, pattern) for tag, pattern in values if tag != "tag:yaml.org,2002:timestamp"]
-        for key, values in yaml.SafeLoader.yaml_implicit_resolvers.items()
-    }
+    pass
+
+
+# Settings are also used in JSON tool/API messages: retain calendar values as strings.
+_SettingsLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in values if tag != "tag:yaml.org,2002:timestamp"]
+    for key, values in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
 
 
 class _SettingsDumper(yaml.SafeDumper):
@@ -44,7 +46,7 @@ def read_settings(path: Path) -> object:
         raise ValueError("Invalid settings YAML") from exc
 
 
-def write_settings(path: Path, values: dict) -> None:
+def write_settings(path: Path, values: dict[str, Any]) -> None:
     if path.suffix in {".yaml", ".yml"}:
         text = "# Edit this file and restart GLaDOS, or save changes through the console.\n"
         text += yaml.dump(values, Dumper=_SettingsDumper, sort_keys=False, allow_unicode=True)

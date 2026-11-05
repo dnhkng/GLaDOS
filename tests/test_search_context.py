@@ -172,7 +172,8 @@ def test_tool_continuation_streams_answer_after_context_recovery(monkeypatch: py
 
 @pytest.mark.parametrize("status", ["queued", "running", "done", "partial", "error", None])
 def test_search_acknowledgement_distinguishes_pending_work_from_findings(
-    status: str | None, monkeypatch: pytest.MonkeyPatch,
+    status: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     processor = make_processor()
     original = history()[:-1]
@@ -180,12 +181,15 @@ def test_search_acknowledgement_distinguishes_pending_work_from_findings(
     processor._inference_scheduler = Mock()
     content = json.dumps({"status": status, "task_id": "task_search_demo"}) if status else "Verified source excerpt"
     message = {"role": "tool", "tool_call_id": "search", "content": content}
-    processor.llm_input_queue.put({**message,
-        "_allow_tools": False, "_tool_reply_context": {"name": "mcp.internet_search.web_search_exa"}})
+    processor.llm_input_queue.put(
+        {**message, "_allow_tools": False, "_tool_reply_context": {"name": "mcp.internet_search.web_search_exa"}}
+    )
     response = MagicMock(status_code=200)
     response.__enter__.return_value = response
-    response.iter_lines.return_value = [b'data: {"choices":[{"delta":{"content":"Search status received."}}]}',
-                                        b'data: [DONE]']
+    response.iter_lines.return_value = [
+        b'data: {"choices":[{"delta":{"content":"Search status received."}}]}',
+        b"data: [DONE]",
+    ]
     post = Mock(return_value=response)
     monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
     speech = []
@@ -211,23 +215,41 @@ def test_search_acknowledgement_distinguishes_pending_work_from_findings(
 
 @pytest.mark.parametrize("calls_tool", [True, False])
 def test_required_search_planning_does_not_speak_date_questions(
-    calls_tool: bool, monkeypatch: pytest.MonkeyPatch,
+    calls_tool: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     processor = make_processor()
     processor._conversation_store = ConversationStore([])
     processor.router = Mock()
-    processor.router.score.return_value = {"action": "plan", "strategy": "hierarchical", "list_id": "speech",
-                                          "revision": 1, "settings_revision": 1, "tool_scope": [SEARCH_TOOL]}
+    processor.router.score.return_value = {
+        "action": "plan",
+        "strategy": "hierarchical",
+        "list_id": "speech",
+        "revision": 1,
+        "settings_revision": 1,
+        "tool_scope": [SEARCH_TOOL],
+    }
     processor._build_tools = lambda _: [{"type": "function", "function": {"name": SEARCH_TOOL}}]
     processor.llm_input_queue.put({"role": "user", "content": "Weather in Munich tomorrow?"})
     chunks = [{"content": "What is the exact date for tomorrow? I will search."}]
     if calls_tool:
-        chunks.append({"tool_calls": [{"index": 0, "id": "weather", "type": "function", "function": {
-            "name": SEARCH_TOOL, "arguments": '{"query":"Munich weather 2026-10-07"}'}}]})
+        chunks.append(
+            {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": "weather",
+                        "type": "function",
+                        "function": {"name": SEARCH_TOOL, "arguments": '{"query":"Munich weather 2026-10-07"}'},
+                    }
+                ]
+            }
+        )
     response = MagicMock(status_code=200)
     response.__enter__.return_value = response
-    response.iter_lines.return_value = [b"data: " + json.dumps({"choices": [{"delta": delta}]}).encode()
-                                        for delta in chunks] + [b"data: [DONE]"]
+    response.iter_lines.return_value = [
+        b"data: " + json.dumps({"choices": [{"delta": delta}]}).encode() for delta in chunks
+    ] + [b"data: [DONE]"]
     post = Mock(return_value=response)
     monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
     worker = threading.Thread(target=processor.run)

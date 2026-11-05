@@ -7,11 +7,11 @@ data loss from in-flight operations.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from enum import IntEnum
 import queue
 import threading
 import time
-from dataclasses import dataclass, field
-from enum import IntEnum
 from typing import Any
 
 from loguru import logger
@@ -300,7 +300,7 @@ class ShutdownOrchestrator:
                 duration=duration,
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one component failing to stop must not block the others
             duration = time.time() - start
             logger.error("Error stopping component '{}': {}", component.name, e)
             return ShutdownResult(

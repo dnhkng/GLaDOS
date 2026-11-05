@@ -9,7 +9,7 @@ from typing import Any
 from loguru import logger
 import numpy as np
 from numpy.typing import NDArray
-import sounddevice as sd  # type: ignore
+import sounddevice as sd
 
 from . import VAD
 from .base import AudioIO
@@ -28,8 +28,12 @@ class SoundDeviceAudioIO(AudioIO):
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
 
-    def __init__(self, vad_threshold: float | None = None, input_device: int | str | None = None,
-                 output_device: int | str | None = None) -> None:
+    def __init__(
+        self,
+        vad_threshold: float | None = None,
+        input_device: int | str | None = None,
+        output_device: int | str | None = None,
+    ) -> None:
         """Initialize the sounddevice audio I/O.
 
         Args:
@@ -83,10 +87,15 @@ class SoundDeviceAudioIO(AudioIO):
     def capture_health(self) -> dict[str, Any]:
         age = time.monotonic() - self._last_callback if self._last_callback else None
         active = self.input_stream is not None and self.input_stream.active is not False
-        return {"enabled": self._listening_enabled, "connected": active and age is not None and age < 2,
-                "last_frame_age_s": round(age, 3) if age is not None else None,
-                "error": self._capture_error, "recoveries": self._capture_recoveries,
-                "pending_frames": self._sample_queue.qsize(), "overflows": self._input_overflows}
+        return {
+            "enabled": self._listening_enabled,
+            "connected": active and age is not None and age < 2,
+            "last_frame_age_s": round(age, 3) if age is not None else None,
+            "error": self._capture_error,
+            "recoveries": self._capture_recoveries,
+            "pending_frames": self._sample_queue.qsize(),
+            "overflows": self._input_overflows,
+        }
 
     def consume_capture_discontinuity(self) -> bool:
         if not self._capture_discontinuity.is_set():
@@ -137,13 +146,24 @@ class SoundDeviceAudioIO(AudioIO):
 
     def device_snapshot(self) -> dict[str, Any]:
         devices, apis = sd.query_devices(), sd.query_hostapis()
+
         def choices(direction: str) -> list[dict[str, Any]]:
-            return [{"id": i, "name": device["name"], "host_api": apis[device["hostapi"]]["name"]}
-                    for i, device in enumerate(devices) if device[f"max_{direction}_channels"] > 0]
+            return [
+                {"id": i, "name": device["name"], "host_api": apis[device["hostapi"]]["name"]}
+                for i, device in enumerate(devices)
+                if device[f"max_{direction}_channels"] > 0
+            ]
+
         with self._device_lock:
-            return {"available": True, "input": choices("input"), "output": choices("output"),
-                    "selected_input": self.input_device, "selected_output": self.output_device,
-                    "input_health": self.capture_health(), "output_health": {"underflows": self._output_underflows}}
+            return {
+                "available": True,
+                "input": choices("input"),
+                "output": choices("output"),
+                "selected_input": self.input_device,
+                "selected_output": self.output_device,
+                "input_health": self.capture_health(),
+                "output_health": {"underflows": self._output_underflows},
+            }
 
     def select_device(self, kind: str, device: int | None) -> None:
         if kind not in {"microphone", "speaker"} or (device is not None and (type(device) is not int or device < 0)):

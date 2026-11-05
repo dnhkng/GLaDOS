@@ -7,12 +7,13 @@ and forwards it to the LLM queue as an alternative to ASR.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import queue
 import selectors
 import sys
 import threading
 import time
-from typing import Any, Callable, TextIO
+from typing import Any, TextIO
 
 from loguru import logger
 
@@ -54,7 +55,7 @@ class TextListener:
             selector = selectors.DefaultSelector()
             selector.register(self._input_stream, selectors.EVENT_READ)
             self._selector = selector
-        except Exception:
+        except (OSError, ValueError):
             self._selector = None
 
     def run(self) -> None:

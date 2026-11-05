@@ -4,8 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import threading
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..autonomy.summarization import estimate_tokens
+
+if TYPE_CHECKING:
+    from ..autonomy import AutonomyConfig, ConstitutionalState, MindScheduler, TaskSlotStore
+    from ..autonomy.agents import EmotionAgent
+    from ..mcp import MCPManager
+    from ..observability import MindRegistry
+    from ..vision import VisionState
+    from .conversation_store import ConversationStore
+    from .inference import InferenceScheduler
+    from .knowledge_store import KnowledgeStore
+    from .store import Store
 
 
 @dataclass(frozen=True)
@@ -20,6 +33,33 @@ class CommandSpec:
 class GladosCommands:
     """Command registry and handlers; relies on the engine state set up by ``Glados.__init__``."""
 
+    # The engine state these commands read and control, provided by the host class (Glados).
+    _command_registry: dict[str, CommandSpec]
+    _command_order: list[str]
+    _conversation_store: ConversationStore
+    _emotion_agent: EmotionAgent | None
+    _quiet_generation: int
+    asr_muted_event: threading.Event
+    autonomy_config: AutonomyConfig
+    autonomy_slots: TaskSlotStore | None
+    constitutional_state: ConstitutionalState
+    inference_scheduler: InferenceScheduler
+    input_mode: Literal["audio", "text", "both"]
+    knowledge_store: KnowledgeStore
+    mcp_manager: MCPManager | None
+    mind_registry: MindRegistry
+    preferences_store: Store[Any]
+    shutdown_event: threading.Event
+    subagent_manager: MindScheduler | None
+    tts_muted_event: threading.Event
+    vision_state: VisionState | None
+
+    if TYPE_CHECKING:
+
+        def set_asr_muted(self, muted: bool) -> None: ...
+        def set_tts_muted(self, muted: bool) -> None: ...
+        def set_autonomy_enabled(self, enabled: bool) -> None: ...
+
     def command_specs(self) -> list[CommandSpec]:
         return [self._command_registry[name] for name in self._command_order]
 
@@ -27,8 +67,7 @@ class GladosCommands:
         text = command.strip()
         if not text:
             return "No command entered."
-        if text.startswith("/"):
-            text = text[1:]
+        text = text.removeprefix("/")
         parts = text.split()
         if not parts:
             return "No command entered."
@@ -37,7 +76,8 @@ class GladosCommands:
         spec = self._command_registry.get(cmd)
         if not spec:
             return f"Unknown command: /{cmd}. Try /help."
-        return spec.handler(args)
+        reply: str = spec.handler(args)
+        return reply
 
     def _build_command_registry(self) -> tuple[dict[str, CommandSpec], list[str]]:
         registry: dict[str, CommandSpec] = {}
@@ -464,8 +504,8 @@ class GladosCommands:
             return f"Deleted knowledge #{entry_id}."
 
         if action == "clear":
-            removed = self.knowledge_store.clear()
-            return f"Cleared {removed} knowledge entr{'y' if removed == 1 else 'ies'}."
+            cleared = self.knowledge_store.clear()
+            return f"Cleared {cleared} knowledge entr{'y' if cleared == 1 else 'ies'}."
 
         return "Usage: /knowledge add|list|set|delete|clear"
 

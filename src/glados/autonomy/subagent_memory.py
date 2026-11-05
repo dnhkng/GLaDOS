@@ -40,7 +40,7 @@ else:
     import fcntl
 
     @contextmanager
-    def _file_lock(f: IO, exclusive: bool = False) -> Iterator[None]:
+    def _file_lock(f: IO[str], exclusive: bool = False) -> Iterator[None]:
         """Acquire a file lock on Unix."""
         try:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
@@ -163,21 +163,20 @@ class SubagentMemory:
             return
 
         try:
-            with open(self.file_path) as f:
-                with _file_lock(f, exclusive=False):
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        data = json.loads(line)
-                        entry = MemoryEntry(
-                            key=data["key"],
-                            value=data["value"],
-                            created_at=data.get("created_at", time.time()),
-                            shown_at=data.get("shown_at"),
-                        )
-                        self._entries[entry.key] = entry
-        except Exception as exc:
+            with open(self.file_path) as f, _file_lock(f, exclusive=False):
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    entry = MemoryEntry(
+                        key=data["key"],
+                        value=data["value"],
+                        created_at=data.get("created_at", time.time()),
+                        shown_at=data.get("shown_at"),
+                    )
+                    self._entries[entry.key] = entry
+        except (OSError, ValueError, KeyError, TypeError) as exc:
             logger.warning("Failed to load memory for {}: {}", self.agent_id, exc)
 
     def _save(self) -> None:
@@ -195,7 +194,7 @@ class SubagentMemory:
                             line = json.dumps(asdict(entry), ensure_ascii=False)
                             f.write(line + "\n")
                         f.flush()
-            except Exception as exc:
+            except (OSError, TypeError, ValueError) as exc:
                 logger.warning("Failed to save memory for {}: {}", self.agent_id, exc)
 
     def __len__(self) -> int:

@@ -1,22 +1,26 @@
 """Timezone-specific clock queries; local time is already supplied in context."""
 
 import json
-import queue
 from typing import Any
 
 from ..core.clock import current_time
+from .protocol import MessageSink
 
 tool_definition = {
     "type": "function",
     "function": {
         "name": "get_time",
         "description": "Read the current time/date in another explicitly named IANA timezone. "
-                       "Local time/date/weekday are in live context; answer those without a tool call.",
+        "Local time/date/weekday are in live context; answer those without a tool call.",
         "parameters": {
             "type": "object",
             "properties": {
-                "timezone": {"type": "string", "minLength": 1, "maxLength": 100,
-                             "description": "Required IANA zone, e.g. Asia/Tokyo or America/New_York."}
+                "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Required IANA zone, e.g. Asia/Tokyo or America/New_York.",
+                }
             },
             "required": ["timezone"],
             "additionalProperties": False,
@@ -26,7 +30,7 @@ tool_definition = {
 
 
 class GetTime:
-    def __init__(self, llm_queue: queue.Queue, tool_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, llm_queue: MessageSink, tool_config: dict[str, Any] | None = None) -> None:
         self.llm_queue = llm_queue
 
     def run(self, tool_call_id: str, call_args: dict[str, Any]) -> None:

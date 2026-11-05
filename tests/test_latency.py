@@ -20,7 +20,12 @@ def test_voice_turn_breaks_down_into_pipeline_stages() -> None:
     _emit_at(bus, 102.25, "tts", "play", autonomy=False)
     [turn] = tracker.snapshot()
     assert (turn["asr_ms"], turn["llm_ms"], turn["tts_ms"], turn["playback_ms"], turn["total_ms"]) == (
-        250.0, 1500.0, 500.0, 250.0, 2500.0)
+        250.0,
+        1500.0,
+        500.0,
+        250.0,
+        2500.0,
+    )
     assert any(e.source == "latency" and e.meta["total_ms"] == 2500.0 for e in bus.snapshot())
 
 

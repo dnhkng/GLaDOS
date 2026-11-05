@@ -1,4 +1,5 @@
 """Request and stream data owned by one processor turn, never persisted as chat."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

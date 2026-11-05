@@ -117,7 +117,7 @@ class Subagent(ABC):
 
     def on_pause(self, paused: bool) -> None:
         """Optional domain cleanup, such as disabling camera capture."""
-        return None
+        return
 
     def set_paused(self, paused: bool) -> None:
         """Compatibility control; the scheduler owns pause state."""
@@ -128,6 +128,10 @@ class Subagent(ABC):
         if not self.runtime.scheduler:
             raise ValueError("Mind is not registered with a scheduler")
         self.runtime.scheduler.trigger(self.agent_id)
+
+    def publishes_slot(self) -> bool:
+        """Whether updates go to this core's own slot; a core reporting elsewhere returns False."""
+        return True
 
     def write_slot(
         self,
@@ -144,6 +148,8 @@ class Subagent(ABC):
         turn_id: str | None = None,
     ) -> None:
         """Publish domain context; progress and returned updates share this path."""
+        if not self.publishes_slot():
+            return
         self._slot_store.update_slot(
             slot_id=self.agent_id,
             title=self.title,

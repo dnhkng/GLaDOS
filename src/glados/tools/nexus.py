@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-import queue
 from typing import TYPE_CHECKING, Any
+
+from .json_tool import JsonTool
 
 if TYPE_CHECKING:
     from ..autonomy.agents.nexus_agent import NexusAgent
@@ -41,12 +42,22 @@ consult_definition = {
         "parameters": {
             "type": "object",
             "properties": {
-                "need": {"type": "string", "maxLength": 1000,
-                         "description": "Why you need help and what you will do with the answer."},
-                "question": {"type": "string", "minLength": 1, "maxLength": 4000,
-                             "description": "The self-contained question for the advisor."},
-                "context": {"type": "string", "maxLength": 4000,
-                            "description": "Only the conversation details the advisor needs."},
+                "need": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Why you need help and what you will do with the answer.",
+                },
+                "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "description": "The self-contained question for the advisor.",
+                },
+                "context": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Only the conversation details the advisor needs.",
+                },
             },
             "required": ["question"],
             "additionalProperties": False,
@@ -55,35 +66,24 @@ consult_definition = {
 }
 
 
-class _BaseNexusTool:
-    def __init__(self, llm_queue: queue.Queue[dict[str, Any]], tool_config: dict[str, Any] | None = None) -> None:
-        self.queue = llm_queue
-        self.config = tool_config or {}
-
+class _BaseNexusTool(JsonTool):
     def _get_agent(self) -> NexusAgent:
-        core = self.config.get("nexus_agent")
+        core: NexusAgent | None = self.config.get("nexus_agent")
         if core is None:
             raise ValueError("Nexus Core unavailable")
         return core
 
-    def execute(self, args: dict[str, Any]) -> dict:
-        raise NotImplementedError
-
-    def run(self, tool_call_id: str, call_args: dict[str, Any]) -> None:
-        try:
-            result = self.execute(call_args)
-        except (ValueError, TypeError, OSError) as exc:
-            result = {"error": str(exc)}
-        self.queue.put({"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(result)})
-
 
 class NexusControl(_BaseNexusTool):
-    def execute(self, args: dict[str, Any]) -> dict:
+    def execute(self, args: dict[str, Any]) -> dict[str, Any]:
         return self._get_agent().control(str(args.get("action")), args.get("preference"))
 
 
 class NexusConsult(_BaseNexusTool):
     """Synchronous fallback; the tool executor normally runs consultations as background tasks."""
 
-    def execute(self, args: dict[str, Any]) -> dict:
-        return json.loads(self._get_agent().consult(args, cancelled=self.config.get("_cancelled", lambda: False)))
+    def execute(self, args: dict[str, Any]) -> dict[str, Any]:
+        report: dict[str, Any] = json.loads(
+            self._get_agent().consult(args, cancelled=self.config.get("_cancelled", lambda: False))
+        )
+        return report

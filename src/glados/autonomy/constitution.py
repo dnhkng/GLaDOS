@@ -8,10 +8,7 @@ must respect when proposing changes to the main agent's behavior.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
 @dataclass
@@ -27,7 +24,7 @@ class Constitution:
     modifiable_bounds: dict[str, tuple[Any, Any]] = field(default_factory=dict)
 
     @classmethod
-    def default(cls) -> "Constitution":
+    def default(cls) -> Constitution:
         """Create a constitution with GLaDOS-appropriate defaults."""
         return cls(
             immutable_rules=[
@@ -53,7 +50,7 @@ class Constitution:
             },
         )
 
-    def validate_modification(self, field_name: str, value: Any) -> bool:
+    def validate_modification(self, field_name: str, value: object) -> bool:
         """
         Check if a proposed modification is within bounds.
 
@@ -72,7 +69,7 @@ class Constitution:
         try:
             # Handle numeric bounds
             if isinstance(min_val, (int, float)) and isinstance(max_val, (int, float)):
-                return min_val <= float(value) <= max_val
+                return isinstance(value, (int, float, str)) and min_val <= float(value) <= max_val
             # Handle categorical bounds (lists)
             if isinstance(min_val, list):
                 return value in min_val
@@ -128,11 +125,22 @@ class PromptModifier:
         """Convert this modifier to a prompt fragment."""
         # Map field names to prompt instructions
         instructions = {
-            "verbosity": lambda v: f"Be {'concise' if v < 0.3 else 'moderately detailed' if v < 0.7 else 'thorough'} in responses.",
-            "snark_level": lambda v: f"Maintain {'mild' if v < 0.5 else 'moderate' if v < 0.8 else 'high'} levels of GLaDOS-style sarcasm.",
-            "formality": lambda v: f"Use {'casual' if v < 0.3 else 'balanced' if v < 0.6 else 'somewhat formal'} language.",
-            "proactivity": lambda v: f"Be {'reactive only' if v < 0.3 else 'moderately proactive' if v < 0.7 else 'highly proactive'} in offering information.",
-            "technical_depth": lambda v: f"Provide {'simple' if v < 0.3 else 'moderate' if v < 0.7 else 'detailed technical'} explanations.",
+            "verbosity": lambda v: (
+                f"Be {'concise' if v < 0.3 else 'moderately detailed' if v < 0.7 else 'thorough'} in responses."
+            ),
+            "snark_level": lambda v: (
+                f"Maintain {'mild' if v < 0.5 else 'moderate' if v < 0.8 else 'high'} levels of GLaDOS-style sarcasm."
+            ),
+            "formality": lambda v: (
+                f"Use {'casual' if v < 0.3 else 'balanced' if v < 0.6 else 'somewhat formal'} language."
+            ),
+            "proactivity": lambda v: (
+                f"Be {'reactive only' if v < 0.3 else 'moderately proactive' if v < 0.7 else 'highly proactive'} "
+                "in offering information."
+            ),
+            "technical_depth": lambda v: (
+                f"Provide {'simple' if v < 0.3 else 'moderate' if v < 0.7 else 'detailed technical'} explanations."
+            ),
         }
 
         if self.field_name in instructions:
@@ -205,8 +213,7 @@ class ConstitutionalState:
             "immutable_rules": self.constitution.immutable_rules,
             "modifiable_bounds": self.constitution.modifiable_bounds,
             "active_modifiers": {
-                name: {"value": m.value, "reason": m.reason}
-                for name, m in self.active_modifiers.items()
+                name: {"value": m.value, "reason": m.reason} for name, m in self.active_modifiers.items()
             },
             "history_count": len(self.modifier_history),
         }

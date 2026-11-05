@@ -76,8 +76,12 @@ def reply(
     expressions: str | None = None,
 ) -> Mock:
     response = Mock()
-    content = {"scene": scene, "changes": changes, "recent_events": "A cup appeared across recent observations.",
-               "face": face or {"presence": "uncertain", "box": None}}
+    content = {
+        "scene": scene,
+        "changes": changes,
+        "recent_events": "A cup appeared across recent observations.",
+        "face": face or {"presence": "uncertain", "box": None},
+    }
     if expressions is not None:
         content["expressions"] = expressions
     response.json.return_value = {"choices": [{"message": {"content": json.dumps(content)}}]}
@@ -94,11 +98,22 @@ def test_focus_matches_signed_laplacian_and_rejects_blur() -> None:
 
 
 def test_observed_return_is_published_once_and_pause_clears_it(
-    mind: VisionMind, monkeypatch: pytest.MonkeyPatch,
+    mind: VisionMind,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    samples = iter([(0, "present"), (10, "absent"), (30, "absent"), (50, "absent"),
-                    (70, "absent"), (75, "present"), (80, "present")])
+    samples = iter(
+        [
+            (0, "present"),
+            (10, "absent"),
+            (30, "absent"),
+            (50, "absent"),
+            (70, "absent"),
+            (75, "present"),
+            (80, "present"),
+        ]
+    )
     sequence = [0]
+
     def observe() -> object:
         stamp, presence = next(samples)
         response = reply()
@@ -108,6 +123,7 @@ def test_observed_return_is_published_once_and_pause_clears_it(
         monkeypatch.setattr(mind, "_infer", Mock(return_value=response))
         sequence[0] += 1
         return mind._observe(frame(sequence[0], captured_at=stamp), 1, False)
+
     monkeypatch.setattr(mind, "run", lambda runtime: observe())
     for _ in range(5):
         mind.runtime.publish(mind.run(mind.runtime))
@@ -124,7 +140,8 @@ def test_observed_return_is_published_once_and_pause_clears_it(
 
 
 def test_morning_greeting_is_published_once_and_not_recreated_after_pause(
-    mind: VisionMind, monkeypatch: pytest.MonkeyPatch,
+    mind: VisionMind,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from datetime import datetime
 
@@ -147,7 +164,9 @@ def test_morning_greeting_is_published_once_and_not_recreated_after_pause(
 
 
 def test_interval_changes_schedule_and_survives_restart(
-    mind: VisionMind, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    mind: VisionMind,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "vision_settings.json"
     mind._settings_path = path
@@ -186,7 +205,6 @@ def test_vision_snapshots_remain_serializable_after_schedule_failure(mind: Visio
         scheduler.shutdown()
 
 
-
 def test_cpu_motion_ignores_exposure_and_decays_after_movement(monkeypatch: pytest.MonkeyPatch) -> None:
     tracker = MotionTracker()
     now = [100.0]
@@ -201,7 +219,7 @@ def test_cpu_motion_ignores_exposure_and_decays_after_movement(monkeypatch: pyte
         now[0] += 0.1
         moved = np.full_like(image, 120)
         left = 10 if index % 2 else 50
-        moved[10:45, left:left + 30] = 240
+        moved[10:45, left : left + 30] = 240
         tracker.update(moved, now[0])
     assert tracker.snapshot()["activity"] > 0.9
     for _ in range(35):
@@ -243,11 +261,13 @@ def test_http_vision_interval_updates_real_schedule(mind: VisionMind) -> None:
         status, result = post({"interval_min_s": 2, "interval_max_s": 5})
         assert status == 200 and result["interval_min_s"] == 2 and result["interval_max_s"] == 5
         assert mind.settings.interval_s == 3.5
-        for body in ({"interval_min_s": 0, "interval_max_s": 5},
-                     {"interval_min_s": True, "interval_max_s": 5},
-                     {"interval_min_s": 6, "interval_max_s": 5},
-                     {"interval_min_s": 2.5, "interval_max_s": 5},
-                     {"interval_min_s": 2, "interval_max_s": 5, "enabled": False}):
+        for body in (
+            {"interval_min_s": 0, "interval_max_s": 5},
+            {"interval_min_s": True, "interval_max_s": 5},
+            {"interval_min_s": 6, "interval_max_s": 5},
+            {"interval_min_s": 2.5, "interval_max_s": 5},
+            {"interval_min_s": 2, "interval_max_s": 5, "enabled": False},
+        ):
             assert post(body)[0] == 400
         assert post({"interval_min_s": 3, "interval_max_s": 6}, "https://other.test")[0] == 403
         assert mind.settings.interval_min_s == 2 and mind.settings.interval_max_s == 5
@@ -295,7 +315,8 @@ def test_comparisons_advance_only_after_success(mind: VisionMind, monkeypatch: p
 
 
 def test_four_image_window_interleaves_true_timestamps_and_skips_failed_frames(
-    mind: VisionMind, monkeypatch: pytest.MonkeyPatch,
+    mind: VisionMind,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = [100.0]
     monkeypatch.setattr("glados.vision.vision_mind.time.time", lambda: now[0])
@@ -789,7 +810,8 @@ def test_question_failure_does_not_fabricate_an_answer_or_change_overview(
 
 
 def test_inference_blink_cue_starts_at_http_request_and_survives_failure(
-    mind: VisionMind, monkeypatch: pytest.MonkeyPatch,
+    mind: VisionMind,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def infer(*args: object, **kwargs: object) -> Mock:
         tracking = mind.tracking_snapshot()

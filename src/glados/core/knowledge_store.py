@@ -79,7 +79,7 @@ class KnowledgeStore:
             return []
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             logger.warning("KnowledgeStore: failed to read {}: {}", self._path, exc)
             return []
 
@@ -99,7 +99,7 @@ class KnowledgeStore:
                         updated_at=float(item.get("updated_at", 0.0)),
                     )
                 )
-            except Exception:
+            except (KeyError, TypeError, ValueError):
                 logger.warning("Knowledge store: skipping malformed entry {!r}", item)
                 continue
         return entries

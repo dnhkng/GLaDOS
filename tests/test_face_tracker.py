@@ -186,11 +186,17 @@ def test_all_people_are_reported_without_duplicate_haar_detections(tracker: Face
 
 def test_yunet_reports_multiple_people_and_ignores_boxes_outside_frame(monkeypatch: pytest.MonkeyPatch) -> None:
     detector = Mock()
-    detector.detect.return_value = (3, np.array([
-        [20, 40, 60, 90, *([0] * 10), 0.95],
-        [200, 60, 80, 120, *([0] * 10), 0.9],
-        [500, 400, 80, 120, *([0] * 10), 0.9],
-    ], dtype=np.float32))
+    detector.detect.return_value = (
+        3,
+        np.array(
+            [
+                [20, 40, 60, 90, *([0] * 10), 0.95],
+                [200, 60, 80, 120, *([0] * 10), 0.9],
+                [500, 400, 80, 120, *([0] * 10), 0.9],
+            ],
+            dtype=np.float32,
+        ),
+    )
     monkeypatch.setattr(cv2, "FaceDetectorYN", Mock(create=Mock(return_value=detector)))
     result = FaceTracker().locate(FRAME, 100)
     assert result["available"] and result["present"]

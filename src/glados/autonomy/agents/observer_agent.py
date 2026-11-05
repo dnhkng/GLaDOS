@@ -61,11 +61,11 @@ class ObserverAgent(Subagent):
         self,
         config: SubagentConfig,
         llm_config: LLMConfig | None = None,
-        conversation_store: "ConversationStore | None" = None,
+        conversation_store: ConversationStore | None = None,
         constitutional_state: ConstitutionalState | None = None,
         sample_count: int = 10,
         min_samples_for_analysis: int = 5,
-        **kwargs,
+        **kwargs: Any,  # noqa: ANN401 - Subagent collaborators are forwarded unchanged.
     ) -> None:
         """
         Initialize the observer agent.
@@ -112,10 +112,9 @@ class ObserverAgent(Subagent):
 
         # Extract assistant messages for analysis
         assistant_messages = [
-            m for m in messages
-            if m.get("role") == "assistant"
-            and isinstance(m.get("content"), str)
-            and m["content"].strip()
+            m
+            for m in messages
+            if m.get("role") == "assistant" and isinstance(m.get("content"), str) and m["content"].strip()
         ]
 
         if len(assistant_messages) < self._min_samples:
@@ -134,8 +133,8 @@ class ObserverAgent(Subagent):
             )
 
         # Get recent samples
-        samples = assistant_messages[-self._sample_count:]
-        analysis_result = self._analyze_behavior(samples)
+        samples = assistant_messages[-self._sample_count :]
+        analysis_result = self._analyze_behavior(self._llm_config, samples)
 
         if analysis_result is None:
             return SubagentOutput(
@@ -191,7 +190,7 @@ class ObserverAgent(Subagent):
                 raw=analysis_result,
             )
 
-    def _analyze_behavior(self, samples: list[dict[str, Any]]) -> dict[str, Any] | None:
+    def _analyze_behavior(self, llm: LLMConfig, samples: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Use LLM to analyze behavior patterns.
 
@@ -214,7 +213,7 @@ class ObserverAgent(Subagent):
         user_prompt = f"Recent GLaDOS outputs to analyze:\n\n{samples_text}"
 
         response = llm_call(
-            self._llm_config,
+            llm,
             system_prompt,
             user_prompt,
             json_response=True,
@@ -224,7 +223,8 @@ class ObserverAgent(Subagent):
             return None
 
         try:
-            return json.loads(response)
+            analysis = json.loads(response)
+            return analysis if isinstance(analysis, dict) else None
         except json.JSONDecodeError as e:
             logger.warning("ObserverAgent: Failed to parse LLM response: {}", e)
             return None

@@ -1,21 +1,22 @@
 """Queue, catalogue and evidence contracts shared by independently running cores."""
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
+
 import pytest
 
+from glados.autonomy.agents.compaction_agent import CompactionAgent
 from glados.autonomy.context import slot_evidence
 from glados.autonomy.event_bus import EventBus
-from glados.autonomy.slots import TaskSlotStore
-from glados.autonomy.task_manager import TaskManager, TaskResult
-from glados.autonomy.agents.compaction_agent import CompactionAgent
-from glados.autonomy.subagent import SubagentConfig
 from glados.autonomy.llm_client import LLMConfig
+from glados.autonomy.slots import TaskSlotStore
+from glados.autonomy.subagent import SubagentConfig
+from glados.autonomy.task_manager import TaskManager, TaskResult
+from glados.core.conversation_store import ConversationStore
 from glados.core.memory_recall import MemoryRecall, RecallConfig
 from glados.core.memory_records import append_record, revision
-from glados.core.conversation_store import ConversationStore
 
 
 def test_search_fifo_capacity_cancel_and_group_snapshot():
@@ -115,7 +116,9 @@ def test_semantic_recall_all_pages_stable_prefix_and_originals(recall_core, monk
         return '{"ids":["64"]}' if '"id": "64"' in system else '{"ids":[]}'
 
     monkeypatch.setattr("glados.autonomy.agents.compaction_agent.llm_call", infer)
-    result = recall_core._semantic_recall("What should I have for dinner?", "", None, 0)
+    result = recall_core._semantic_recall(
+        recall_core._llm_config, recall_core._recall, "What should I have for dinner?", "", None, 0
+    )
     assert len(calls) == 3
     assert [f["content"] for f in result["facts"]] == ["Steak is my favourite"]
     # The HTTP timeout starts after admission; a conversation hold must not
@@ -123,7 +126,7 @@ def test_semantic_recall_all_pages_stable_prefix_and_originals(recall_core, monk
     assert all(c[0].lane == "autonomy" and c[0].deadline is None and c[0].timeout > 0 for c in calls)
     prefixes = [c[1] for c in calls]
     calls.clear()
-    recall_core._semantic_recall("Something for supper?", "", None, 0)
+    recall_core._semantic_recall(recall_core._llm_config, recall_core._recall, "Something for supper?", "", None, 0)
     assert prefixes == [c[1] for c in calls]
 
 
@@ -141,7 +144,7 @@ def test_audio_topic_and_edits_inflight_do_not_publish_stale_facts(recall_core, 
 
     monkeypatch.setattr("glados.autonomy.agents.compaction_agent.llm_call", infer)
     audio = [{"type": "input_audio", "input_audio": {"data": "transient", "format": "wav"}}]
-    result = recall_core._semantic_recall("", "", audio, 0)
+    result = recall_core._semantic_recall(recall_core._llm_config, recall_core._recall, "", "", audio, 0)
     assert calls[0][1:] == audio and result["query"] == "dinner suggestion"
     assert result["facts"] == []
     assert "transient" not in str(recall_core._memory_store.entries())
@@ -196,8 +199,9 @@ def test_maintenance_tick_preserves_semantic_result(recall_core, monkeypatch):
 
 def test_memory_http_full_record_edit_delete_and_revision_conflict(recall_core):
     import http.client
-    from tests.test_webapp import _FakeEngine
+
     from glados.webapp.server import WebappServer
+    from tests.test_webapp import _FakeEngine
 
     engine = _FakeEngine()
     engine.compaction_agent = recall_core
@@ -230,8 +234,9 @@ def test_memory_http_full_record_edit_delete_and_revision_conflict(recall_core):
 
 
 def test_preview_cannot_replace_versions_of_submitted_review():
-    from tests.test_speech_markup import make_processor
     from glados.autonomy.context import slot_version
+    from tests.test_speech_markup import make_processor
+
     processor = make_processor()
     processor.slot_store = TaskSlotStore()
     slot = processor.slot_store.update_slot("task", "Result", "done", "First", report="Old evidence")

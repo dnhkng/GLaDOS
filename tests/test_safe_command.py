@@ -15,7 +15,7 @@ from glados.core.decision_lists import DecisionListStore
 from glados.core.inference import InferenceScheduler
 from glados.core.llm_processor import LanguageModelProcessor
 from glados.core.native_audio import NativeAudioConfig, NativeAudioInput
-from glados.core.tool_executor import ToolExecutor, _ToolResultQueue
+from glados.core.tool_executor import ToolExecutor, ToolResultQueue
 from glados.tools import tool_definitions
 from glados.tools.safe_command import SafeCommandRunner
 
@@ -27,7 +27,11 @@ def test_new_settings_include_fixed_commands_and_preserve_saved_edits(tmp_path: 
     decision = data["lists"][0]
     commands = [o for o in decision["options"] if o["tool"] == "run_safe_command"]
     assert {o["arguments"]["task"] for o in commands} == {
-        "uptime", "disk_usage", "memory_usage", "system_info", "cpu_load",
+        "uptime",
+        "disk_usage",
+        "memory_usage",
+        "system_info",
+        "cpu_load",
     }
     decision["options"] = [o for o in decision["options"] if o["id"] != "command_uptime"]
     store.mutate({"action": "save", "revision": data["revision"], "list": decision})
@@ -35,10 +39,16 @@ def test_new_settings_include_fixed_commands_and_preserve_saved_edits(tmp_path: 
     assert all(o.id != "command_uptime" for o in reopened.get().options)
 
 
-@pytest.mark.parametrize("args", [
-    {}, {"task": "time; touch /tmp/bad"}, {"task": "bash"}, {"task": []},
-    {"task": "time", "arguments": ["--set", "yesterday"]},
-])
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},
+        {"task": "time; touch /tmp/bad"},
+        {"task": "bash"},
+        {"task": []},
+        {"task": "time", "arguments": ["--set", "yesterday"]},
+    ],
+)
 def test_rejects_custom_commands_before_execution(monkeypatch: pytest.MonkeyPatch, args: dict) -> None:
     run = Mock()
     monkeypatch.setattr("glados.tools.safe_command.subprocess.run", run)
@@ -97,7 +107,7 @@ def test_command_slot_excludes_simultaneous_console_and_assistant_calls(monkeypa
 def test_nonblocking_tool_results_keep_context_and_single_action_guard() -> None:
     target = queue.Queue()
     call = {"function": {"name": "mcp.clock", "arguments": "{}"}}
-    wrapper = _ToolResultQueue(target, call, bound=True)
+    wrapper = ToolResultQueue(target, call, bound=True)
     ToolExecutor._enqueue(wrapper, {"role": "tool", "content": "12:34"})
     result = target.get_nowait()
     assert result["_tool_reply_context"] == call["function"]
@@ -106,26 +116,47 @@ def test_nonblocking_tool_results_keep_context_and_single_action_guard() -> None
 
 @pytest.mark.parametrize("transcripts", [False, True])
 def test_native_audio_routed_time_roundtrip_preserves_interpreted_request(
-    monkeypatch: pytest.MonkeyPatch, transcripts: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    transcripts: bool,
 ) -> None:
     active = threading.Event()
     active.set()
     native = NativeAudioInput(NativeAudioConfig(enabled=True, user_transcripts=transcripts))
     history = ConversationStore([])
     processor = LanguageModelProcessor(
-        queue.Queue(), queue.Queue(), queue.Queue(), history, "http://localhost/v1/chat/completions", "test",
-        None, active, threading.Event(), native_audio=native, inference_scheduler=InferenceScheduler(),
+        queue.Queue(),
+        queue.Queue(),
+        queue.Queue(),
+        history,
+        "http://localhost/v1/chat/completions",
+        "test",
+        None,
+        active,
+        threading.Event(),
+        native_audio=native,
+        inference_scheduler=InferenceScheduler(),
     )
     native.transcribe = Mock(return_value="What time is it in UTC?")
-    route = {"action": "tool", "tool": "get_time", "arguments": {"timezone": "UTC"},
-             "list_id": "speech", "revision": 1, "option_id": "time"}
+    route = {
+        "action": "tool",
+        "tool": "get_time",
+        "arguments": {"timezone": "UTC"},
+        "list_id": "speech",
+        "revision": 1,
+        "option_id": "time",
+    }
     store = Mock()
     store.snapshot.return_value = {"speculative": False}
     store.authorize.return_value = True
     processor.router = Mock(store=store)
     processor.router.score.return_value = route
-    processor.llm_input_queue.put({"role": "user", "content": "[User spoke via audio; transcript disabled.]",
-                                   "_native_audio": [{"type": "input_audio", "data": "private-audio"}]})
+    processor.llm_input_queue.put(
+        {
+            "role": "user",
+            "content": "[User spoke via audio; transcript disabled.]",
+            "_native_audio": [{"type": "input_audio", "data": "private-audio"}],
+        }
+    )
     captured = []
 
     def post(*args: object, **kwargs: object) -> MagicMock:
@@ -139,8 +170,14 @@ def test_native_audio_routed_time_roundtrip_preserves_interpreted_request(
         return response
 
     monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
-    executor = ToolExecutor(processor.llm_input_queue, queue.Queue(), processor.tool_calls_queue,
-                            processor.processing_active_event, processor.shutdown_event, decision_store=store)
+    executor = ToolExecutor(
+        processor.llm_input_queue,
+        queue.Queue(),
+        processor.tool_calls_queue,
+        processor.processing_active_event,
+        processor.shutdown_event,
+        decision_store=store,
+    )
     threads = [threading.Thread(target=processor.run), threading.Thread(target=executor.run)]
     for thread in threads:
         thread.start()

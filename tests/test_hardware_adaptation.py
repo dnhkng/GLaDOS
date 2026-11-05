@@ -22,7 +22,7 @@ def test_detect_ram_returns_valid_values() -> None:
 
 
 def test_detect_gpu_runs_without_crashing() -> None:
-    gpu_type, gpu_name, vram_total, vram_free, unified = detect_gpu()
+    gpu_type, gpu_name, vram_total, _vram_free, unified = detect_gpu()
     assert isinstance(gpu_type, str)
     assert isinstance(gpu_name, str)
     assert vram_total is None or vram_total >= 0

@@ -22,9 +22,11 @@ Endpoints
      GET  /api/agents            registered subagent statuses
      POST /api/command           run an engine command ({"command": "/agents"})
 """
+
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable, Collection
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -35,12 +37,13 @@ import struct
 import sys
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 from loguru import logger
 import numpy as np
 
+from ..audio_io.remote_io import RemoteSwitchAudioIO
 from ..tools.manage_slot import save_task
 from . import auth
 from .config import AUTO_HOST, console_hosts, local_addresses
@@ -59,24 +62,22 @@ from .serializers import (
     serialize_slot_full,
 )
 
+if TYPE_CHECKING:
+    from ..autonomy.mind_scheduler import MindScheduler
+    from ..autonomy.slots import TaskSlot, TaskSlotStore
+    from ..core.engine import Glados
+    from ..observability.minds import MindStatus
+    from ..vision.vision_mind import VisionMind
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-_LOCKED_PAGE = """<!doctype html><html lang="fr"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>GLaDOS · appareil non appairé</title>
-<body style="font:16px system-ui,sans-serif;background:#14161a;color:#e6e6e6;max-width:36em;margin:3em auto;padding:0 1em">
-<h1 style="color:#ffa020">Appareil non appairé</h1>
-<p>Cet appareil n'est pas encore autorisé à utiliser la console GLaDOS.</p>
-<p>Sur le PC, lancez <code>glados pair</code> (ou regardez la ligne « Pair a device » dans le terminal de GLaDOS),
-puis ouvrez ce lien sur cet appareil. Ce n'est à faire qu'une fois.</p>
-<p><a style="color:#40a0ff" href="/glados-ca.crt">Télécharger le certificat GLaDOS</a> pour supprimer l'alerte de sécurité.</p>
-<hr style="border-color:#333"><p lang="en" style="color:#999">This device is not paired. Run <code>glados pair</code> on the PC
-and open the link it prints on this device.</p></body></html>
-"""
+# Served instead of the console to a device that has not been paired yet.
+_LOCKED_PAGE = (STATIC_DIR / "locked.html").read_text(encoding="utf-8")
 
 
-def _serialize_or(serializer: Any, item: Any) -> dict[str, Any]:
+def _serialize_or[T](serializer: Callable[[T], dict[str, Any]], item: T) -> dict[str, Any]:
     try:
         return serializer(item)
-    except Exception:  # pragma: no cover
+    except Exception:  # noqa: BLE001 - the console shows what it can
         logger.opt(exception=True).debug("webapp: {} failed", getattr(serializer, "__name__", serializer))
         return {}
 
@@ -98,19 +99,21 @@ def _content_type(name: str) -> str:
     }.get(Path(name).suffix.lower(), "application/octet-stream")
 
 
-def _find_mind(engine: Any, mind_id: str) -> Any | None:
+def _find_mind(engine: Glados, mind_id: str) -> MindStatus | None:
     for mind in engine.mind_registry.snapshot():
         if mind.mind_id == mind_id:
             return mind
     return None
 
 
-def _find_store(engine: Any) -> Any | None:
-    return getattr(engine, "autonomy_slots", None)
+def _find_store(engine: Glados) -> TaskSlotStore | None:
+    store: TaskSlotStore | None = getattr(engine, "autonomy_slots", None)
+    return store
 
 
-def _agent_manager(engine: Any) -> Any | None:
-    return getattr(engine, "subagent_manager", None)
+def _agent_manager(engine: Glados) -> MindScheduler | None:
+    manager: MindScheduler | None = getattr(engine, "subagent_manager", None)
+    return manager
 
 
 class _EngineHTTPServer(ThreadingHTTPServer):
@@ -118,9 +121,17 @@ class _EngineHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], engine: Any, allowed_hosts: list[str],
-                 tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True,
-                 sessions: auth.SessionStore | None = None, authority: Path | None = None):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        engine: Glados,
+        allowed_hosts: list[str],
+        tls: ssl.SSLContext | None = None,
+        token: str | None = None,
+        trust_loopback: bool = True,
+        sessions: auth.SessionStore | None = None,
+        authority: Path | None = None,
+    ) -> None:
         self.engine = engine
         self.authority = authority
         self.token = token
@@ -135,17 +146,20 @@ class _EngineHTTPServer(ThreadingHTTPServer):
             # The handshake runs in each handler thread, so one slow client cannot stall accept().
             self.socket = tls.wrap_socket(self.socket, server_side=True, do_handshake_on_connect=False)
 
-    def shared(self, name: str, max_age_s: float, build: Any) -> Any:
+    def shared[T](self, name: str, max_age_s: float, build: Callable[[Glados], T]) -> T:
         """Build a stream payload once for every connected tab instead of once per tab."""
         with self._shared_lock:
             built_at, payload = self._shared.get(name, (0.0, None))
             if time.monotonic() - built_at >= max_age_s:
                 payload = build(self.engine)
                 self._shared[name] = (time.monotonic(), payload)
-            return payload
+            return cast("T", payload)  # each name is only ever built by the same function
 
-    def handle_error(self, request: socket.socket | tuple[bytes, socket.socket], client_address: tuple[str, int],
-                     ) -> None:
+    def handle_error(
+        self,
+        request: socket.socket | tuple[bytes, socket.socket],
+        client_address: tuple[str, int],
+    ) -> None:
         if isinstance(request, ssl.SSLSocket):
             logger.debug("webapp: TLS connection from {} failed", client_address)
             return
@@ -155,7 +169,58 @@ class _EngineHTTPServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def _host_ok(host: str, allowed: list[str]) -> bool:
+# Files served from the console root as well as under /static/, so index.html also works opened locally.
+_STATIC_FILES = frozenset(
+    {
+        "/glados-rig.js",
+        "/glados-avatar.js",
+        "/glados-avatar.css",
+        "/glados-vision.js",
+        "/glados-routing.js",
+        "/glados-context.js",
+        "/glados-devices.js",
+        "/glados-memory.js",
+        "/glados-themes.js",
+        "/glados-overview.js",
+        "/glados-vision-themes.js",
+        "/glados-favicon.js",
+        "/glados-dom.js",
+        "/glados-remote-audio.js",
+        "/glados-i18n.js",
+        "/manifest.webmanifest",
+        "/glados-icon-192.png",
+        "/glados-icon-512.png",
+        "/glados-themes.css",
+        "/glados-console.css",
+        "/potato-skin.svg",
+        "/potato-skin.png",
+    }
+)
+# POST bodies are small JSON, except a decision test that may carry recorded speech.
+_BODY_LIMITS = {"/api/decisions/test": 2_000_000}
+
+
+def _decode_test_audio(encoded: str) -> list[dict[str, Any]]:
+    """A base64 mono 16 kHz WAV clip (at most 30 s) as the router's native-audio payload."""
+    import io
+
+    import soundfile as sf
+
+    from ..core.native_audio import NativeAudioConfig, NativeAudioInput
+
+    raw = base64.b64decode(encoded, validate=True)
+    with sf.SoundFile(io.BytesIO(raw)) as wave:
+        if wave.samplerate != 16000 or wave.channels != 1 or wave.frames > 30 * 16000:
+            raise ValueError("Use mono 16 kHz WAV audio, at most 30 seconds")
+        samples = wave.read(dtype="float32")
+    message = NativeAudioInput(NativeAudioConfig()).message([samples])
+    if not message:
+        raise ValueError("Audio contains no signal")
+    parts: list[dict[str, Any]] = message["_native_audio"]
+    return parts
+
+
+def _host_ok(host: str, allowed: Collection[str]) -> bool:
     """Whether a Host header names this console (DNS-rebinding guard, also used for redirects)."""
     if not host or any(char.isspace() for char in host):
         return False
@@ -178,6 +243,8 @@ def _host_ok(host: str, allowed: list[str]) -> bool:
 class _Handler(BaseHTTPRequestHandler):
     """Stateless handler; reads the engine reference from ``self.server.engine``."""
 
+    server: _EngineHTTPServer
+
     protocol_version = "HTTP/1.1"
 
     def setup(self) -> None:
@@ -198,12 +265,22 @@ class _Handler(BaseHTTPRequestHandler):
         if raw.recv(self.request, 1, socket.MSG_PEEK) in (b"", b"\x16"):
             return
         head = raw.recv(self.request, 8192)
-        host = next((line.split(":", 1)[1].strip() for line in head.decode("latin-1").split("\r\n")[1:]
-                     if line.lower().startswith("host:")), "")
+        host = next(
+            (
+                line.split(":", 1)[1].strip()
+                for line in head.decode("latin-1").split("\r\n")[1:]
+                if line.lower().startswith("host:")
+            ),
+            "",
+        )
         if _host_ok(host, self.server.allowed_hosts):
             target = f"https://{host}/".encode()
-            raw.sendall(self.request, b"HTTP/1.1 301 Moved Permanently\r\nLocation: " + target
-                        + b"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            raw.sendall(
+                self.request,
+                b"HTTP/1.1 301 Moved Permanently\r\nLocation: "
+                + target
+                + b"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
         else:
             raw.sendall(self.request, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         raise ConnectionAbortedError("plain HTTP on the TLS port")
@@ -246,13 +323,14 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _pair(self, candidate: str) -> None:
+    def _pair(self, token: str, candidate: str) -> None:
         """Exchange a pairing-link token for a session cookie, then drop it from the URL."""
-        if not auth.matches(self.server.token, candidate):
+        if not auth.matches(token, candidate):
             self.close_connection = True
             return self._text(403, "Invalid pairing link.")
-        session = self.server.sessions.create(auth.device_label(self.headers.get("User-Agent", "")),
-                                              self.client_address[0])
+        session = self.server.sessions.create(
+            auth.device_label(self.headers.get("User-Agent", "")), self.client_address[0]
+        )
         self.send_response(303)
         self.send_header("Set-Cookie", auth.session_cookie(session, self.server.secure))
         self.send_header("Location", self._path())
@@ -272,7 +350,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _json(self, code: int, payload: Any) -> None:
+    def _json(self, code: int, payload: object) -> None:
         body = dumps(payload).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -302,7 +380,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt: str, *args: Any) -> None:
+    def log_message(self, fmt: str, *args: object) -> None:
         logger.debug("[webapp] {} {}", self.address_string(), fmt % args)
 
     # --------------------------------------------------------------- do_GET
@@ -315,59 +393,31 @@ class _Handler(BaseHTTPRequestHandler):
             # Public by nature, and needed before a phone can trust the console at all.
             return self._authority()
         if self.server.token is not None and "token" in self._query():
-            return self._pair(self._query()["token"])
+            return self._pair(self.server.token, self._query()["token"])
         if not self._authorized():
             return self._refuse_unpaired()
         if path in ("/", "/index.html"):
             return self._file("index.html")
-        # Sibling URLs keep index.html usable as a local-file demo too.
-        if path in (
-            "/glados-rig.js", "/glados-avatar.js", "/glados-avatar.css", "/glados-vision.js",
-            "/glados-routing.js", "/glados-context.js", "/glados-devices.js", "/glados-memory.js",
-            "/glados-themes.js", "/glados-overview.js", "/glados-vision-themes.js", "/glados-favicon.js",
-            "/glados-dom.js", "/glados-remote-audio.js", "/glados-i18n.js",
-            "/manifest.webmanifest", "/glados-icon-192.png", "/glados-icon-512.png",
-            "/glados-themes.css", "/glados-console.css", "/potato-skin.svg", "/potato-skin.png",
-        ):
+        if path in _STATIC_FILES:
             return self._file(path[1:])
         if path.startswith("/static/"):
-            return self._file(path[len("/static/"):])
-        if path == "/api/audio/remote":
-            return self._remote_audio()
-        if path == "/api/pairing":
-            return self._json(200, {"enabled": self.server.token is not None, "current": self._device(),
-                                    "authority": self.server.authority is not None,
-                                    "devices": self.server.sessions.devices()})
-        if path in ("/api/vision/frame", "/api/vision/live"):
-            origin = self.headers.get("Origin")
-            if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get(
-                "Sec-Fetch-Site"
-            ) == "cross-site":
-                return self._json(403, {"error": "Cross-origin camera access is not allowed"})
-            agent = getattr(self.server.engine, "vision_agent", None)
-            if path == "/api/vision/live":
-                return self._camera_stream(agent)
-            frame = agent.preview() if agent else None
-            if frame is None:
-                return self._json(404, {"error": "No camera observation available"})
-            self.send_response(200)
-            self.send_header("Content-Type", "image/jpeg")
-            self.send_header("Content-Length", str(len(frame)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
-            self.end_headers()
-            self.wfile.write(frame)
-            return
+            return self._file(path[len("/static/") :])
         if path.startswith("/api/"):
             try:
                 return self._route_api(path)
-            except (BrokenPipeError, ConnectionResetError):  # pragma: no cover
-                return
-            except OSError:  # pragma: no cover
+            except OSError:  # pragma: no cover - the client went away mid-response
                 return
         return self._text(404, "Not found")
 
-    def _camera_stream(self, agent: Any) -> None:
+    def _cross_site_read(self) -> bool:
+        """Whether another site is reading data that only this console's pages should see."""
+        origin = self.headers.get("Origin")
+        return (
+            bool(origin and urlparse(origin).netloc != self.headers.get("Host"))
+            or self.headers.get("Sec-Fetch-Site") == "cross-site"
+        )
+
+    def _camera_stream(self, agent: VisionMind | None) -> None:
         """Stream CPU-tracked webcam frames independently of E4B captions."""
         overlay = self._query().get("overlay", "1") != "0"
         if agent is None or agent.live_preview(overlay=overlay) is None:
@@ -390,7 +440,9 @@ class _Handler(BaseHTTPRequestHandler):
                     self.wfile.write(
                         b"--glados-frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
                         + str(len(jpeg)).encode()
-                        + b"\r\n\r\n" + jpeg + b"\r\n"
+                        + b"\r\n\r\n"
+                        + jpeg
+                        + b"\r\n"
                     )
                     self.wfile.flush()
                     sequence = revision
@@ -407,12 +459,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._refuse_unpaired()
         if self._path() == "/api/command":
             return self._command()
-        if self._path() in {
-            "/api/control", "/api/instructions", "/api/input", "/api/slots", "/api/minds/control",
-            "/api/tools/command", "/api/decisions", "/api/decisions/test",
-            "/api/devices", "/api/vision/settings", "/api/search/settings", "/api/memory/edit", "/api/tasks/cancel",
-            "/api/nexus/settings", "/api/pairing",
-        }:
+        if self._path() in self._OPERATIONS:
             return self._operate()
         self._json(404, {"error": "not found"})
 
@@ -423,231 +470,290 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(403, {"error": "Cross-origin changes are not allowed"})
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             return self._json(415, {"error": "Expected application/json"})
-        engine = self.server.engine
+        path = self._path()
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            limit = 2_000_000 if self._path() == "/api/decisions/test" else 65536
-            if not 0 < length <= limit:
+            if not 0 < length <= _BODY_LIMITS.get(path, 65536):
                 self.close_connection = True
                 return self._json(400, {"error": "Invalid request size"})
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict):
-                raise ValueError("Expected a JSON object")
-            path = self._path()
-            if path == "/api/pairing":
-                if body.get("action") == "revoke" and isinstance(body.get("id"), str):
-                    revoked = self.server.sessions.revoke(body["id"])
-                elif body.get("action") == "revoke_all":
-                    revoked = self.server.sessions.revoke()
-                else:
-                    raise ValueError("Use action revoke (with id) or revoke_all")
-                return self._json(200, {"revoked": revoked, "devices": self.server.sessions.devices()})
-            if path == "/api/search/settings":
-                agent = getattr(engine, "search_agent", None)
-                if agent is None:
-                    return self._json(404, {"error": "Search Core is unavailable in this profile"})
-                return self._json(200, agent.preferences.update(body))
-            if path == "/api/nexus/settings":
-                agent = getattr(engine, "nexus_agent", None)
-                if agent is None:
-                    return self._json(404, {"error": "Nexus Core is unavailable in this profile"})
-                return self._json(200, agent.update_settings(body))
-            if path == "/api/memory/edit":
-                core = getattr(engine, "compaction_agent", None)
-                if core is None:
-                    raise ValueError("Memory Core unavailable")
-                if not isinstance(body.get("id"), str):
-                    raise ValueError("Memory ID required")
-                return self._json(200, core.mutate_memory(body["id"], body.get("action"),
-                    body.get("revision"), body.get("content")))
-            if path == "/api/tasks/cancel":
-                manager = getattr(engine, "autonomy_tasks", None)
-                if manager is None or not isinstance(body.get("slot_id"), str):
-                    raise ValueError("Task manager or task ID unavailable")
-                return self._json(200, {"cancellation_requested": manager.cancel(body["slot_id"])})
-            if path == "/api/vision/settings":
-                if set(body) != {"interval_min_s", "interval_max_s"}:
-                    raise ValueError("Provide interval_min_s and interval_max_s only")
-                agent = getattr(engine, "vision_agent", None)
-                if agent is None:
-                    return self._json(404, {"error": "Vision Core is unavailable in this profile"})
-                agent.set_interval_range(body["interval_min_s"], body["interval_max_s"])
-                return self._json(200, agent.snapshot())
-            if path == "/api/decisions":
-                return self._json(200, engine.decision_lists.mutate(body))
-            if path == "/api/decisions/test":
-                decision = engine.decision_lists.get(body.get("list_id"))
-                if decision is None:
-                    return self._json(404, {"error": "Decision list not found"})
-                text = body.get("text", "")
-                if not isinstance(text, str) or len(text) > 8000:
-                    raise ValueError("Text must be at most 8000 characters")
-                audio = None
-                if body.get("audio"):
-                    import base64
-                    import io
-
-                    import soundfile as sf
-
-                    from ..core.native_audio import NativeAudioConfig, NativeAudioInput
-                    raw = base64.b64decode(body["audio"], validate=True)
-                    with sf.SoundFile(io.BytesIO(raw)) as wave:
-                        if wave.samplerate != 16000 or wave.channels != 1 or wave.frames > 30 * 16000:
-                            raise ValueError("Use mono 16 kHz WAV audio, at most 30 seconds")
-                        samples = wave.read(dtype="float32")
-                    message = NativeAudioInput(NativeAudioConfig()).message([samples])
-                    if not message:
-                        raise ValueError("Audio contains no signal")
-                    audio = message["_native_audio"]
-                if not text.strip() and not audio:
-                    raise ValueError("Enter text or record speech to test")
-                return self._json(
-                    200, engine.router.score(decision, text, audio, dry_run=True, spoken=body.get("spoken") is True)
-                )
-            if path == "/api/tools/command":
-                runner = getattr(engine, "command_runner", None)
-                if runner is None:
-                    return self._json(503, {"error": "Command slot unavailable"})
-                return self._json(200, runner.run(body, source="console"))
-            if path == "/api/devices":
-                select_device(engine, body.get("kind"), body.get("device"))
-                return self._json(200, device_snapshot(engine))
-            if path == "/api/minds/control":
-                if getattr(engine, "quiet_event", None) and engine.quiet_event.is_set():
-                    return self._json(409, {"error": "Wake GLaDOS before running or changing background cores."})
-                manager = _agent_manager(engine)
-                agent_id, action = body.get("agent_id"), body.get("action")
-                if not isinstance(agent_id, str):
-                    raise ValueError("agent_id must be text")
-                agent = manager.get(agent_id) if manager else None
-                if agent is None:
-                    return self._json(404, {"error": "Background core not found"})
-                if action in {"pause", "resume"}:
-                    manager.pause(agent_id, action == "pause")
-                elif action == "run":
-                    manager.trigger(agent_id)
-                else:
-                    raise ValueError("Unknown core action")
-                engine.observability_bus.emit("subagent", "control", f"{agent_id}: {action}")
-                return self._json(200, {"accepted": True, "paused": agent.paused})
-            if path == "/api/control":
-                action, enabled = body.get("action"), body.get("enabled")
-                if not isinstance(enabled, bool):
-                    raise ValueError("enabled must be a boolean")
-                if action == "microphone":
-                    engine.set_asr_muted(not enabled)
-                elif action == "voice":
-                    engine.set_tts_muted(not enabled)
-                elif action == "quiet":
-                    engine.set_quiet_mode(enabled)
-                elif action == "autonomy":
-                    engine.set_autonomy_enabled(enabled)
-                elif action == "transcripts" and getattr(engine, "native_audio", None):
-                    engine.native_audio.config.user_transcripts = enabled
-                else:
-                    raise ValueError("Control unavailable")
-                return self._json(200, build_state(engine))
-            if path == "/api/instructions":
-                engine.operator_state.set_instructions(body.get("instructions"))
-                engine.observability_bus.emit("operator", "instructions", "Session instructions updated")
-                return self._json(200, engine.operator_state.snapshot())
-            if path == "/api/input":
-                message = body.get("text")
-                if not isinstance(message, str) or not message.strip() or len(message) > 8000:
-                    raise ValueError("Enter a message of 1-8000 characters")
-                if engine.shutdown_event.is_set() or not engine.submit_text_input(message, source="webapp"):
-                    return self._json(409, {"error": "Engine is not accepting input"})
-                return self._json(202, {"accepted": True})
-            store = _find_store(engine)
-            if store is None:
-                return self._json(409, {"error": "Task board unavailable"})
-            slot = save_task(store, body)
-            return self._json(200, serialize_slot_full(slot))
+                raise TypeError("Expected a JSON object")
+            return self._OPERATIONS[path](self, self.server.engine, body)
         except (ValueError, TypeError) as exc:
             return self._json(400, {"error": str(exc)})
         except Exception:
             logger.exception("Console operation failed")
             return self._json(500, {"error": "The engine could not complete the operation"})
 
+    # ----------------------------------------------------------- operations
+    # POST handlers: each gets the live engine and the decoded JSON object, and a
+    # ValueError or TypeError it raises becomes a 400 with its message.
+    def _op_pairing(self, engine: Glados, body: dict[str, Any]) -> None:
+        if body.get("action") == "revoke" and isinstance(body.get("id"), str):
+            revoked = self.server.sessions.revoke(body["id"])
+        elif body.get("action") == "revoke_all":
+            revoked = self.server.sessions.revoke()
+        else:
+            raise ValueError("Use action revoke (with id) or revoke_all")
+        self._json(200, {"revoked": revoked, "devices": self.server.sessions.devices()})
+
+    def _op_search_settings(self, engine: Glados, body: dict[str, Any]) -> None:
+        agent = getattr(engine, "search_agent", None)
+        if agent is None:
+            return self._json(404, {"error": "Search Core is unavailable in this profile"})
+        self._json(200, agent.preferences.update(body))
+
+    def _op_nexus_settings(self, engine: Glados, body: dict[str, Any]) -> None:
+        agent = getattr(engine, "nexus_agent", None)
+        if agent is None:
+            return self._json(404, {"error": "Nexus Core is unavailable in this profile"})
+        self._json(200, agent.update_settings(body))
+
+    def _op_memory_edit(self, engine: Glados, body: dict[str, Any]) -> None:
+        core = getattr(engine, "compaction_agent", None)
+        if core is None:
+            raise ValueError("Memory Core unavailable")
+        if not isinstance(body.get("id"), str):
+            raise TypeError("Memory ID required")
+        self._json(200, core.mutate_memory(body["id"], body.get("action"), body.get("revision"), body.get("content")))
+
+    def _op_cancel_task(self, engine: Glados, body: dict[str, Any]) -> None:
+        manager = getattr(engine, "autonomy_tasks", None)
+        if manager is None or not isinstance(body.get("slot_id"), str):
+            raise ValueError("Task manager or task ID unavailable")
+        self._json(200, {"cancellation_requested": manager.cancel(body["slot_id"])})
+
+    def _op_vision_settings(self, engine: Glados, body: dict[str, Any]) -> None:
+        if set(body) != {"interval_min_s", "interval_max_s"}:
+            raise ValueError("Provide interval_min_s and interval_max_s only")
+        agent = getattr(engine, "vision_agent", None)
+        if agent is None:
+            return self._json(404, {"error": "Vision Core is unavailable in this profile"})
+        agent.set_interval_range(body["interval_min_s"], body["interval_max_s"])
+        self._json(200, agent.snapshot())
+
+    def _op_decisions(self, engine: Glados, body: dict[str, Any]) -> None:
+        self._json(200, engine.decision_lists.mutate(body))
+
+    def _op_test_decision(self, engine: Glados, body: dict[str, Any]) -> None:
+        decision = engine.decision_lists.get(body.get("list_id"))
+        if decision is None:
+            return self._json(404, {"error": "Decision list not found"})
+        text = body.get("text", "")
+        if not isinstance(text, str) or len(text) > 8000:
+            raise ValueError("Text must be at most 8000 characters")
+        audio = _decode_test_audio(body["audio"]) if body.get("audio") else None
+        if not text.strip() and not audio:
+            raise ValueError("Enter text or record speech to test")
+        self._json(200, engine.router.score(decision, text, audio, dry_run=True, spoken=body.get("spoken") is True))
+
+    def _op_tool_command(self, engine: Glados, body: dict[str, Any]) -> None:
+        runner = getattr(engine, "command_runner", None)
+        if runner is None:
+            return self._json(503, {"error": "Command slot unavailable"})
+        self._json(200, runner.run(body, source="console"))
+
+    def _op_devices(self, engine: Glados, body: dict[str, Any]) -> None:
+        select_device(engine, str(body.get("kind") or ""), body.get("device"))
+        self._json(200, device_snapshot(engine))
+
+    def _op_mind_control(self, engine: Glados, body: dict[str, Any]) -> None:
+        if getattr(engine, "quiet_event", None) and engine.quiet_event.is_set():
+            return self._json(409, {"error": "Wake GLaDOS before running or changing background cores."})
+        manager = _agent_manager(engine)
+        agent_id, action = body.get("agent_id"), body.get("action")
+        if not isinstance(agent_id, str):
+            raise TypeError("agent_id must be text")
+        agent = manager.get(agent_id) if manager else None
+        if manager is None or agent is None:
+            return self._json(404, {"error": "Background core not found"})
+        if action in {"pause", "resume"}:
+            manager.pause(agent_id, action == "pause")
+        elif action == "run":
+            manager.trigger(agent_id)
+        else:
+            raise ValueError("Unknown core action")
+        engine.observability_bus.emit("subagent", "control", f"{agent_id}: {action}")
+        self._json(200, {"accepted": True, "paused": agent.paused})
+
+    def _op_control(self, engine: Glados, body: dict[str, Any]) -> None:
+        action, enabled = body.get("action"), body.get("enabled")
+        if not isinstance(enabled, bool):
+            raise TypeError("enabled must be a boolean")
+        if action == "microphone":
+            engine.set_asr_muted(not enabled)
+        elif action == "voice":
+            engine.set_tts_muted(not enabled)
+        elif action == "quiet":
+            engine.set_quiet_mode(enabled)
+        elif action == "autonomy":
+            engine.set_autonomy_enabled(enabled)
+        elif action == "transcripts" and (native := getattr(engine, "native_audio", None)):
+            native.config.user_transcripts = enabled
+        else:
+            raise ValueError("Control unavailable")
+        self._json(200, build_state(engine))
+
+    def _op_instructions(self, engine: Glados, body: dict[str, Any]) -> None:
+        instructions = body.get("instructions")
+        if not isinstance(instructions, str):
+            raise TypeError("Instructions must be text")
+        engine.operator_state.set_instructions(instructions)
+        engine.observability_bus.emit("operator", "instructions", "Session instructions updated")
+        self._json(200, engine.operator_state.snapshot())
+
+    def _op_input(self, engine: Glados, body: dict[str, Any]) -> None:
+        message = body.get("text")
+        if not isinstance(message, str) or not message.strip() or len(message) > 8000:
+            raise ValueError("Enter a message of 1-8000 characters")
+        if engine.shutdown_event.is_set() or not engine.submit_text_input(message, source="webapp"):
+            return self._json(409, {"error": "Engine is not accepting input"})
+        self._json(202, {"accepted": True})
+
+    def _op_save_task(self, engine: Glados, body: dict[str, Any]) -> None:
+        store = _find_store(engine)
+        if store is None:
+            return self._json(409, {"error": "Task board unavailable"})
+        self._json(200, serialize_slot_full(save_task(store, body)))
+
+    _OPERATIONS: ClassVar[dict[str, Callable[[_Handler, Any, dict[str, Any]], None]]] = {
+        "/api/pairing": _op_pairing,
+        "/api/search/settings": _op_search_settings,
+        "/api/nexus/settings": _op_nexus_settings,
+        "/api/memory/edit": _op_memory_edit,
+        "/api/tasks/cancel": _op_cancel_task,
+        "/api/vision/settings": _op_vision_settings,
+        "/api/decisions": _op_decisions,
+        "/api/decisions/test": _op_test_decision,
+        "/api/tools/command": _op_tool_command,
+        "/api/devices": _op_devices,
+        "/api/minds/control": _op_mind_control,
+        "/api/control": _op_control,
+        "/api/instructions": _op_instructions,
+        "/api/input": _op_input,
+        "/api/slots": _op_save_task,
+    }
+
     # -------------------------------------------------------------- routing
     def _route_api(self, path: str) -> None:
         engine = self.server.engine
-        if path == "/api/devices":
-            return self._json(200, device_snapshot(engine))
-        if path == "/api/context":
-            origin = self.headers.get("Origin")
-            if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get(
-                "Sec-Fetch-Site"
-            ) == "cross-site":
-                return self._json(403, {"error": "Cross-origin context access is not allowed"})
-            query = self._query()
-            try:
-                return self._json(200, build_context(engine, query.get("mode", "user"), query.get("view", "live")))
-            except ValueError as exc:
-                return self._json(400, {"error": str(exc)})
-        if path == "/api/memory":
-            origin = self.headers.get("Origin")
-            if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get(
-                "Sec-Fetch-Site"
-            ) == "cross-site":
-                return self._json(403, {"error": "Cross-origin memory access is not allowed"})
-            core = getattr(engine, "compaction_agent", None)
-            if core is None:
-                return self._json(200, {"available": False, "reason": "Memory Core is disabled", "memories": []})
-            query = self._query()
-            try:
-                if "id" in query:
-                    return self._json(200, core.memory_entry(query["id"]))
-                return self._json(200, core.memory_snapshot(query.get("query", "")[:280], query.get("kind", "all"),
-                                                           int(query.get("offset", "0")), int(query.get("limit", "30"))))
-            except ValueError as exc:
-                return self._json(400, {"error": str(exc)})
-        if path == "/api/stream":
-            return self._stream(engine)
-        if path == "/api/decisions":
-            return self._json(200, engine.decision_lists.snapshot())
-        if path == "/api/snapshot":
-            return self._json(200, build_snapshot(engine))
-        if path == "/api/state":
-            return self._json(200, build_state(engine))
-        if path == "/api/minds":
-            minds = [_serialize_or(serialize_mind, m) for m in engine.mind_registry.snapshot()]
-            return self._json(200, {"minds": minds})
-        if path == "/api/agents":
-            return self._json(200, {"agents": self._agent_list(engine)})
-        if path == "/api/slots":
-            slots = [_serialize_or(serialize_slot, s) for s in self._slots(engine)]
-            return self._json(200, {"slots": slots})
-
+        query = self._QUERIES.get(path)
+        if query is not None:
+            return query(self, engine)
         mind_rest = _sub_path(path, "/api/minds/")
         if mind_rest is not None:
-            parts = mind_rest.split("/", 1)
-            mind_id = unquote(parts[0])
-            sub = parts[1] if len(parts) > 1 else ""
-            if sub == "memory":
-                entries = self._memory(engine, mind_id)
-                if entries is None:
-                    return self._json(404, {"error": "No memory for that core"})
-                return self._json(200, {"agent_id": mind_id, "memory": entries})
-            if sub:
-                return self._json(404, {"error": "Unknown sub-path"})
-            mind = _find_mind(engine, mind_id)
-            if mind is None:
-                return self._json(404, {"error": "core not found"})
-            return self._json(200, serialize_mind(mind))
-
+            return self._get_mind(engine, mind_rest)
         slot_id = _sub_path(path, "/api/slots/")
         if slot_id is not None:
-            store = _find_store(engine)
-            slot = store.get_slot(unquote(slot_id)) if store is not None else None
-            if slot is None:
-                return self._json(404, {"error": "slot not found"})
-            return self._json(200, serialize_slot_full(slot))
-
+            return self._get_slot(engine, unquote(slot_id))
         self._json(404, {"error": "not found"})
 
+    # GET handlers: each gets the live engine and answers the request itself.
+    def _get_pairing(self, engine: Glados) -> None:
+        self._json(
+            200,
+            {
+                "enabled": self.server.token is not None,
+                "current": self._device(),
+                "authority": self.server.authority is not None,
+                "devices": self.server.sessions.devices(),
+            },
+        )
+
+    def _get_vision(self, engine: Glados) -> None:
+        if self._cross_site_read():
+            return self._json(403, {"error": "Cross-origin camera access is not allowed"})
+        agent = getattr(engine, "vision_agent", None)
+        if self._path() == "/api/vision/live":
+            return self._camera_stream(agent)
+        frame = agent.preview() if agent else None
+        if frame is None:
+            return self._json(404, {"error": "No camera observation available"})
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(frame)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.end_headers()
+        self.wfile.write(frame)
+
+    def _get_context(self, engine: Glados) -> None:
+        if self._cross_site_read():
+            return self._json(403, {"error": "Cross-origin context access is not allowed"})
+        query = self._query()
+        try:
+            self._json(200, build_context(engine, query.get("mode", "user"), query.get("view", "live")))
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+
+    def _get_memory(self, engine: Glados) -> None:
+        if self._cross_site_read():
+            return self._json(403, {"error": "Cross-origin memory access is not allowed"})
+        core = getattr(engine, "compaction_agent", None)
+        if core is None:
+            return self._json(200, {"available": False, "reason": "Memory Core is disabled", "memories": []})
+        query = self._query()
+        try:
+            if "id" in query:
+                return self._json(200, core.memory_entry(query["id"]))
+            self._json(
+                200,
+                core.memory_snapshot(
+                    query.get("query", "")[:280],
+                    query.get("kind", "all"),
+                    int(query.get("offset", "0")),
+                    int(query.get("limit", "30")),
+                ),
+            )
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+
+    def _get_mind(self, engine: Glados, rest: str) -> None:
+        mind_id, _, sub = rest.partition("/")
+        mind_id = unquote(mind_id)
+        if sub == "memory":
+            entries = self._memory(engine, mind_id)
+            if entries is None:
+                return self._json(404, {"error": "No memory for that core"})
+            return self._json(200, {"agent_id": mind_id, "memory": entries})
+        if sub:
+            return self._json(404, {"error": "Unknown sub-path"})
+        mind = _find_mind(engine, mind_id)
+        if mind is None:
+            return self._json(404, {"error": "core not found"})
+        self._json(200, serialize_mind(mind))
+
+    def _get_slot(self, engine: Glados, slot_id: str) -> None:
+        store = _find_store(engine)
+        slot = store.get_slot(slot_id) if store is not None else None
+        if slot is None:
+            return self._json(404, {"error": "slot not found"})
+        self._json(200, serialize_slot_full(slot))
+
+    _QUERIES: ClassVar[dict[str, Callable[[_Handler, Any], None]]] = {
+        "/api/audio/remote": lambda handler, engine: handler._remote_audio(),
+        "/api/pairing": _get_pairing,
+        "/api/vision/frame": _get_vision,
+        "/api/vision/live": _get_vision,
+        "/api/devices": lambda handler, engine: handler._json(200, device_snapshot(engine)),
+        "/api/context": _get_context,
+        "/api/memory": _get_memory,
+        "/api/stream": lambda handler, engine: handler._stream(engine),
+        "/api/decisions": lambda handler, engine: handler._json(200, engine.decision_lists.snapshot()),
+        "/api/snapshot": lambda handler, engine: handler._json(200, build_snapshot(engine)),
+        "/api/state": lambda handler, engine: handler._json(200, build_state(engine)),
+        "/api/minds": lambda handler, engine: handler._json(
+            200, {"minds": [_serialize_or(serialize_mind, m) for m in engine.mind_registry.snapshot()]}
+        ),
+        "/api/agents": lambda handler, engine: handler._json(200, {"agents": handler._agent_list(engine)}),
+        "/api/slots": lambda handler, engine: handler._json(
+            200, {"slots": [_serialize_or(serialize_slot, s) for s in handler._slots(engine)]}
+        ),
+    }
+
     # --------------------------------------------------------------- SSE
-    def _stream(self, engine: Any) -> None:
+    def _stream(self, engine: Glados) -> None:
         """SSE stream: replay history then push live events + periodic state.
 
         Uses a private :meth:`ObservabilityBus.subscribe` queue so each browser
@@ -684,17 +790,21 @@ class _Handler(BaseHTTPRequestHandler):
                     next_snapshot = now + 2.0
                 if now >= next_camera:
                     audio = build_audio_state(engine)
-                    revision = (audio["updated_at"], audio["vad_active"], audio["rms"])
-                    if revision != audio_revision:
+                    audio_key = (audio["updated_at"], audio["vad_active"], audio["rms"])
+                    if audio_key != audio_revision:
                         self._send_sse("audio", audio)
-                        audio_revision = revision
+                        audio_revision = audio_key
                     agent = getattr(engine, "vision_agent", None)
                     tracking = agent.tracking_snapshot() if agent else None
                     camera = tracking["camera"] if tracking else {}
                     face = camera.get("face", {})
-                    revision = (bool(tracking and tracking["paused"]), camera.get("enabled"),
-                                camera.get("connected"), face.get("observed_at"),
-                                tracking.get("inference_sequence") if tracking else None)
+                    revision = (
+                        bool(tracking and tracking["paused"]),
+                        camera.get("enabled"),
+                        camera.get("connected"),
+                        face.get("observed_at"),
+                        tracking.get("inference_sequence") if tracking else None,
+                    )
                     if revision != camera_revision:
                         self._send_sse("camera", tracking)
                         camera_revision = revision
@@ -718,8 +828,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _remote_audio(self) -> None:
         """WebSocket: a browser's microphone and speaker replace the local ones while connected."""
-        audio = getattr(self.server.engine, "audio_io", None)
-        if not hasattr(audio, "attach"):
+        audio: RemoteSwitchAudioIO | None = getattr(self.server.engine, "audio_io", None)
+        if not isinstance(audio, RemoteSwitchAudioIO):
             return self._json(404, {"error": "Remote audio is disabled"})
         origin = self.headers.get("Origin")
         # Browsers always send Origin on WebSockets; requiring it blocks cross-site hijacking.
@@ -743,8 +853,13 @@ class _Handler(BaseHTTPRequestHandler):
 
         def send(opcode: int, payload: bytes) -> None:
             size = len(payload)
-            head = bytes([0x80 | opcode]) + (bytes([size]) if size < 126 else
-                    struct.pack(">BH", 126, size) if size < 1 << 16 else struct.pack(">BQ", 127, size))
+            head = bytes([0x80 | opcode]) + (
+                bytes([size])
+                if size < 126
+                else struct.pack(">BH", 126, size)
+                if size < 1 << 16
+                else struct.pack(">BQ", 127, size)
+            )
             with lock:
                 self.wfile.write(head + payload)
 
@@ -809,44 +924,44 @@ class _Handler(BaseHTTPRequestHandler):
             if fin and opcode is not None:
                 return opcode, b"".join(parts)
 
-    def _send_sse(self, event_type: str, payload: Any) -> None:
+    def _send_sse(self, event_type: str, payload: object) -> None:
         data = dumps(payload)
         frame = (f"event: {event_type}\ndata: {data}\n\n").encode()
         self.wfile.write(frame)
         self.wfile.flush()
 
     # -------------------------------------------------------------- helpers
-    def _slots(self, engine: Any) -> list[Any]:
+    def _slots(self, engine: Glados) -> list[TaskSlot]:
         store = _find_store(engine)
         if store is None:
             return []
         try:
             return store.list_slots()
-        except Exception:  # pragma: no cover
+        except Exception:  # noqa: BLE001 - the console shows what it can
             return []
 
-    def _agent_list(self, engine: Any) -> list[dict[str, Any]]:
+    def _agent_list(self, engine: Glados) -> list[dict[str, Any]]:
         manager = _agent_manager(engine)
         if manager is None:
             return []
         try:
             return [_serialize_or(serialize_agent, a) for a in manager.list_agents()]
-        except Exception:  # pragma: no cover
+        except Exception:  # noqa: BLE001 - the console shows what it can
             return []
 
-    def _memory(self, engine: Any, agent_id: str) -> list[dict[str, Any]] | None:
+    def _memory(self, engine: Glados, agent_id: str) -> list[dict[str, Any]] | None:
         manager = _agent_manager(engine)
         if manager is None:
             return None
         try:
             subagent = manager.get(agent_id)
-        except Exception:  # pragma: no cover
+        except Exception:  # noqa: BLE001 - the console shows what it can
             return None
         if subagent is None:
             return None
         try:
             entries = subagent.memory.list_all()
-        except Exception:  # pragma: no cover
+        except Exception:  # noqa: BLE001 - the console shows what it can
             return None
         return [_serialize_or(serialize_memory_entry, e) for e in entries]
 
@@ -885,7 +1000,7 @@ class _Handler(BaseHTTPRequestHandler):
 def _sub_path(path: str, prefix: str) -> str | None:
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest or rest.endswith("/"):
         return None
     return rest
@@ -895,9 +1010,16 @@ class WebappServer:
     """Lifecycle wrapper: start/stop the console server on a background thread."""
 
     def __init__(
-        self, engine: Any, host: str = "127.0.0.1", port: int = 8050, allowed_hosts: list[str] | None = None,
-        tls: ssl.SSLContext | None = None, token: str | None = None, trust_loopback: bool = True,
-        sessions: auth.SessionStore | None = None, authority: Path | None = None,
+        self,
+        engine: Glados,
+        host: str = "127.0.0.1",
+        port: int = 8050,
+        allowed_hosts: list[str] | None = None,
+        tls: ssl.SSLContext | None = None,
+        token: str | None = None,
+        trust_loopback: bool = True,
+        sessions: auth.SessionStore | None = None,
+        authority: Path | None = None,
     ) -> None:
         self.engine = engine
         self.host = host
@@ -916,8 +1038,16 @@ class WebappServer:
         if self._server is not None:
             return
         try:
-            self._server = _EngineHTTPServer((self.host, self.port), self.engine, self.allowed_hosts, self.tls,
-                                             self.token, self.trust_loopback, self.sessions, self.authority)
+            self._server = _EngineHTTPServer(
+                (self.host, self.port),
+                self.engine,
+                self.allowed_hosts,
+                self.tls,
+                self.token,
+                self.trust_loopback,
+                self.sessions,
+                self.authority,
+            )
             self.bound_port = self._server.server_address[1]
         except (OSError, ValueError) as exc:
             logger.error("webapp: failed to bind {}:{} - {}", self.host, self.port, exc)

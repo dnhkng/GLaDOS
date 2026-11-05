@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-
 import logging
+from pathlib import Path
+import time
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -30,7 +29,7 @@ def _read_uptime() -> float | None:
 @mcp.tool()
 def now_iso() -> str:
     """Return current time in ISO-8601 format (UTC and local)."""
-    utc = datetime.now(timezone.utc).isoformat()
+    utc = datetime.now(UTC).isoformat()
     local = datetime.now().astimezone().isoformat()
     return json.dumps({"utc": utc, "local": local})
 

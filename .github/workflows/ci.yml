@@ -33,21 +33,17 @@ jobs:
       - name: Download models
         run: uv run --no-sync glados download
 
-      # Bug-class rules everywhere; the full rule set only where it is already clean.
-      # Add a package to the second list once `ruff check <package>` passes.
+      # The whole tree is clean under the full rule set in pyproject.toml; keep it that way.
       - name: Lint
         run: |
-          uv run --no-sync ruff check src tests --select F,E9,B,PLE
-          uv run --no-sync ruff check src/glados/ASR src/glados/TTS src/glados/api src/glados/audio_io \
-            src/glados/glados_ui src/glados/observability src/glados/utils src/glados/vision
+          uv run --no-sync ruff check src tests
+          uv run --no-sync ruff format --check src tests
 
       - name: Test
         run: uv run --no-sync pytest -q
 
   typecheck:
-    # Informational until the ~500 existing strict-mode errors are worked down.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -55,4 +51,4 @@ jobs:
           enable-cache: true
       - run: uv sync --extra cpu --extra dev --locked
       - name: mypy (strict, from pyproject)
-        run: uv run --no-sync --with mypy mypy src/glados --ignore-missing-imports
+        run: uv run --no-sync mypy src/glados

@@ -47,9 +47,20 @@ class TaskSlotStore:
 
     @staticmethod
     def update_event(slot: TaskSlot) -> TaskUpdateEvent:
-        return TaskUpdateEvent(slot.slot_id, slot.title, slot.status, slot.summary,
-                               slot.notify_user, slot.updated_at, slot.importance, slot.confidence,
-                               slot.next_run, slot.attention_key, slot.update_priority, slot.revision)
+        return TaskUpdateEvent(
+            slot.slot_id,
+            slot.title,
+            slot.status,
+            slot.summary,
+            slot.notify_user,
+            slot.updated_at,
+            slot.importance,
+            slot.confidence,
+            slot.next_run,
+            slot.attention_key,
+            slot.update_priority,
+            slot.revision,
+        )
 
     def update_slot(
         self,
@@ -106,8 +117,20 @@ class TaskSlotStore:
             # Timestamps and elapsed progress do not create a new attention episode.
             changed = existing is None or any(
                 getattr(existing, name) != getattr(slot, name)
-                for name in ("title", "status", "summary", "report", "context", "update_priority",
-                             "importance", "confidence", "next_run", "attention_key", "turn_id", "queue_position")
+                for name in (
+                    "title",
+                    "status",
+                    "summary",
+                    "report",
+                    "context",
+                    "update_priority",
+                    "importance",
+                    "confidence",
+                    "next_run",
+                    "attention_key",
+                    "turn_id",
+                    "queue_position",
+                )
             )
             slot.handled = existing.handled if existing and not changed else False
             slot.revision = (existing.revision if existing else 0) + int(changed)
@@ -138,8 +161,12 @@ class TaskSlotStore:
         """Retire a consumed terminal job result from routine context, retaining its report."""
         with self._lock:
             slot = self._slots.get(slot_id)
-            if (slot and slot.revision == revision and slot.owner_id
-                    and slot.status in {"done", "partial", "error", "cancelled"}):
+            if (
+                slot
+                and slot.revision == revision
+                and slot.owner_id
+                and slot.status in {"done", "partial", "error", "cancelled"}
+            ):
                 self._slots[slot_id] = replace(slot, handled=True)
 
     def list_slots(self) -> list[TaskSlot]:

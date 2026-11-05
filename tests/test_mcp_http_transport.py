@@ -14,14 +14,14 @@ import inspect
 
 import pytest
 
-import glados.mcp.manager as manager_mod
 from glados.mcp import MCPManager, MCPServerConfig
+import glados.mcp.manager as manager_mod
 
 pytest.importorskip("mcp")
 
 
 def _http_config(**overrides) -> MCPServerConfig:
-    base = dict(name="auth_server", transport="http", url="https://example.com/mcp")
+    base = {"name": "auth_server", "transport": "http", "url": "https://example.com/mcp"}
     base.update(overrides)
     return MCPServerConfig(**base)
 

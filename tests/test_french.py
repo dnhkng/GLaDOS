@@ -25,8 +25,8 @@ def test_french_profile_asks_for_french_replies_and_keeps_french_speech() -> Non
 def test_espeak_keeps_clause_punctuation_and_reads_names_and_times() -> None:
     sentences = EspeakPhonemizer("fr")("Bonjour, GLaDOS. Il est 14 h 30 ?")
     assert len(sentences) == 2 and sentences[0].endswith(".") and sentences[1].endswith("?")
-    assert "," in sentences[0] and "ɡladˈɔs" in sentences[0]
-    assert "ˈaʃ" not in sentences[1] and "ˈœʁ" in sentences[1], "“h” is read as “heures”, not the letter"
+    assert "," in sentences[0] and "ɡladˈɔs" in sentences[0]  # noqa: RUF001 - IPA from espeak-ng
+    assert "ˈaʃ" not in sentences[1] and "ˈœʁ" in sentences[1], "“h” is read as “heures”, not the letter"  # noqa: RUF001
 
 
 def test_only_english_voices_use_the_english_text_converter() -> None:
@@ -56,8 +56,9 @@ def test_glados_effect_raises_pitch_keeps_shape_and_never_clips() -> None:
 
 
 @needs_espeak
-@pytest.mark.skipif(not __import__("pathlib").Path("models/TTS/fr_FR-siwis-medium.onnx").exists(),
-                    reason="French voice not downloaded")
+@pytest.mark.skipif(
+    not __import__("pathlib").Path("models/TTS/fr_FR-siwis-medium.onnx").exists(), reason="French voice not downloaded"
+)
 def test_french_uses_the_native_voice_with_the_glados_effect() -> None:
     from glados.TTS import get_speech_synthesizer
 

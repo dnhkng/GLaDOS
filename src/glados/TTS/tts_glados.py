@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-import onnxruntime as ort  # type: ignore
+import onnxruntime as ort
 
 from ..onnx_runtime import audio_providers, report_session_providers
 from ..utils.resources import resource_path
@@ -125,8 +125,12 @@ class SpeechSynthesizer:
     EOS = "$"  # end of sentence
 
     def __init__(
-        self, model_path: Path = MODEL_PATH, phoneme_path: Path = PHONEME_TO_ID_PATH, speaker_id: int | None = None,
-        language: str = "en", effect: GladosEffect | None = None,
+        self,
+        model_path: Path = MODEL_PATH,
+        phoneme_path: Path = PHONEME_TO_ID_PATH,
+        speaker_id: int | None = None,
+        language: str = "en",
+        effect: GladosEffect | None = None,
     ) -> None:
         """
         Initialize the text-to-speech synthesizer with a specified model and optional speaker configuration.
@@ -167,8 +171,11 @@ class SpeechSynthesizer:
             ) from e
         self.config = PiperConfig.from_dict(config_dict)
         # The GLaDOS voice keeps its table in a pickle; stock Piper voices carry theirs in the config.
-        self.id_map = (self._load_pickle(phoneme_path) if model_path == self.MODEL_PATH
-                       else {k: list(v) for k, v in self.config.phoneme_id_map.items()})
+        self.id_map = (
+            self._load_pickle(phoneme_path)
+            if model_path == self.MODEL_PATH
+            else {k: list(v) for k, v in self.config.phoneme_id_map.items()}
+        )
         self.sample_rate = self.config.sample_rate
         self.speaker_id = (
             self.config.speaker_id_map.get(str(speaker_id), 0)
@@ -209,8 +216,9 @@ class SpeechSynthesizer:
         phonemes = self._phonemizer(text)
         phoneme_ids_list = [self._phonemes_to_ids(sentence) for sentence in phonemes]
         length_scale = self.config.length_scale * (self.effect.pitch if self.effect else 1.0)
-        audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids, length_scale=length_scale)
-                        for phoneme_ids in phoneme_ids_list]
+        audio_chunks = [
+            self._synthesize_ids_to_audio(phoneme_ids, length_scale=length_scale) for phoneme_ids in phoneme_ids_list
+        ]
 
         if audio_chunks:
             audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T

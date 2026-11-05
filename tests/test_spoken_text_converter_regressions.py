@@ -44,8 +44,10 @@ def converter() -> SpokenTextConverter:
         ("I'd read it. He'd read it.", "I'd read it. he'd read it."),
         (
             "I'm using 4096 tokens; it's cost $1,234.56.",
-            "I am using four thousand ninety-six tokens; it has cost one thousand two hundred thirty-four "
-            "dollars and fifty-six cents.",
+            (
+                "I am using four thousand ninety-six tokens; it has cost one thousand two hundred thirty-four "
+                "dollars and fifty-six cents."
+            ),
         ),
     ],
 )
@@ -126,13 +128,17 @@ def test_session_edge_case_variants(converter: SpokenTextConverter, text: str, e
         ("1,000,000,000,000", "one trillion"),
         (
             "9007199254740993",
-            "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
-            "seven hundred forty thousand nine hundred ninety-three",
+            (
+                "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
+                "seven hundred forty thousand nine hundred ninety-three"
+            ),
         ),
         (
             "9007199254740993.01",
-            "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
-            "seven hundred forty thousand nine hundred ninety-three point zero one",
+            (
+                "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
+                "seven hundred forty thousand nine hundred ninety-three point zero one"
+            ),
         ),
         ("Room 007; code 01234.", "room zero zero seven; code zero one two three four."),
         ("Values: 1,2,3.", "values: one,two,three."),
@@ -189,8 +195,10 @@ def test_numeric_expressions(converter: SpokenTextConverter, text: str, expected
         ("100.00000000001%", "one hundred point zero zero zero zero zero zero zero zero zero zero one percent"),
         (
             "$1,234.56 and 25% in 2026",
-            "one thousand two hundred thirty-four dollars and fifty-six cents and twenty-five percent in "
-            "twenty twenty-six",
+            (
+                "one thousand two hundred thirty-four dollars and fifty-six cents and twenty-five percent in "
+                "twenty twenty-six"
+            ),
         ),
     ],
 )
@@ -226,8 +234,10 @@ def test_currency_and_percentages(converter: SpokenTextConverter, text: str, exp
         ("11/31/2024", "11/31/2024"),
         (
             "We'll meet at 3:00 PM on 2026-10-07, costing €1,234.56.",
-            "we will meet at three in the afternoon on october seventh, twenty twenty-six, costing one thousand two "
-            "hundred thirty-four euros and fifty-six cents.",
+            (
+                "we will meet at three in the afternoon on october seventh, twenty twenty-six, "
+                "costing one thousand two hundred thirty-four euros and fifty-six cents."
+            ),
         ),
     ],
 )
@@ -279,8 +289,10 @@ def test_units_ranges_and_text_boundaries(converter: SpokenTextConverter, text: 
         (-17, "negative seventeen"),
         (
             "9007199254740993",
-            "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
-            "seven hundred forty thousand nine hundred ninety-three",
+            (
+                "nine quadrillion seven trillion one hundred ninety-nine billion two hundred fifty-four million "
+                "seven hundred forty thousand nine hundred ninety-three"
+            ),
         ),
         (
             "0.1234567890123456789",

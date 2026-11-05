@@ -77,19 +77,25 @@ def test_input_events_identify_the_queued_turn() -> None:
     )
     listener.run()
     events = bus.drain()
-    assert [event.meta["generation"] for event in events] == [
-        pending.get_nowait()["_quiet_generation"], pending.get_nowait()["_quiet_generation"],
-    ] == [41, 42]
+    assert (
+        [event.meta["generation"] for event in events]
+        == [
+            pending.get_nowait()["_quiet_generation"],
+            pending.get_nowait()["_quiet_generation"],
+        ]
+        == [41, 42]
+    )
 
 
 def test_engine_constructs_text_and_both_input_modes(tmp_path, monkeypatch) -> None:
     """Exercise the engine's real listener kwargs without models or worker startup."""
     from unittest.mock import Mock
+
+    from glados.autonomy.agents.health_agent import HealthConfig
+    from glados.autonomy.agents.search_agent import SearchConfig
     from glados.autonomy.config import AutonomyConfig
     from glados.core.engine import Glados
-    from glados.autonomy.agents.health_agent import HealthConfig
     from glados.core.routing import RoutingConfig
-    from glados.autonomy.agents.search_agent import SearchConfig
 
     monkeypatch.setattr("glados.core.engine.resource_path", lambda name: tmp_path / name)
     monkeypatch.setattr(threading.Thread, "start", lambda self: None)
@@ -99,10 +105,18 @@ def test_engine_constructs_text_and_both_input_modes(tmp_path, monkeypatch) -> N
         config.tokens.enabled = False
         config.tokens.recall.enabled = False
         config.tokens.state_path = None
-        engine = Glados(asr_model=None, tts_model=Mock(sample_rate=16000), audio_io=Mock(),
-            completion_url="http://test/v1/chat/completions", llm_model="test", input_mode=mode,
-            autonomy_config=config, health_config=HealthConfig(enabled=False),
-            search_config=SearchConfig(enabled=False), routing_config=RoutingConfig(enabled=False))
+        engine = Glados(
+            asr_model=None,
+            tts_model=Mock(sample_rate=16000),
+            audio_io=Mock(),
+            completion_url="http://test/v1/chat/completions",
+            llm_model="test",
+            input_mode=mode,
+            autonomy_config=config,
+            health_config=HealthConfig(enabled=False),
+            search_config=SearchConfig(enabled=False),
+            routing_config=RoutingConfig(enabled=False),
+        )
         assert isinstance(engine.text_listener, TextListener)
         assert (engine.speech_listener is not None) == (mode == "both")
         engine.shutdown_event.set()

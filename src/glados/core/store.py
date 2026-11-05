@@ -6,10 +6,11 @@ Replaces: PreferencesStore, KnowledgeStore, TaskSlotStore, MindRegistry
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 import threading
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 
@@ -19,7 +20,7 @@ T = TypeVar("T")
 Formatter = Callable[[dict[str, T]], str | None]
 
 
-class Store(Generic[T]):
+class Store[T]:
     """
     Thread-safe key-value store with optional YAML or legacy JSON persistence.
 
@@ -89,7 +90,7 @@ class Store(Generic[T]):
             return
         try:
             # Convert dataclasses to dicts for serialization
-            serializable = {}
+            serializable: dict[str, Any] = {}
             for k, v in self._data.items():
                 if is_dataclass(v) and not isinstance(v, type):
                     serializable[k] = asdict(v)
@@ -123,7 +124,7 @@ class Store(Generic[T]):
                 return True
             return False
 
-    def update(self, key: str, **fields: Any) -> T | None:
+    def update(self, key: str, **fields: object) -> T | None:
         """
         Update specific fields of a value (if it's a dataclass or dict).
         Returns the updated value, or None if key doesn't exist.
@@ -133,6 +134,7 @@ class Store(Generic[T]):
             if existing is None:
                 return None
 
+            updated: T
             if is_dataclass(existing) and not isinstance(existing, type):
                 # Create new dataclass with updated fields
                 current = asdict(existing)
@@ -200,6 +202,7 @@ class Store(Generic[T]):
 
 
 # Common formatters
+
 
 def format_preferences(data: dict[str, Any]) -> str | None:
     """Format preferences for LLM context."""

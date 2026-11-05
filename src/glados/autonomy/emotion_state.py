@@ -7,8 +7,8 @@ State transitions are decided by LLM, not hard-coded math.
 
 from __future__ import annotations
 
-import time
 from dataclasses import asdict, dataclass, field
+import time
 from typing import Any
 
 
@@ -82,7 +82,10 @@ class EmotionState:
         p, a, d = self.pleasure, self.arousal, self.dominance
         if p < -0.3 and a > 0.3:
             direction = "angry glare"
-            style = "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to polite neutrality."
+            style = (
+                "You are angry and affronted. Use clipped, sharp sarcasm and visible irritation; do not reset to "
+                "polite neutrality."
+            )
         elif p < -0.3:
             direction = "suspicious" if d > 0.3 else "disappointed"
             style = "Sound displeased and sceptical, with a dry edge."

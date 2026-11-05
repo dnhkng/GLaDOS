@@ -4,7 +4,6 @@ import importlib.util
 from pathlib import Path
 import sys
 
-
 # Load modules directly to avoid the full autonomy __init__ import chain
 # which pulls in vision and other heavy dependencies
 
@@ -21,16 +20,12 @@ def _load_module(name: str, path: Path):
 
 
 # Load config first (it has no problematic dependencies)
-_config_module = _load_module(
-    "glados.autonomy.config",
-    _src_path / "glados" / "autonomy" / "config.py"
-)
+_config_module = _load_module("glados.autonomy.config", _src_path / "glados" / "autonomy" / "config.py")
 TokenConfig = _config_module.TokenConfig
 
 # Load token_estimator (depends only on config and loguru)
 _token_module = _load_module(
-    "glados.autonomy.token_estimator",
-    _src_path / "glados" / "autonomy" / "token_estimator.py"
+    "glados.autonomy.token_estimator", _src_path / "glados" / "autonomy" / "token_estimator.py"
 )
 SimpleTokenEstimator = _token_module.SimpleTokenEstimator
 TokenEstimator = _token_module.TokenEstimator

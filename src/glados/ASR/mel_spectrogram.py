@@ -48,7 +48,7 @@ Internal Functions:
 from pathlib import Path
 from typing import Any, Literal
 
-from numba import jit  # type: ignore
+from numba import jit
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,7 +58,7 @@ import yaml  # PyYAML for YAML loading
 NEMO_CONSTANT = 1e-5  # Used as dither and guard, aligned with some NeMo practices
 
 
-@jit(nopython=True)  # type: ignore
+@jit(nopython=True)
 def _extract_windows_numba(
     audio_padded: NDArray[np.float32],
     window_coeffs: NDArray[np.float32],
@@ -359,6 +359,7 @@ class MelSpectrogramCalculator:
         self.mel_filterbank = self._create_mel_filterbank(self.fmin, self.fmax)
 
         window_fn_name = window.lower()
+        actual_window: NDArray[np.floating[Any]]
         if self.win_length == 0:
             actual_window = np.array([], dtype=np.float32)
         elif window_fn_name == "hann":
@@ -390,7 +391,7 @@ class MelSpectrogramCalculator:
         self,
         frequencies: float | NDArray[np.float32],
         dtype: np.dtype[Any] | None = None,
-    ) -> NDArray[np.float32]:
+    ) -> NDArray[np.floating[Any]]:
         """Converts Hz to Mel scale using Slaney's Auditory Toolbox formula.
 
         This formula is linear below 1kHz and logarithmic above.
@@ -423,7 +424,7 @@ class MelSpectrogramCalculator:
 
     def _slaney_mel_to_hz(
         self, mels: float | NDArray[np.float32], dtype: np.dtype[Any] | None = None
-    ) -> NDArray[np.float32]:
+    ) -> NDArray[np.floating[Any]]:
         """Converts Mel scale to Hz using Slaney's Auditory Toolbox formula.
 
         Inverse of Slaney `hz_to_mel`.

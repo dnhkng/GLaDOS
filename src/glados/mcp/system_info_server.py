@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
-
-import logging
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -79,11 +78,10 @@ def cpu_load() -> str:
 def memory_usage() -> str:
     """Return memory usage statistics."""
     try:
-        import psutil  # type: ignore
+        import psutil
     except ImportError:
-        psutil = None
-
-    if psutil:
+        pass
+    else:
         mem = psutil.virtual_memory()
         return json.dumps(
             {

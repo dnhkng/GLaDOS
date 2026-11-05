@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 import time
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -53,7 +54,7 @@ class _VisiblePage(HTMLParser):
             self.parts.append(data)
 
 
-def page_source(html: str, url: str, retrieved_at: str) -> dict | None:
+def page_source(html: str, url: str, retrieved_at: str) -> dict[str, Any] | None:
     parser = _VisiblePage(url)
     parser.feed(html)
     lines = [" ".join(line.split()) for line in "".join(parser.parts).splitlines()]
@@ -65,11 +66,17 @@ def page_source(html: str, url: str, retrieved_at: str) -> dict | None:
     update_label = next((line for line in lines if "News as of " in line), "")
     if update_label:
         text = update_label[:200] + "\n" + text
-    return {"url": url, "title": title, "published": None, "retrieved_at": retrieved_at,
-            "kind": "news_page", "excerpt": header + text[:3500 - len(header)]}
+    return {
+        "url": url,
+        "title": title,
+        "published": None,
+        "retrieved_at": retrieved_at,
+        "kind": "news_page",
+        "excerpt": header + text[: 3500 - len(header)],
+    }
 
 
-def read_news_page(site: str, timeout: float, cancelled: Callable[[], bool]) -> dict | None:
+def read_news_page(site: str, timeout: float, cancelled: Callable[[], bool]) -> dict[str, Any] | None:
     """Fetch only configured pages, with a deadline and a strict response-size bound."""
     url = "https://" + site
     deadline = time.monotonic() + timeout
@@ -77,13 +84,19 @@ def read_news_page(site: str, timeout: float, cancelled: Callable[[], bool]) -> 
         if cancelled() or time.monotonic() >= deadline:
             return None
         parsed = urlsplit(url)
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
-                or parsed.username or parsed.password or parsed.port not in {None, 80, 443}):
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.port not in {None, 80, 443}
+        ):
             raise ValueError("Invalid news page URL")
         budget = max(0.1, deadline - time.monotonic())
         headers = {"User-Agent": "GLaDOS-NewsReader/1.0", "Accept": "text/html,text/plain"}
-        with requests.get(url, timeout=(min(3.0, budget), budget), stream=True,
-                          allow_redirects=False, headers=headers) as response:
+        with requests.get(
+            url, timeout=(min(3.0, budget), budget), stream=True, allow_redirects=False, headers=headers
+        ) as response:
             if response.status_code in {301, 302, 303, 307, 308}:
                 url = urljoin(url, response.headers.get("Location", ""))
                 continue

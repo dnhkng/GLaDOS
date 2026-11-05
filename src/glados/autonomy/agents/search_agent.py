@@ -49,7 +49,7 @@ def forecast_date_matches(quote: str, target: str) -> bool:
     quote = re.sub(r"https?://\S+", "", quote)
     weekdays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
     for index, weekday in enumerate(weekdays):
-        if index != day.weekday() and re.search(r"\b(?:" + weekday + "|" + weekday[:3] + r")\b", quote, re.I):
+        if index != day.weekday() and re.search(r"\b(?:" + weekday + "|" + weekday[:3] + r")\b", quote, re.IGNORECASE):
             return False
     # A full ISO or German calendar date is unambiguous. Never accept another
     # year by accidentally matching just the month/day prefix.
@@ -61,14 +61,14 @@ def forecast_date_matches(quote: str, target: str) -> bool:
         rf"\b{month}\.?\s+0?{day.day}(?:st|nd|rd|th)?\b{year}",
         rf"\b0?{day.day}(?:st|nd|rd|th)?\s+{month}\.?\b{year}",
     )
-    return any(re.search(pattern, quote, re.I) for pattern in patterns)
+    return any(re.search(pattern, quote, re.IGNORECASE) for pattern in patterns)
 
 
-def parse_sources(text: str) -> list[dict]:
+def parse_sources(text: str) -> list[dict[str, Any]]:
     """Only returned HTTP(S) URLs can become citations; never invent missing URLs."""
     sources = []
     for block in re.split(r"\n(?=Title:)", text.strip()):
-        url = re.search(r"^URL:\s*(\S+)", block, re.M)
+        url = re.search(r"^URL:\s*(\S+)", block, re.MULTILINE)
         if not url:
             continue
         address = url.group(1)
@@ -78,8 +78,8 @@ def parse_sources(text: str) -> list[dict]:
             continue
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or len(address) > 600:
             continue
-        title = re.search(r"^Title:\s*(.*)", block, re.M)
-        published = re.search(r"^Published:\s*(.*)", block, re.M)
+        title = re.search(r"^Title:\s*(.*)", block, re.MULTILINE)
+        published = re.search(r"^Published:\s*(.*)", block, re.MULTILINE)
         sources.append(
             {
                 "url": address,
@@ -148,15 +148,13 @@ class SearchAgent(Subagent):
         self,
         settings: SearchConfig,
         llm_config: LLMConfig,
-        search: Callable[[dict, float], str],
+        search: Callable[[dict[str, Any], float], str],
         settings_path: Path | None = None,
-        read_page: Callable[[str, float, Callable[[], bool]], dict | None] = read_news_page,
+        read_page: Callable[[str, float, Callable[[], bool]], dict[str, Any] | None] = read_news_page,
         **kwargs: Any,  # noqa: ANN401 - Base core collaborators are forwarded unchanged.
     ) -> None:
         super().__init__(
-            SubagentConfig(
-                "search", "Search Core", role="Requested research and source verification"
-            ),
+            SubagentConfig("search", "Search Core", role="Requested research and source verification"),
             **kwargs,
         )
         self.settings, self.llm, self._search = settings, llm_config, search
@@ -165,15 +163,14 @@ class SearchAgent(Subagent):
         self._research_lock = threading.Lock()
         self._state_lock = threading.RLock()
         self._cancel_epoch = 0
-        self._managed_task_id = None
-        self._state: dict = {"status": "idle", "rounds": 0, "sources": 0, "findings": 0}
+        self._managed_task_id: str | None = None
+        self._state: dict[str, Any] = {"status": "idle", "rounds": 0, "sources": 0, "findings": 0}
 
-    def write_slot(self, **kwargs: Any) -> None:  # noqa: ANN401 - Forward the base core's slot arguments.
+    def publishes_slot(self) -> bool:
         # Managed research has one canonical result in the task slot, plus a core queue summary.
-        if self._managed_task_id is None:
-            super().write_slot(**kwargs)
+        return self._managed_task_id is None
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         with self._state_lock:
             return {
                 **deepcopy(self._state),
@@ -203,7 +200,7 @@ class SearchAgent(Subagent):
 
     def research(
         self,
-        arguments: dict,
+        arguments: dict[str, Any],
         cancelled: Callable[[], bool] = lambda: False,
         context_current: Callable[[], bool] = lambda: True,
         task_id: str | None = None,
@@ -234,7 +231,9 @@ class SearchAgent(Subagent):
                     target_dates.append(value)
         weather = bool(
             re.search(
-                r"\b(?:weather|wetter|meteorological|precipitation|wettervorhersage)\b", query + " " + objective, re.I
+                r"\b(?:weather|wetter|meteorological|precipitation|wettervorhersage)\b",
+                query + " " + objective,
+                re.IGNORECASE,
             )
         )
         with self._state_lock:
@@ -265,15 +264,17 @@ class SearchAgent(Subagent):
         def remaining() -> float:
             return max(0.1, self.settings.deadline_s - (time.monotonic() - started))
 
-        sources: list[dict] = []
-        findings: list[dict] = []
+        sources: list[dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
         gaps: list[str] = []
         seen_queries: set[str] = set()
         status = "partial"
         try:
             for round_index in range(self.settings.max_rounds):
                 pages = self._read_preferred_pages(round_index, preferred_sources, weather, stop, expired, remaining)
-                query, objective = self._focus_search_query(query, objective, clock, round_index, preferred_sources, pages, weather, target_dates)
+                query, objective = self._focus_search_query(
+                    query, objective, clock, round_index, preferred_sources, pages, weather, target_dates
+                )
                 if stop() or expired():
                     gaps.append("Research was cancelled" if stop() else "Research time limit reached")
                     break
@@ -299,7 +300,7 @@ class SearchAgent(Subagent):
                             {"query": query, "objective": objective, "numResults": self.settings.results_per_query},
                             min(self.settings.search_timeout_s, remaining()),
                         )
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - any search backend failure becomes a reported gap
                         gaps.append("Search service failed or timed out")
                         break
                     if stop() or expired():
@@ -316,7 +317,9 @@ class SearchAgent(Subagent):
                     query = self._state["query"] + " official sources"
                     objective = self._state["objective"]
                     continue
-                response = self._review_evidence(sources, findings, seen_queries, round_index, inference_lane, remaining, started, stop, expired)
+                response = self._review_evidence(
+                    sources, findings, seen_queries, round_index, inference_lane, remaining, started, stop, expired
+                )
                 if stop() or expired():
                     gaps.append("Research was cancelled" if stop() else "Research time limit reached")
                     break
@@ -369,8 +372,10 @@ class SearchAgent(Subagent):
                 )
             else:
                 gaps.append("Search round limit reached")
-            return self._complete_research(status, sources, findings, gaps, stop, weather, target_dates, context_current, started)
-        except Exception:
+            return self._complete_research(
+                status, sources, findings, gaps, stop, weather, target_dates, context_current, started
+            )
+        except Exception:  # noqa: BLE001 - an unexpected failure must not leave the core marked as working
             # Unexpected response shapes must not leave a core permanently marked as working.
             report = self._pack_report("error", sources, [], ["Research could not be completed"])
             with self._state_lock:
@@ -387,12 +392,20 @@ class SearchAgent(Subagent):
             self._managed_task_id = None
             self._research_lock.release()
 
-    def _read_preferred_pages(self, round_index: int, preferred_sources: dict, weather: bool, stop: Callable[[], bool], expired: Callable[[], bool], remaining: Callable[[], float]) -> list[dict]:
-        pages: list[dict] = []
+    def _read_preferred_pages(
+        self,
+        round_index: int,
+        preferred_sources: dict[str, Any],
+        weather: bool,
+        stop: Callable[[], bool],
+        expired: Callable[[], bool],
+        remaining: Callable[[], float],
+    ) -> list[dict[str, Any]]:
+        pages: list[dict[str, Any]] = []
         if round_index == 0 and preferred_sources.get("news") and not weather:
             # Leave most of the research budget for review and any necessary fallback searches.
             page_deadline = time.monotonic() + min(20.0, remaining() / 3)
-            for site in preferred_sources["news"][:self.settings.max_sources]:
+            for site in preferred_sources["news"][: self.settings.max_sources]:
                 if stop() or expired() or time.monotonic() >= page_deadline:
                     break
                 with self._state_lock:
@@ -401,7 +414,7 @@ class SearchAgent(Subagent):
                     self._observability_bus.emit("search", "page", "Reading https://" + site)
                 try:
                     page = self._read_page(site, min(8.0, page_deadline - time.monotonic()), stop)
-                except Exception:
+                except Exception:  # noqa: BLE001 - a page that cannot be fetched is skipped
                     page = None
                 with self._state_lock:
                     if page:
@@ -411,7 +424,17 @@ class SearchAgent(Subagent):
                         self._state["page_errors"].append("Could not read https://" + site)
         return pages
 
-    def _focus_search_query(self, query: str, objective: str, clock: dict, round_index: int, preferred_sources: dict, pages: list[dict], weather: bool, target_dates: list[str]) -> tuple[str, str]:
+    def _focus_search_query(
+        self,
+        query: str,
+        objective: str,
+        clock: dict[str, Any],
+        round_index: int,
+        preferred_sources: dict[str, Any],
+        pages: list[dict[str, Any]],
+        weather: bool,
+        target_dates: list[str],
+    ) -> tuple[str, str]:
         query, _ = resolve_relative_dates(query, clock)
         objective, _ = resolve_relative_dates(objective, clock)
         query, objective = query[:1000], objective[:2000]
@@ -419,7 +442,7 @@ class SearchAgent(Subagent):
         if round_index == 0 and preferred_sources and not pages:
             favorites = list(dict.fromkeys(site for sites in preferred_sources.values() for site in sites))
             # Bias the first lookup toward favorites; later rounds can broaden to fill evidence gaps.
-            selected = []
+            selected: list[str] = []
             for site in favorites[:8]:
                 candidate = " (" + " OR ".join([*selected, "site:" + site]) + ")"
                 if len(candidate) <= 500:
@@ -434,7 +457,7 @@ class SearchAgent(Subagent):
         query = query[: 1000 - len(suffix)] + suffix
         return query, objective
 
-    def _merge_search_sources(self, sources: list[dict], pages: list[dict]) -> None:
+    def _merge_search_sources(self, sources: list[dict[str, Any]], pages: list[dict[str, Any]]) -> None:
         for source in pages:
             if len(sources) >= self.settings.max_sources:
                 break
@@ -448,7 +471,18 @@ class SearchAgent(Subagent):
         with self._state_lock:
             self._state["sources"] = len(sources)
 
-    def _review_evidence(self, sources: list[dict], findings: list[dict], seen_queries: set[str], round_index: int, inference_lane: str, remaining: Callable[[], float], started: float, stop: Callable[[], bool], expired: Callable[[], bool]) -> str | None:
+    def _review_evidence(
+        self,
+        sources: list[dict[str, Any]],
+        findings: list[dict[str, Any]],
+        seen_queries: set[str],
+        round_index: int,
+        inference_lane: str,
+        remaining: Callable[[], float],
+        started: float,
+        stop: Callable[[], bool],
+        expired: Callable[[], bool],
+    ) -> str | None:
         review_input = self._review_input(sources, findings, seen_queries, round_index)
         config = replace(
             self.llm,
@@ -467,7 +501,18 @@ class SearchAgent(Subagent):
         response = llm_call(config, _REVIEW_PROMPT, review_input, json_response=True)
         return response
 
-    def _complete_research(self, status: str, sources: list[dict], findings: list[dict], gaps: list[str], stop: Callable[[], bool], weather: bool, target_dates: list[str], context_current: Callable[[], bool], started: float) -> str:
+    def _complete_research(
+        self,
+        status: str,
+        sources: list[dict[str, Any]],
+        findings: list[dict[str, Any]],
+        gaps: list[str],
+        stop: Callable[[], bool],
+        weather: bool,
+        target_dates: list[str],
+        context_current: Callable[[], bool],
+        started: float,
+    ) -> str:
         if stop():
             status = "cancelled"
         elif not sources:
@@ -493,8 +538,7 @@ class SearchAgent(Subagent):
             self.write_slot(
                 status=status,
                 summary=(
-                    f"Research {status}: {len(packed['findings'])} cited passages "
-                    f"from {len(packed['sources'])} sources"
+                    f"Research {status}: {len(packed['findings'])} cited passages from {len(packed['sources'])} sources"
                 ),
                 report=report,
                 notify_user=False,
@@ -512,7 +556,9 @@ class SearchAgent(Subagent):
             )
         return report
 
-    def _review_input(self, sources: list[dict], findings: list[dict], queries: set[str], round_index: int) -> str:
+    def _review_input(
+        self, sources: list[dict[str, Any]], findings: list[dict[str, Any]], queries: set[str], round_index: int
+    ) -> str:
         # Divide the evidence allowance fairly so later sources cannot disappear behind a long first page.
         payload = {
             "objective": self._state["objective"][:1000],
@@ -572,14 +618,14 @@ class SearchAgent(Subagent):
         return encode()
 
     @staticmethod
-    def _parse_review(response: str | None) -> dict | None:
+    def _parse_review(response: str | None) -> dict[str, Any] | None:
         try:
             value = json.loads(response) if isinstance(response, str) else None
             return value if isinstance(value, dict) and value.get("action") in {"done", "search"} else None
         except (ValueError, TypeError):
             return None
 
-    def _verify_findings(self, proposed: object, sources: list[dict]) -> list[dict]:
+    def _verify_findings(self, proposed: object, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not isinstance(proposed, list):
             return []
         result = []
@@ -612,7 +658,9 @@ class SearchAgent(Subagent):
             result.append(finding)
         return result
 
-    def _pack_report(self, status: str, sources: list[dict], findings: list[dict], gaps: list[str]) -> str:
+    def _pack_report(
+        self, status: str, sources: list[dict[str, Any]], findings: list[dict[str, Any]], gaps: list[str]
+    ) -> str:
         # Reserve room to mark an incomplete handoff when selected evidence is omitted.
         report_budget = self.settings.max_report_chars - 100
         payload = {

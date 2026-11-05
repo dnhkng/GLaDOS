@@ -28,6 +28,14 @@ def enable_file_log() -> Path | None:
     path = Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
     # diagnose=False keeps variable values (API keys, tokens) out of logged tracebacks.
-    _handler_id = logger.add(path, level="INFO", rotation="10 MB", retention=5, encoding="utf-8",
-                             enqueue=True, backtrace=False, diagnose=False)
+    _handler_id = logger.add(
+        path,
+        level="INFO",
+        rotation="10 MB",
+        retention=5,
+        encoding="utf-8",
+        enqueue=True,
+        backtrace=False,
+        diagnose=False,
+    )
     return path

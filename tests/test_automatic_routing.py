@@ -67,13 +67,18 @@ def test_unavailable_backend_does_not_require_routing(monkeypatch: pytest.Monkey
 @pytest.mark.parametrize("search_tools", [False, True])
 @pytest.mark.parametrize("changed", [False, True])
 def test_automatic_draft_survives_background_mood_changes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: bool, search_tools: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: bool,
+    search_tools: bool,
 ) -> None:
     processor = make_processor()
     processor._inference_scheduler = InferenceScheduler()
     store = DecisionListStore(tmp_path / "choices.json", lambda: [tool_definition])
     if search_tools:
-        processor._reply_tools = lambda: [{"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}]
+        processor._reply_tools = lambda: [
+            {"type": "function", "function": {"name": "mcp.internet_search.web_search_exa"}}
+        ]
     affect = ["Neutral; [emotion:neutral]"]
     builder = ContextBuilder()
     builder.register("emotion", lambda: affect[0], volatile=True)
@@ -97,8 +102,8 @@ def test_automatic_draft_survives_background_mood_changes(
 
         def lines(chunk_size: int = 1) -> Iterator[bytes]:
             generated.set()
-            yield b'data: ' + json.dumps({"choices": [{"delta": {"content": text}}]}).encode()
-            yield b'data: [DONE]'
+            yield b"data: " + json.dumps({"choices": [{"delta": {"content": text}}]}).encode()
+            yield b"data: [DONE]"
 
         response.iter_lines.side_effect = lines
         return response
@@ -179,9 +184,15 @@ def test_unsupported_backend_bypasses_one_token_gate(monkeypatch: pytest.MonkeyP
 def test_draft_generation_cancellation_survives_processing_reset() -> None:
     processor = make_processor()
     generation = [1]
-    stream = SpeculativeStream(InferenceScheduler(), "http://test", {}, {"model": "test"},
-                               processor.shutdown_event, processor.processing_active_event,
-                               cancelled_if=lambda: generation[0] != 1)
+    stream = SpeculativeStream(
+        InferenceScheduler(),
+        "http://test",
+        {},
+        {"model": "test"},
+        processor.shutdown_event,
+        processor.processing_active_event,
+        cancelled_if=lambda: generation[0] != 1,
+    )
     assert not stream.stopped()
     generation[0] = 2
     processor.processing_active_event.clear()
@@ -194,12 +205,19 @@ def test_direct_audio_does_not_launch_speculative_inference(monkeypatch):
     processor._inference_scheduler = InferenceScheduler()
     draft = Mock()
     monkeypatch.setattr("glados.core.llm_processor.SpeculativeStream", draft)
+
     def score(*args, **kwargs):
         assert kwargs["on_admitted"] is None
         processor.shutdown_event.set()
         return {"action": "ignore"}
+
     processor.router = Mock(store=Mock(), score=score)
-    processor.llm_input_queue.put({"role": "user", "content": "[Voice input]",
-        "_native_audio": [{"type": "input_audio", "input_audio": {"data": "test", "format": "wav"}}]})
+    processor.llm_input_queue.put(
+        {
+            "role": "user",
+            "content": "[Voice input]",
+            "_native_audio": [{"type": "input_audio", "input_audio": {"data": "test", "format": "wav"}}],
+        }
+    )
     processor.run()
     draft.assert_not_called()

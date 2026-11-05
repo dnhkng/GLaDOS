@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import socket
-from pathlib import Path
-from typing import Any
-
 import logging
+from pathlib import Path
+import socket
+from typing import Any
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -41,8 +40,7 @@ def _resolve_addresses(hostname: str) -> list[str]:
     addresses: set[str] = set()
     try:
         for info in socket.getaddrinfo(hostname, None):
-            addr = info[4][0]
-            addresses.add(addr)
+            addresses.add(str(info[4][0]))
     except socket.gaierror:
         pass
     return sorted(addresses)

@@ -1,11 +1,11 @@
 """The reply agent and console use the same task records and validation."""
 
 import json
-import queue
 from typing import Any
 import uuid
 
 from ..autonomy.slots import TaskSlot, TaskSlotStore
+from .protocol import MessageSink
 
 
 def save_task(store: TaskSlotStore, values: dict[str, Any]) -> TaskSlot:
@@ -17,7 +17,7 @@ def save_task(store: TaskSlotStore, values: dict[str, Any]) -> TaskSlot:
         raise ValueError("Task not found")
     if old and old.owner_id:
         raise ValueError("Managed jobs cannot be edited; use cancel_task to cancel them")
-    fields = {}
+    fields: dict[str, str] = {}
     for name, limit, default in (("title", 160, ""), ("summary", 2000, ""), ("report", 20000, "")):
         value = values.get(name, getattr(old, name, default) or default)
         if not isinstance(value, str) or len(value) > limit:
@@ -28,7 +28,14 @@ def save_task(store: TaskSlotStore, values: dict[str, Any]) -> TaskSlot:
     status = values.get("status", old.status if old else "open")
     if status not in {"open", "done", "blocked"}:
         raise ValueError("Task status must be open, done, or blocked")
-    return store.update_slot(slot_id, status=status, notify_user=False, **fields)
+    return store.update_slot(
+        slot_id,
+        title=fields["title"],
+        status=status,
+        summary=fields["summary"],
+        report=fields["report"],
+        notify_user=False,
+    )
 
 
 tool_definition = {
@@ -54,7 +61,7 @@ tool_definition = {
 
 
 class ManageSlot:
-    def __init__(self, llm_queue: queue.Queue, tool_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, llm_queue: MessageSink, tool_config: dict[str, Any] | None = None) -> None:
         self.llm_queue = llm_queue
         self.tool_config = tool_config or {}
 

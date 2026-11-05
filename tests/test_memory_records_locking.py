@@ -53,9 +53,8 @@ def test_unix_lock_excludes_other_writers_and_releases_on_error(tmp_path: Path) 
     import fcntl
 
     with pytest.raises(RuntimeError, match="write failed"), memory_records.locked(tmp_path):
-        with (tmp_path / ".memory.lock").open("a+b") as other:
-            with pytest.raises(BlockingIOError):
-                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with (tmp_path / ".memory.lock").open("a+b") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
         raise RuntimeError("write failed")
     with (tmp_path / ".memory.lock").open("a+b") as other:
         fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)

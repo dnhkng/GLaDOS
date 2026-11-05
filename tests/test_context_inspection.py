@@ -19,16 +19,21 @@ from tests.test_webapp import _FakeEngine
 
 
 def flatten(snapshot):
-    return [{k: v for k, v in message.items() if k != "index"}
-            for section in snapshot["sections"] for message in section["messages"]]
+    return [
+        {k: v for k, v in message.items() if k != "index"}
+        for section in snapshot["sections"]
+        for message in section["messages"]
+    ]
 
 
 def test_preview_uses_live_sources_in_model_order_without_changing_history(monkeypatch):
     monkeypatch.setattr("glados.core.llm_processor.current_time", lambda: {"time": "12:34"})
     processor = make_processor()
-    history = [{"role": "system", "content": "Base personality"},
-               {"role": "assistant", "content": "[summary] Previous hour: user wants English."},
-               {"role": "user", "content": "What changed?"}]
+    history = [
+        {"role": "system", "content": "Base personality"},
+        {"role": "assistant", "content": "[summary] Previous hour: user wants English."},
+        {"role": "user", "content": "What changed?"},
+    ]
     processor._conversation_store = ConversationStore(history)
     state = {"emotion": "P=-0.6; speak with irritation", "vision": "A red jacket appeared"}
     builder = ContextBuilder()
@@ -39,14 +44,30 @@ def test_preview_uses_live_sources_in_model_order_without_changing_history(monke
     builder.register("broken", lambda: 1 / 0)
     processor.context_builder = builder
     processor.vision_state = SimpleNamespace(as_message=lambda: {"role": "system", "content": state["vision"]})
-    processor.mcp_manager = SimpleNamespace(get_context_messages=lambda **kw: [{"role": "system", "content": "System info"}],
-                                            get_tool_definitions=lambda: [])
+    processor.mcp_manager = SimpleNamespace(
+        get_context_messages=lambda **kw: [{"role": "system", "content": "System info"}],
+        get_tool_definitions=list,
+    )
     processor.autonomy_system_prompt = "Autonomy instructions"
     preview = processor.context_preview()
     assert flatten(preview) == processor._build_messages(False)
     sources = [s["source"] for s in preview["sections"]]
-    assert sources == ["system", "speech", "console", "operator", "summary", "emotion", "slots", "mcp", "clock", "vision", "history"]
-    assert [m["index"] for s in preview["sections"] for m in s["messages"]] == list(range(1, preview["message_count"] + 1))
+    assert sources == [
+        "system",
+        "speech",
+        "console",
+        "operator",
+        "summary",
+        "emotion",
+        "slots",
+        "mcp",
+        "clock",
+        "vision",
+        "history",
+    ]
+    assert [m["index"] for s in preview["sections"] for m in s["messages"]] == list(
+        range(1, preview["message_count"] + 1)
+    )
     assert processor.last_context() is None
     assert processor._conversation_store.snapshot() == history
     state["vision"] = "A blue book appeared"
@@ -65,10 +86,19 @@ def test_real_submission_captures_extra_instructions_and_omits_binary_media(monk
     processor.completion_url = "http://localhost" + endpoint
     processor._ollama_mode = processor._is_ollama_endpoint()
     processor._conversation_store = ConversationStore([{"role": "system", "content": "Base prompt"}])
-    audio = [{"type": "input_audio", "input_audio": {"data": "SECRET-AUDIO-BYTES", "format": "wav"}},
-             {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,SECRET-IMAGE-BYTES"}}]
-    processor.llm_input_queue.put({"role": "user", "content": "Audio placeholder", "_native_audio": audio,
-                                   "_allow_tools": False, "_tool_reply_context": {"tool": "cpu_load", "result": "0.1"}})
+    audio = [
+        {"type": "input_audio", "input_audio": {"data": "SECRET-AUDIO-BYTES", "format": "wav"}},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,SECRET-IMAGE-BYTES"}},
+    ]
+    processor.llm_input_queue.put(
+        {
+            "role": "user",
+            "content": "Audio placeholder",
+            "_native_audio": audio,
+            "_allow_tools": False,
+            "_tool_reply_context": {"tool": "cpu_load", "result": "0.1"},
+        }
+    )
     payloads = []
 
     def post(*args, **kwargs):
@@ -103,9 +133,10 @@ def test_context_endpoint_modes_latest_worker_and_unavailable_states():
     processor = make_processor()
     engine.llm_processor = processor
     assert not build_context(engine, view="request")["available"]
-    engine.autonomy_llm_processors = [SimpleNamespace(last_context=lambda: {
-        "available": True, "mode": "autonomy", "captured_at": 1}), SimpleNamespace(last_context=lambda: {
-        "available": True, "mode": "autonomy", "captured_at": 2})]
+    engine.autonomy_llm_processors = [
+        SimpleNamespace(last_context=lambda: {"available": True, "mode": "autonomy", "captured_at": 1}),
+        SimpleNamespace(last_context=lambda: {"available": True, "mode": "autonomy", "captured_at": 2}),
+    ]
     assert build_context(engine, "autonomy", "request")["captured_at"] == 2
     server = WebappServer(engine, port=0)
     server.start()
@@ -135,16 +166,21 @@ def test_context_endpoint_modes_latest_worker_and_unavailable_states():
 
 @pytest.mark.parametrize("pending_tool", [False, True])
 def test_live_updates_preserve_completed_history_prefix_and_tool_exchanges(
-    monkeypatch: pytest.MonkeyPatch, pending_tool: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    pending_tool: bool,
 ) -> None:
     processor = make_processor()
-    completed = [{"role": "system", "content": "Base personality"},
-                 {"role": "user", "content": "Earlier question"},
-                 {"role": "assistant", "content": "Earlier answer"}]
+    completed = [
+        {"role": "system", "content": "Base personality"},
+        {"role": "user", "content": "Earlier question"},
+        {"role": "assistant", "content": "Earlier answer"},
+    ]
     current = [{"role": "user", "content": "Current question"}]
     if pending_tool:
-        current += [{"role": "assistant", "tool_calls": [{"id": "clock", "function": {"name": "get_time"}}]},
-                    {"role": "tool", "tool_call_id": "clock", "content": "12:34"}]
+        current += [
+            {"role": "assistant", "tool_calls": [{"id": "clock", "function": {"name": "get_time"}}]},
+            {"role": "tool", "tool_call_id": "clock", "content": "12:34"},
+        ]
     processor._conversation_store = ConversationStore(completed + current)
     state = {"clock": "12:34", "emotion": "Neutral", "vision": "Red cup"}
     monkeypatch.setattr("glados.core.llm_processor.current_time", lambda: {"time": state["clock"]})
@@ -159,10 +195,10 @@ def test_live_updates_preserve_completed_history_prefix_and_tool_exchanges(
     first_live = next(i for i, message in enumerate(after) if message["content"] == "Irritated")
     assert before[:first_live] == after[:first_live]
     assert after[first_live - 1] == completed[-1], "History belongs before rapidly changing sensor data"
-    assert after[-len(current):] == current, "Tool calls and their results must remain adjacent"
+    assert after[-len(current) :] == current, "Tool calls and their results must remain adjacent"
     processor._add_request_context(after, "New routing result")
     assert after[:first_live] == before[:first_live]
-    assert after[-len(current):] == current
+    assert after[-len(current) :] == current
     assert after[-len(current) - 1]["content"] == "Blue cup"
     assert processor._conversation_store.snapshot() == completed + current
 
@@ -174,16 +210,19 @@ def test_completed_turn_remains_before_live_context(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("glados.core.llm_processor.current_time", lambda: {"time": "12:34"})
     messages = processor._build_messages(False)
     clock_index = next(i for i, message in enumerate(messages) if "Live system clock" in str(message["content"]))
-    assert messages[clock_index-2:clock_index] == history
+    assert messages[clock_index - 2 : clock_index] == history
 
 
 def test_context_numbers_use_payload_order_not_internal_history_indices() -> None:
-    messages = [{"role": "system", "content": "Personality", "index": 50},
-                {"role": "assistant", "content": "Previous reply", "index": 0},
-                {"role": "system", "content": "PAD and tone"},
-                {"role": "user", "content": "New input", "index": 2}]
-    snapshot = describe_context(messages, ["system", "history", "emotion", "input"], [],
-                                model="test", mode="user", kind="request")
+    messages = [
+        {"role": "system", "content": "Personality", "index": 50},
+        {"role": "assistant", "content": "Previous reply", "index": 0},
+        {"role": "system", "content": "PAD and tone"},
+        {"role": "user", "content": "New input", "index": 2},
+    ]
+    snapshot = describe_context(
+        messages, ["system", "history", "emotion", "input"], [], model="test", mode="user", kind="request"
+    )
     assert [m["index"] for section in snapshot["sections"] for m in section["messages"]] == [1, 2, 3, 4]
     assert [section["source"] for section in snapshot["sections"]] == ["system", "history", "emotion", "input"]
     assert "Live PAD" in snapshot["sections"][2]["description"]

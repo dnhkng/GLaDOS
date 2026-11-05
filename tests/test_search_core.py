@@ -89,13 +89,26 @@ def test_favorite_sites_focus_query_and_review_without_restricting_followups(cor
 
 def test_news_reads_both_favorite_pages_before_review_without_web_search(core: tuple) -> None:
     agent, search, model = core
-    agent.preferences.update({"weather": [], "news": ["news.ycombinator.com", "huggingnews.com"],
-                              "reddit": [], "general": []})
+    agent.preferences.update(
+        {"weather": [], "news": ["news.ycombinator.com", "huggingnews.com"], "reddit": [], "general": []}
+    )
     agent._read_page.side_effect = [
-        {"url": "https://news.ycombinator.com/", "title": "Hacker News", "published": None,
-         "kind": "news_page", "retrieved_at": "2026-10-06T16:00:00Z", "excerpt": PRICE},
-        {"url": "https://huggingnews.com/", "title": "HuggingNews", "published": None,
-         "kind": "news_page", "retrieved_at": "2026-10-06T16:00:00Z", "excerpt": PURPOSE},
+        {
+            "url": "https://news.ycombinator.com/",
+            "title": "Hacker News",
+            "published": None,
+            "kind": "news_page",
+            "retrieved_at": "2026-10-06T16:00:00Z",
+            "excerpt": PRICE,
+        },
+        {
+            "url": "https://huggingnews.com/",
+            "title": "HuggingNews",
+            "published": None,
+            "kind": "news_page",
+            "retrieved_at": "2026-10-06T16:00:00Z",
+            "excerpt": PURPOSE,
+        },
     ]
     model.return_value = review(findings=[{"source_id": 1, "quote": PRICE}, {"source_id": 2, "quote": PURPOSE}])
     result = json.loads(agent.research({"query": "check the news today"}))
@@ -112,11 +125,18 @@ def test_news_reads_both_favorite_pages_before_review_without_web_search(core: t
 def test_news_page_gaps_use_search_and_preserve_page_evidence(core: tuple) -> None:
     agent, search, model = core
     agent.preferences.update({"weather": [], "news": ["favorite.example.org/news"], "reddit": [], "general": []})
-    agent._read_page.return_value = {"url": "https://favorite.example.org/news", "title": "News",
-                                    "published": None, "kind": "news_page", "excerpt": PRICE}
+    agent._read_page.return_value = {
+        "url": "https://favorite.example.org/news",
+        "title": "News",
+        "published": None,
+        "kind": "news_page",
+        "excerpt": PRICE,
+    }
     search.return_value = source(2, PURPOSE)
-    model.side_effect = [review("search", gaps=["Purpose missing"], query="module official release", objective="Purpose"),
-                         review(findings=[{"source_id": 2, "quote": PURPOSE}])]
+    model.side_effect = [
+        review("search", gaps=["Purpose missing"], query="module official release", objective="Purpose"),
+        review(findings=[{"source_id": 2, "quote": PURPOSE}]),
+    ]
     result = json.loads(agent.research({"query": "module news", "objective": "Price and purpose"}))
     assert result["status"] == "done" and len(result["findings"]) == 2
     agent._read_page.assert_called_once()
@@ -136,11 +156,18 @@ def test_news_page_failure_falls_back_to_search(core: tuple) -> None:
 def test_reading_news_pages_does_not_count_as_already_searching_the_query(core: tuple) -> None:
     agent, search, model = core
     agent.preferences.update({"weather": [], "news": ["favorite.example.org/news"], "reddit": [], "general": []})
-    agent._read_page.return_value = {"url": "https://favorite.example.org/news", "title": "News",
-                                    "published": None, "kind": "news_page", "excerpt": PRICE}
+    agent._read_page.return_value = {
+        "url": "https://favorite.example.org/news",
+        "title": "News",
+        "published": None,
+        "kind": "news_page",
+        "excerpt": PRICE,
+    }
     search.return_value = source(2, PURPOSE)
-    model.side_effect = [review("search", gaps=["Purpose missing"], query="module news", objective="Purpose"),
-                         review(findings=[{"source_id": 2, "quote": PURPOSE}])]
+    model.side_effect = [
+        review("search", gaps=["Purpose missing"], query="module news", objective="Purpose"),
+        review(findings=[{"source_id": 2, "quote": PURPOSE}]),
+    ]
     result = json.loads(agent.research({"query": "module news", "objective": "Price and purpose"}))
     assert result["status"] == "done" and len(result["findings"]) == 2
     search.assert_called_once()

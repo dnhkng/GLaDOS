@@ -14,7 +14,7 @@ from glados.autonomy.subagent import SubagentConfig
 from glados.core.audio_data import AudioMessage
 from glados.core.engine import Glados
 from glados.core.speech_markup import SpeechText
-from glados.core.tool_executor import _ToolResultQueue
+from glados.core.tool_executor import ToolResultQueue
 from glados.core.tts_synthesizer import TextToSpeechSynthesizer
 from tests.test_speech_markup import make_processor
 
@@ -29,14 +29,16 @@ def emotion_agent(monkeypatch: pytest.MonkeyPatch) -> EmotionAgent:
 def test_reaction_uses_current_input_and_idle_does_not_reset_anger(monkeypatch: pytest.MonkeyPatch) -> None:
     agent = emotion_agent(monkeypatch)
     from dataclasses import replace
-    model = Mock(side_effect=lambda events, audio=None, **kw: replace(
-        kw["state"], pleasure=-.8, arousal=.8, dominance=.9))
+
+    model = Mock(
+        side_effect=lambda events, audio=None, **kw: replace(kw["state"], pleasure=-0.8, arousal=0.8, dominance=0.9)
+    )
     monkeypatch.setattr(agent, "_ask_llm", model)
     audio = [{"type": "input_audio", "input_audio": {"data": "audio", "format": "wav"}}]
     agent.react("You are useless", audio)
     model.assert_not_called()
     agent.run(agent.runtime)
-    assert agent.state.pleasure == -.8
+    assert agent.state.pleasure == -0.8
     assert "angry glare" in agent.state.response_instructions()
     assert model.call_args.args[1] == audio
     assert "You are useless" in model.call_args.args[0][0].description
@@ -80,8 +82,8 @@ def test_sleep_pauses_minds_drains_work_and_restores_previous_pauses() -> None:
         pending = queue.Queue()
         pending.put("stale")
         setattr(engine, name, pending)
-    engine.subagent_manager.pause = (
-        lambda agent_id, paused=True: engine.subagent_manager.get(agent_id).set_paused(paused)
+    engine.subagent_manager.pause = lambda agent_id, paused=True: engine.subagent_manager.get(agent_id).set_paused(
+        paused
     )
     Glados.set_quiet_mode(engine, True)
     assert engine.quiet_event.is_set() and all(a.paused for a in agents.values())
@@ -153,7 +155,7 @@ def test_speech_and_tool_results_from_old_generation_are_dropped() -> None:
     processor._process_sentence_for_tts(["Old reply"])
     assert processor.tts_input_queue.empty()
     target = queue.Queue()
-    wrapper = _ToolResultQueue(target, {"function": {"name": "get_time"}}, cancelled=lambda: True)
+    wrapper = ToolResultQueue(target, {"function": {"name": "get_time"}}, cancelled=lambda: True)
     wrapper.put({"role": "tool", "content": "old"})
     assert target.empty()
     pending = queue.Queue()
@@ -205,9 +207,14 @@ def test_late_connection_error_after_sleep_and_wake_cannot_speak(monkeypatch: py
 
 
 def test_new_user_turn_invalidates_work_without_entering_quiet_mode() -> None:
-    engine = SimpleNamespace(_quiet_lock=threading.RLock(), _quiet_generation=4, inference_scheduler=Mock(),
-                             processing_active_event=threading.Event(), audio_io=Mock(),
-                             quiet_event=threading.Event())
+    engine = SimpleNamespace(
+        _quiet_lock=threading.RLock(),
+        _quiet_generation=4,
+        inference_scheduler=Mock(),
+        processing_active_event=threading.Event(),
+        audio_io=Mock(),
+        quiet_event=threading.Event(),
+    )
     engine.processing_active_event.set()
     for name in ("llm_queue_priority", "tts_queue", "audio_queue", "tool_calls_queue"):
         pending = queue.Queue()
@@ -216,8 +223,9 @@ def test_new_user_turn_invalidates_work_without_entering_quiet_mode() -> None:
     assert Glados._begin_user_turn(engine) == 5
     engine.inference_scheduler.begin_interaction.assert_called_once_with(5)
     assert not engine.quiet_event.is_set() and not engine.processing_active_event.is_set()
-    assert all(getattr(engine, name).empty() for name in
-               ("llm_queue_priority", "tts_queue", "audio_queue", "tool_calls_queue"))
+    assert all(
+        getattr(engine, name).empty() for name in ("llm_queue_priority", "tts_queue", "audio_queue", "tool_calls_queue")
+    )
     engine.audio_io.stop_speaking.assert_called_once()
 
 
@@ -231,11 +239,13 @@ def test_cancelled_stream_cannot_resume_after_processing_flag_is_reset(monkeypat
         response = MagicMock(status_code=200)
         response.__enter__.return_value = response
         response.__exit__.side_effect = lambda *args: processor.shutdown_event.set()
+
         def lines(chunk_size: int = 1):
             epoch[0] = 2
             processor.processing_active_event.clear()
             processor.processing_active_event.set()
             yield b'data: {"choices":[{"delta":{"content":"Old reply."}}]}'
+
         response.iter_lines.side_effect = lines
         return response
 
@@ -251,6 +261,7 @@ def test_queued_old_turn_is_discarded_and_tool_result_keeps_its_generation(monke
     processor.llm_input_queue.put({"role": "user", "content": "stale", "_quiet_generation": 1})
     processor.llm_input_queue.put({"role": "user", "content": "current", "_quiet_generation": 2, "_allow_tools": False})
     requests_seen = []
+
     def post(*args, **kwargs):
         requests_seen.append(kwargs["json"])
         processor.shutdown_event.set()
@@ -258,27 +269,39 @@ def test_queued_old_turn_is_discarded_and_tool_result_keeps_its_generation(monke
         response.__enter__.return_value = response
         response.iter_lines.return_value = iter(())
         return response
+
     monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
     processor.run()
     assert len(requests_seen) == 1
     assert "stale" not in str(requests_seen)
     target = queue.Queue()
-    _ToolResultQueue(target, {"function": {"name": "get_time"}, "_quiet_generation": 2}).put(
-        {"role": "tool", "content": "result"})
+    ToolResultQueue(target, {"function": {"name": "get_time"}, "_quiet_generation": 2}).put(
+        {"role": "tool", "content": "result"}
+    )
     assert target.get_nowait()["_quiet_generation"] == 2
 
 
 def test_synthesis_finishing_after_new_turn_is_discarded() -> None:
     import numpy as np
+
     epoch = [1]
     shutdown = threading.Event()
     pending, output = queue.Queue(), queue.Queue()
     pending.put(SpeechText("Old sentence", generation=1))
+
     def generate(text):
         epoch[0] = 2
         shutdown.set()
         return np.ones(100, dtype=np.float32)
+
     model = SimpleNamespace(sample_rate=16000, generate_speech_audio=generate)
-    TextToSpeechSynthesizer(pending, output, model, SimpleNamespace(text_to_spoken=lambda t: t),
-                            shutdown, .001, quiet_generation=lambda: epoch[0]).run()
+    TextToSpeechSynthesizer(
+        pending,
+        output,
+        model,
+        SimpleNamespace(text_to_spoken=lambda t: t),
+        shutdown,
+        0.001,
+        quiet_generation=lambda: epoch[0],
+    ).run()
     assert output.empty()

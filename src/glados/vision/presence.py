@@ -3,6 +3,7 @@
 from datetime import date, datetime
 import json
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -25,9 +26,9 @@ class DailyGreetingHistory:
         """Reset live evidence without forgetting today's sighting."""
         self._last_at: float | None = None
         self._last_presence: str | None = None
-        self._event: dict | None = None
+        self._event: dict[str, Any] | None = None
 
-    def observe(self, presence: str, captured_at: float, max_gap_s: float = 30) -> dict | None:
+    def observe(self, presence: str, captured_at: float, max_gap_s: float = 30) -> dict[str, Any] | None:
         if self._last_at is not None and captured_at <= self._last_at:
             return self._event
         if self._last_at is not None and captured_at - self._last_at > max_gap_s:
@@ -71,9 +72,9 @@ class PresenceHistory:
     def reset(self) -> None:
         self.last_at: float | None = None
         self.absent_since: float | None = None
-        self.arrival: dict | None = None
+        self.arrival: dict[str, Any] | None = None
 
-    def observe(self, presence: str, captured_at: float, max_gap_s: float = 30) -> dict | None:
+    def observe(self, presence: str, captured_at: float, max_gap_s: float = 30) -> dict[str, Any] | None:
         if self.last_at is not None and captured_at <= self.last_at:
             return self.arrival
         if self.last_at is not None and captured_at - self.last_at > max_gap_s:

@@ -7,8 +7,11 @@ from typing import Any
 from ..core.conversation_store import ConversationStore
 from .slots import TaskSlot
 
+# A comparable identity of what a slot currently says; equal versions mean nothing new to announce.
+Version = tuple[object, ...]
 
-def slot_version(slot: TaskSlot) -> tuple:
+
+def slot_version(slot: TaskSlot) -> Version:
     return (slot.attention_key, slot.status, slot.summary, slot.context, slot.report)
 
 
@@ -16,7 +19,7 @@ def slot_evidence(slots: list[TaskSlot], budget_chars: int = 32000) -> list[dict
     """Bound details before summaries; handled results remain available via report lookup."""
     now = time.time()
     selected = [s for s in sorted(slots, key=lambda slot: slot.slot_id) if not s.handled]
-    rows = [
+    rows: list[dict[str, Any]] = [
         {
             "slot_id": s.slot_id,
             "title": s.title[:80],
@@ -30,7 +33,10 @@ def slot_evidence(slots: list[TaskSlot], budget_chars: int = 32000) -> list[dict
         }
         for s in selected
     ]
-    encode = lambda value: json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+    def encode(value: object) -> str:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
     # Drop prose before states. Active jobs take precedence if a pathological number
     # of user records exceeds even the identity budget.
     if len(encode(rows)) > budget_chars:
@@ -46,8 +52,8 @@ def slot_evidence(slots: list[TaskSlot], budget_chars: int = 32000) -> list[dict
         rows.append({"omitted_slots": omitted, "note": "Additional records available on the task board"})
     by_id = {row.get("slot_id"): row for row in rows}
     for slot in sorted(selected, key=lambda slot: slot.update_priority != "important"):
-        row = by_id.get(slot.slot_id)
-        if row is None:
+        entry = by_id.get(slot.slot_id)
+        if entry is None:
             continue
         detail = slot.report or slot.context or ""
         if slot.context and slot.context not in detail:
@@ -57,16 +63,16 @@ def slot_evidence(slots: list[TaskSlot], budget_chars: int = 32000) -> list[dict
         low, high = 0, min(3500, len(detail))
         while low < high:
             mid = (low + high + 1) // 2
-            row.update(evidence=detail[:mid], excerpt=mid < len(detail))
+            entry.update(evidence=detail[:mid], excerpt=mid < len(detail))
             if len(encode(rows)) <= budget_chars:
                 low = mid
             else:
                 high = mid - 1
         if low:
-            row.update(evidence=detail[:low], excerpt=low < len(detail))
+            entry.update(evidence=detail[:low], excerpt=low < len(detail))
         else:
-            row.pop("evidence", None)
-            row.pop("excerpt", None)
+            entry.pop("evidence", None)
+            entry.pop("excerpt", None)
     return rows
 
 

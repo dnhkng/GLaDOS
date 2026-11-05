@@ -11,14 +11,14 @@ import requests
 from glados.core.conversation_store import ConversationStore
 from glados.core.inference import InferenceScheduler
 from glados.core.llm_processor import INTERNET_SEARCH_TOOL, LanguageModelProcessor
-from glados.core.tool_executor import _ToolResultQueue
+from glados.core.tool_executor import ToolResultQueue
 from glados.vision.vision_state import VisionState
+from tests.test_speech_markup import make_processor
 
 
 def _wire(name: str) -> str:
     """OpenAI-compatible endpoints reject dots, so MCP tools are offered as mcp_server_tool."""
     return name.replace(".", "_")
-from tests.test_speech_markup import make_processor
 
 
 @pytest.mark.parametrize("action", ["assist", "clarify", "unavailable"])
@@ -79,7 +79,8 @@ def test_full_assistant_receives_original_audio_and_limited_tools(
             "run_safe_command",
             "get_report",
             "get_preferences",
-        } | ({_wire(INTERNET_SEARCH_TOOL)} if search_enabled else set())
+        }
+        | ({_wire(INTERNET_SEARCH_TOOL)} if search_enabled else set())
     )
 
 
@@ -92,7 +93,8 @@ def test_search_is_available_in_replies_and_without_routing() -> None:
     processor.mcp_manager.get_tool_definitions.return_value = [search, system, write]
     assert processor._reply_tools() == [search]
     assert LanguageModelProcessor._filter_tools_for_message(
-        [search, system, write], "Search for recent astronomy news",
+        [search, system, write],
+        "Search for recent astronomy news",
     ) == [search]
 
 
@@ -107,7 +109,7 @@ def test_generated_write_tool_cannot_escape_read_only_fallback() -> None:
     assert call["id"] == "read" and call["_read_only_tools"]
     assert processor.tool_calls_queue.empty()
     target = queue.Queue()
-    _ToolResultQueue(target, call, bound=True).put({"role": "tool", "content": "load = 1"})
+    ToolResultQueue(target, call, bound=True).put({"role": "tool", "content": "load = 1"})
     assert target.get_nowait()["_allow_tools"] is False
 
 
@@ -167,8 +169,13 @@ def test_reply_routing_allows_a_fresh_visual_question_and_preserves_audio(
     monkeypatch.setattr("glados.core.llm_processor.requests.post", post)
     audio = [{"type": "input_audio", "input_audio": {"data": "original-question-audio", "format": "wav"}}]
     question = "Does my jacket have a zipper?"
-    processor.llm_input_queue.put({"role": "user", "content": "[Voice input]" if native_audio else question,
-                                   **({"_native_audio": audio} if native_audio else {})})
+    processor.llm_input_queue.put(
+        {
+            "role": "user",
+            "content": "[Voice input]" if native_audio else question,
+            **({"_native_audio": audio} if native_audio else {}),
+        }
+    )
     thread = threading.Thread(target=processor.run)
     thread.start()
     try:

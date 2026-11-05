@@ -35,8 +35,12 @@ dev = [
     "pytest-mock",
     "ruff",
     "ipykernel",
-    "types-requests",
+    "mypy",
+    "types-jsonschema",
+    "types-psutil",
     "types-PyYAML",
+    "types-regex",
+    "types-requests",
 ]
 export = [
     "nemo_toolkit[asr]>=2.6.1",
@@ -61,6 +65,11 @@ line-length = 120
 indent-width = 4
 
 # Enable all rules, including those that replace Black and isort
+# loguru's logger.exception() records the traceback, so an `except Exception` that calls it
+# is a deliberate, logged boundary rather than a swallowed error (BLE001).
+lint.logger-objects = ["loguru.logger"]
+# Pylint's argument-count checks assume %-style logging; loguru formats with {} placeholders.
+lint.ignore = ["PLE1205", "PLE1206"]
 lint.extend-select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
@@ -101,6 +110,10 @@ exclude = [
     "venv",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Test functions and fixtures are not an API; annotating every one adds noise, not safety.
+"tests/**" = ["ANN"]
+
 [tool.ruff.lint.isort]
 order-by-type = true
 force-sort-within-sections = true
@@ -116,6 +129,11 @@ python_version = "3.12"
 strict = true
 
 [[tool.mypy.overrides]]
-# Mixins of Glados / LanguageModelProcessor: their methods use state the host class's __init__ sets up.
-module = ["glados.core.commands", "glados.core.llm_wire"]
-disable_error_code = ["attr-defined"]
+# Third-party packages that ship neither inline types nor stubs on PyPI.
+module = ["onnxruntime.*", "sounddevice.*", "soundfile.*", "threadpoolctl.*", "numba.*", "litestar.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The API server uses litestar from the optional "api" extra; without it installed its decorators are untyped.
+module = ["glados.api.*"]
+disallow_untyped_decorators = false

@@ -1,8 +1,7 @@
 """Tests for the thread-safe ConversationStore."""
 
-import threading
 from concurrent.futures import ThreadPoolExecutor
-
+import threading
 
 from glados.core.conversation_store import ConversationStore
 
@@ -60,7 +59,6 @@ class TestConversationStore:
         # Modifying snapshot should not affect store
         snapshot1.append({"role": "assistant", "content": "Hi"})
         assert len(store) == 1
-
 
     def test_replace_all(self) -> None:
         """Test atomic replacement of all messages."""
@@ -147,7 +145,7 @@ class TestConversationStoreThreadSafety:
             for i in range(100):
                 try:
                     store.append({"role": "user", "content": f"Message {i}"})
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - collected and asserted on the main thread
                     errors.append(e)
 
         def reader() -> None:
@@ -158,7 +156,7 @@ class TestConversationStoreThreadSafety:
                     for msg in snapshot:
                         assert "role" in msg
                         assert "content" in msg
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - collected and asserted on the main thread
                     errors.append(e)
 
         # Start multiple readers and writers

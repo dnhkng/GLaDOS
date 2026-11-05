@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 import struct
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..core.engine import Glados
 
 _SWITCH_LOCK = threading.Lock()
 
@@ -14,9 +17,11 @@ _SWITCH_LOCK = threading.Lock()
 def camera_devices() -> list[dict[str, Any]]:
     """Query Linux V4L2 capabilities without opening a capture stream."""
     import sys
+
     if not sys.platform.startswith("linux"):
         return []
     import fcntl
+
     devices = []
     for path in sorted(Path("/dev").glob("video*")):
         descriptor = None
@@ -37,13 +42,19 @@ def camera_devices() -> list[dict[str, Any]]:
     return devices
 
 
-def device_snapshot(engine: Any) -> dict[str, Any]:
+def device_snapshot(engine: Glados) -> dict[str, Any]:
     audio_io = getattr(engine, "audio_io", None)
-    audio = {"available": False, "input": [], "output": [], "reason": "Local audio device selection is unavailable for this backend."}
-    if hasattr(audio_io, "device_snapshot"):
+    audio = {
+        "available": False,
+        "input": [],
+        "output": [],
+        "reason": "Local audio device selection is unavailable for this backend.",
+    }
+    list_devices = getattr(audio_io, "device_snapshot", None)
+    if callable(list_devices):
         try:
-            audio = audio_io.device_snapshot()
-        except Exception as exc:
+            audio = list_devices()
+        except Exception as exc:  # noqa: BLE001 - PortAudio errors are not OSError subclasses
             audio["reason"] = f"Audio devices could not be listed: {exc}"
     vision = getattr(engine, "vision_agent", None)
     camera = vision.camera.snapshot().get("device", vision.settings.camera_spec) if vision else None
@@ -55,7 +66,7 @@ def device_snapshot(engine: Any) -> dict[str, Any]:
     return {"audio": audio, "camera": {"available": vision is not None, "devices": cameras, "selected": selected}}
 
 
-def select_device(engine: Any, kind: str, device: Any) -> None:
+def select_device(engine: Glados, kind: str, device: object) -> None:
     with _SWITCH_LOCK:
         if kind == "camera":
             vision = getattr(engine, "vision_agent", None)
@@ -70,8 +81,8 @@ def select_device(engine: Any, kind: str, device: Any) -> None:
                 raise ValueError("The selected webcam is no longer available; refresh the device list")
             vision.select_camera(device)
         elif kind in {"microphone", "speaker"}:
-            audio = getattr(engine, "audio_io", None)
-            if not hasattr(audio, "select_device"):
+            switch = getattr(getattr(engine, "audio_io", None), "select_device", None)
+            if not callable(switch):
                 raise ValueError("Local audio device selection is unavailable for this backend")
             if device is not None and (type(device) is not int or device < 0):
                 raise ValueError("Choose a listed audio device or the system default")
@@ -83,11 +94,11 @@ def select_device(engine: Any, kind: str, device: Any) -> None:
                 muted = engine.asr_muted_event.is_set()
                 engine.set_asr_muted(True)
                 try:
-                    audio.select_device(kind, device)
+                    switch(kind, device)
                 finally:
                     engine.set_asr_muted(muted)
             else:
-                audio.select_device(kind, device)
+                switch(kind, device)
         else:
             raise ValueError("Choose camera, microphone or speaker")
         bus = getattr(engine, "observability_bus", None)

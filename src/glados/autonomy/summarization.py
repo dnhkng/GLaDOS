@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
+from typing import Any
 
 from .token_estimator import TokenEstimator, get_default_estimator
-
-if TYPE_CHECKING:
-    pass
 
 
 def estimate_tokens(

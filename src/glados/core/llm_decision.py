@@ -21,15 +21,15 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
-
-from ..autonomy.llm_client import LLMConfig
+import json
 from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel
+
+from ..autonomy.llm_client import LLMConfig
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -37,9 +37,7 @@ T = TypeVar("T", bound=BaseModel)
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm_decide")
 
 
-
-
-async def llm_decide(
+async def llm_decide[T: BaseModel](
     prompt: str,
     context: dict[str, Any],
     schema: type[T],
@@ -89,15 +87,26 @@ async def llm_decide(
     }
 
     try:
-        def request():
-            guard = config.scheduler.lease(
-                config.owner, "autonomy", config.model,
-                lambda: bool(config.shutdown_event and config.shutdown_event.is_set()),
-            ) if config.scheduler else nullcontext()
+
+        def request() -> dict[str, Any]:
+            guard = (
+                config.scheduler.lease(
+                    config.owner,
+                    "autonomy",
+                    config.model,
+                    lambda: bool(config.shutdown_event and config.shutdown_event.is_set()),
+                )
+                if config.scheduler
+                else nullcontext()
+            )
             with guard, httpx.Client(timeout=config.timeout) as client:
                 response = client.post(config.url, headers=config.headers, json=data)
                 response.raise_for_status()
-                return response.json()
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise LLMDecisionError("LLM response is not a JSON object")
+                return payload
+
         result = await asyncio.to_thread(request)
 
         # Extract content from response
@@ -118,7 +127,7 @@ async def llm_decide(
         raise LLMDecisionError(f"Decision failed: {e}") from e
 
 
-def llm_decide_sync(
+def llm_decide_sync[T: BaseModel](
     prompt: str,
     context: dict[str, Any],
     schema: type[T],
@@ -147,7 +156,6 @@ def llm_decide_sync(
 
 class LLMDecisionError(Exception):
     """Raised when an LLM decision fails."""
-    pass
 
 
 def _build_schema_hint(schema: type[BaseModel]) -> str:
@@ -165,19 +173,21 @@ def _build_schema_hint(schema: type[BaseModel]) -> str:
             else:
                 fields.append(f'  "{name}": {field_type}')
         return "{\n" + ",\n".join(fields) + "\n}"
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return "{...}"
 
 
 def _extract_content(result: dict[str, Any]) -> str | None:
     """Extract content from OpenAI or Ollama response format."""
     # OpenAI format
-    if "choices" in result and result["choices"]:
-        return result["choices"][0]["message"]["content"]
+    if result.get("choices"):
+        content = result["choices"][0]["message"]["content"]
+        return content if isinstance(content, str) else None
 
     # Ollama format
     if "message" in result:
-        return result["message"].get("content")
+        content = result["message"].get("content")
+        return content if isinstance(content, str) else None
 
     return None
 
@@ -189,12 +199,14 @@ def _extract_content(result: dict[str, Any]) -> str | None:
 
 class WakeWordDecision(BaseModel):
     """Decision for wake word detection."""
+
     detected: bool
     confidence: float
 
 
 class UrgencyDecision(BaseModel):
     """Decision for alert/notification urgency."""
+
     notify_user: bool
     importance: float
     reason: str
@@ -202,6 +214,7 @@ class UrgencyDecision(BaseModel):
 
 class TimingDecision(BaseModel):
     """Decision for autonomy timing."""
+
     should_speak: bool
     wait_seconds: int
     reason: str
@@ -209,12 +222,14 @@ class TimingDecision(BaseModel):
 
 class CompactionDecision(BaseModel):
     """Decision for message compaction."""
+
     indices_to_summarize: list[int]
     reason: str
 
 
 class RelevanceDecision(BaseModel):
     """Decision for content relevance (news, etc.)."""
+
     relevant: bool
     importance: float
     summary: str

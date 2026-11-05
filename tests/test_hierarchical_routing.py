@@ -101,7 +101,9 @@ def scripted_scores(
     return post
 
 
-def test_local_time_reply_uses_clock_without_tool_permit(router: DecisionRouter, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_time_reply_uses_clock_without_tool_permit(
+    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
     post = scripted_scores(router, monkeypatch, [("area", "reply")])
     result = router.score(router.store.get(), "What time is it?")
     assert result["action"] == "reply" and result["tool"] is None
@@ -113,9 +115,10 @@ def test_local_time_reply_uses_clock_without_tool_permit(router: DecisionRouter,
 
 
 def test_router_rules_stay_identical_when_history_changes(
-    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch,
+    router: DecisionRouter,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    post = scripted_scores(router, monkeypatch, [("area", "reply")]*3)
+    post = scripted_scores(router, monkeypatch, [("area", "reply")] * 3)
     decision = router.store.get()
     router.score(decision, "What time is it?", context=[{"role": "assistant", "content": "Earlier answer"}])
     audio = [{"type": "input_audio", "input_audio": {"data": "recording", "format": "wav"}}]
@@ -174,7 +177,9 @@ def test_uncertainty_stops_the_pipeline_without_tool_authority(
     monkeypatch: pytest.MonkeyPatch,
     uncertain: int,
 ) -> None:
-    post = scripted_scores(router, monkeypatch, [("area", "area_system"), ("system", "command_cpu_load")], uncertain=uncertain)
+    post = scripted_scores(
+        router, monkeypatch, [("area", "area_system"), ("system", "command_cpu_load")], uncertain=uncertain
+    )
     result = router.score(router.store.get(), "Maybe do it")
     assert result["action"] == "assist" and not result["accepted"]
     assert result["tool"] is None and result["tool_scope"] == []
@@ -198,7 +203,7 @@ def test_unavailable_tools_and_large_registries_keep_short_choices(router: Decis
     assert all(2 <= len(node.decision.options) <= 19 for node in tree.nodes.values())
     assert "vision" not in tree.nodes and "system" not in tree.nodes
     assert len(tree.nodes) > 5
-    router.store.tools = lambda: []
+    router.store.tools = list
     assert not router.tree(router.store.get()).catalog
 
 
@@ -269,7 +274,9 @@ def test_executor_rejects_a_call_when_its_scoped_settings_changed(
         worker.join(2)
 
 
-def test_sleep_branch_checks_affirmation_before_changing_mode(router: DecisionRouter, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sleep_branch_checks_affirmation_before_changing_mode(
+    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
     scripted_scores(router, monkeypatch, [("area", "quiet_mode_enter"), ("quiet_control", "proceed")])
     result = router.score(router.store.get(), "Don't go to sleep")
     assert result["action"] == "reply" and len(result["stages"]) == 2
@@ -286,8 +293,11 @@ def test_named_timezone_keeps_timezone_tool_scope(router: DecisionRouter, monkey
 
 def test_clock_choice_is_absent_and_legacy_context_aliases_are_ignored(router: DecisionRouter) -> None:
     decision = router.store.get()
-    decision.options.append(DecisionOption(id="legacy_clock", action="reply", context_source="clock",
-                                           description="Local clock from context"))
+    decision.options.append(
+        DecisionOption(
+            id="legacy_clock", action="reply", context_source="clock", description="Local clock from context"
+        )
+    )
     tree = router.tree(decision)
     assert "clock" not in tree.nodes and "area_clock" not in tree.nodes["area"].children
     assert not any(o.context_source == "clock" for o in tree.nodes["area"].decision.options)
@@ -296,13 +306,20 @@ def test_clock_choice_is_absent_and_legacy_context_aliases_are_ignored(router: D
 
 
 def test_saved_timezone_binding_moves_from_system_and_retains_permit(
-    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch,
+    router: DecisionRouter,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     decision = router.store.get()
-    decision.options.append(DecisionOption(
-        id="tokyo_clock", action="tool", tool="get_time", category="system",
-        arguments={"timezone": "Asia/Tokyo"}, description="Read the current Tokyo time",
-    ))
+    decision.options.append(
+        DecisionOption(
+            id="tokyo_clock",
+            action="tool",
+            tool="get_time",
+            category="system",
+            arguments={"timezone": "Asia/Tokyo"},
+            description="Read the current Tokyo time",
+        )
+    )
     settings = router.store.snapshot()
     router.store.mutate({"action": "save", "revision": settings["revision"], "list": decision.model_dump()})
     scripted_scores(router, monkeypatch, [("area", "area_system"), ("system", "tokyo_clock")])
@@ -314,7 +331,10 @@ def test_saved_timezone_binding_moves_from_system_and_retains_permit(
 @pytest.mark.parametrize("branch", ["area", "system", "mcp"])
 @pytest.mark.parametrize("fallback", ["assist", "clarify"])
 def test_explicit_no_match_uses_fallback_without_tool_authority(
-    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch, branch: str, fallback: str,
+    router: DecisionRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    branch: str,
+    fallback: str,
 ) -> None:
     decision = router.store.get().model_copy(update={"fallback": fallback})
     choices = [] if branch == "area" else [("area", "area_" + branch)]
@@ -331,10 +351,15 @@ def test_explicit_no_match_uses_fallback_without_tool_authority(
 def test_multi_tool_mcp_retains_tool_selection(router: DecisionRouter, monkeypatch: pytest.MonkeyPatch) -> None:
     tools = [*router.store.tools(), definition("mcp.lights.turn_off", "Turn off a named light")]
     router.store.tools = lambda: tools
-    post = scripted_scores(router, monkeypatch, [
-        ("area", "area_mcp"), ("mcp", identity("choose_", "lights")),
-        (identity("server_", "lights"), identity("tool_", "mcp.lights.turn_off")),
-    ])
+    post = scripted_scores(
+        router,
+        monkeypatch,
+        [
+            ("area", "area_mcp"),
+            ("mcp", identity("choose_", "lights")),
+            (identity("server_", "lights"), identity("tool_", "mcp.lights.turn_off")),
+        ],
+    )
     result = router.score(router.store.get(), "Turn off the kitchen light")
     assert result["server"] == "lights" and post.call_count == 3
     assert result["tool_scope"] == ["mcp.lights.turn_off"]
@@ -351,10 +376,20 @@ def test_slow_clap_prefers_mcp_and_retains_offline_or_explicit_local_binding(rou
     mcp_choice = identity("choose_", "slow_clap_demo")
     assert tree.nodes["mcp"].scopes[mcp_choice] == ["mcp.slow_clap_demo.slow_clap"]
     assert tree.server_choices[mcp_choice] == "slow_clap_demo"
-    explicit = decision.model_copy(update={"options": [*decision.options, DecisionOption(
-        id="local_clap", action="tool", tool="slow_clap", arguments={"claps": 2},
-        description="Play the local slow-clap audio twice",
-    )]})
+    explicit = decision.model_copy(
+        update={
+            "options": [
+                *decision.options,
+                DecisionOption(
+                    id="local_clap",
+                    action="tool",
+                    tool="slow_clap",
+                    arguments={"claps": 2},
+                    description="Play the local slow-clap audio twice",
+                ),
+            ]
+        }
+    )
     assert "local_clap" in router.tree(explicit).nodes["other"].bindings
     router.store.tools = lambda: local_tools
     offline = router.tree(decision)
@@ -363,16 +398,27 @@ def test_slow_clap_prefers_mcp_and_retains_offline_or_explicit_local_binding(rou
 
 
 def test_fixed_binding_to_no_argument_tool_has_no_duplicate_dynamic_choice(router: DecisionRouter) -> None:
-    tools = [{"type": "function", "function": {
-        "name": "get_preferences", "description": "Read saved preferences",
-        "parameters": {"type": "object", "properties": {}},
-    }}]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_preferences",
+                "description": "Read saved preferences",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
     router.store.tools = lambda: tools
     decision = router.store.get()
-    decision.options.append(DecisionOption(
-        id="read_preferences", action="tool", tool="get_preferences", arguments={},
-        description="Read saved preferences",
-    ))
+    decision.options.append(
+        DecisionOption(
+            id="read_preferences",
+            action="tool",
+            tool="get_preferences",
+            arguments={},
+            description="Read saved preferences",
+        )
+    )
     tree = router.tree(decision)
     node = tree.nodes["memory"]
     assert [o.id for o in node.decision.options] == ["read_preferences", node.fallback_id]
@@ -380,7 +426,8 @@ def test_fixed_binding_to_no_argument_tool_has_no_duplicate_dynamic_choice(route
 
 
 def test_fixed_system_choice_retains_saved_execution_permit(
-    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch,
+    router: DecisionRouter,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scripted_scores(router, monkeypatch, [("area", "area_system"), ("system", "command_uptime")])
     result = router.score(router.store.get(), "How long has this machine been running?")
@@ -390,7 +437,8 @@ def test_fixed_system_choice_retains_saved_execution_permit(
 
 
 def test_collapsed_vision_scope_is_revoked_after_saved_edit(
-    router: DecisionRouter, monkeypatch: pytest.MonkeyPatch,
+    router: DecisionRouter,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scripted_scores(router, monkeypatch, [("area", "area_vision")])
     result = router.score(router.store.get(), "What can you see?")

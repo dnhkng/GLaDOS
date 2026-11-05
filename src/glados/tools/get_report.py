@@ -1,11 +1,13 @@
-import queue
 from typing import Any
+
+from .protocol import MessageSink
 
 tool_definition = {
     "type": "function",
     "function": {
         "name": "get_report",
-        "description": "Get detailed report from a subagent. Use when the summary in context isn't enough and you need more details.",
+        "description": "Get detailed report from a subagent. "
+        "Use when the summary in context isn't enough and you need more details.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -23,7 +25,7 @@ tool_definition = {
 class GetReport:
     def __init__(
         self,
-        llm_queue: queue.Queue[dict[str, Any]],
+        llm_queue: MessageSink,
         tool_config: dict[str, Any] | None = None,
     ) -> None:
         self.llm_queue = llm_queue

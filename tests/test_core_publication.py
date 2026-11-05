@@ -252,8 +252,10 @@ def test_search_outcomes_are_preserved(status: str) -> None:
 @pytest.fixture(autouse=True)
 def schedule_memory_cores(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     import tests.test_memory_recall as helpers
+
     original = helpers.core
     schedulers = []
+
     def create(tmp_path: Path, store: ConversationStore | None = None, **kwargs: object) -> CompactionAgent:
         agent = original(tmp_path, store, **kwargs)
         scheduler = MindScheduler(agent._slot_store)
@@ -261,6 +263,7 @@ def schedule_memory_cores(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         scheduler.start_all()
         schedulers.append(scheduler)
         return agent
+
     monkeypatch.setattr(helpers, "core", create)
     # This module imported the helper directly.
     monkeypatch.setattr(__import__(__name__, fromlist=["core"]), "core", create)

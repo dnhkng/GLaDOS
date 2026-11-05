@@ -1,33 +1,26 @@
 import asyncio
+from collections.abc import AsyncIterator, Iterable
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass
 import fnmatch
 import subprocess
 import threading
 import time
 import traceback
-from collections.abc import AsyncIterator, Iterable
-from contextlib import asynccontextmanager
-from concurrent.futures import TimeoutError as FuturesTimeoutError
-from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client  # The SDK's own factory, with its default timeouts.
+from pydantic import AnyUrl
 
+from ..observability import ObservabilityBus, trim_message
 from .config import MCPServerConfig
 from .search_results import SEARCH_TOOL, compact_search_results
-from ..observability import ObservabilityBus, trim_message
-
-try:
-    from mcp import ClientSession
-    from mcp.client.sse import sse_client
-    from mcp.client.stdio import StdioServerParameters, stdio_client
-    from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
-except ImportError:  # pragma: no cover - handled in runtime checks
-    ClientSession = None  # type: ignore[assignment]
-    sse_client = None  # type: ignore[assignment]
-    StdioServerParameters = None  # type: ignore[assignment]
-    stdio_client = None  # type: ignore[assignment]
-    create_mcp_http_client = None  # type: ignore[assignment]
-    streamable_http_client = None  # type: ignore[assignment]
 
 
 @asynccontextmanager
@@ -40,9 +33,11 @@ async def _http_transport(url: str, headers: dict[str, str]) -> AsyncIterator[An
     client. So we build one here with MCP defaults plus the auth headers and
     close it when the transport context exits.
     """
-    async with create_mcp_http_client(headers=headers) as client:
-        async with streamable_http_client(url, http_client=client) as streams:
-            yield streams
+    async with (
+        create_mcp_http_client(headers=headers) as client,
+        streamable_http_client(url, http_client=client) as streams,
+    ):
+        yield streams
 
 
 def _leaf_exceptions(exc: BaseException, depth: int = 0, max_depth: int = 8) -> list[str]:
@@ -126,8 +121,6 @@ class MCPManager:
     def start(self) -> None:
         if not self._servers:
             return
-        if ClientSession is None:
-            raise MCPError("MCP client library is not installed. Install the 'mcp' package to enable MCP support.")
         if self._thread.is_alive():
             return
         self._thread.start()
@@ -159,12 +152,15 @@ class MCPManager:
             category = config.routing_category if config else "mcp"
             if entry.server.casefold() == "memory":
                 category = "memory"
-            server = servers.setdefault(entry.server, {
-                "name": entry.server,
-                "description": config.description if config else "",
-                "category": category,
-                "tools": [],
-            })
+            server = servers.setdefault(
+                entry.server,
+                {
+                    "name": entry.server,
+                    "description": config.description if config else "",
+                    "category": category,
+                    "tools": [],
+                },
+            )
             server["tools"].append({"name": name, "description": entry.description or ""})
         return [servers[name] for name in sorted(servers)]
 
@@ -215,7 +211,7 @@ class MCPManager:
             tools = list(self._tool_registry.values())
         with self._resource_lock:
             resource_counts: dict[str, int] = {}
-            for (server_name, _uri) in self._resource_cache.keys():
+            for server_name, _uri in self._resource_cache:
                 resource_counts[server_name] = resource_counts.get(server_name, 0) + 1
         connected = set(self._sessions.keys())
         tool_counts: dict[str, int] = {}
@@ -261,23 +257,25 @@ class MCPManager:
             try:
                 # streamable_http_client yields 3 values (read, write, get_session_id);
                 # sse_client and stdio_client yield 2. *_ absorbs the extra trailing value.
-                async with self._open_transport(config) as (read_stream, write_stream, *_):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
-                        self._sessions[config.name] = session
-                        if self._observability_bus:
-                            self._observability_bus.emit(
-                                source="mcp",
-                                kind="connect",
-                                message=f"{config.name} connected",
-                                meta={"transport": config.transport},
-                            )
-                        await self._refresh_tools(config, session)
-                        await self._refresh_resources(config, session)
-                        await self._shutdown_async.wait()
+                async with (
+                    self._open_transport(config) as (read_stream, write_stream, *_),
+                    ClientSession(read_stream, write_stream) as session,
+                ):
+                    await session.initialize()
+                    self._sessions[config.name] = session
+                    if self._observability_bus:
+                        self._observability_bus.emit(
+                            source="mcp",
+                            kind="connect",
+                            message=f"{config.name} connected",
+                            meta={"transport": config.transport},
+                        )
+                    await self._refresh_tools(config, session)
+                    await self._refresh_resources(config, session)
+                    await self._shutdown_async.wait()
             except asyncio.CancelledError:
                 break
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - connection failures arrive as arbitrary exception groups
                 leaves = _leaf_exceptions(exc)
                 logger.warning(f"MCP: server '{config.name}' connection failed: leaves={leaves}")
                 tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
@@ -301,7 +299,7 @@ class MCPManager:
                         message=f"{config.name} disconnected",
                     )
 
-    def _open_transport(self, config: MCPServerConfig):
+    def _open_transport(self, config: MCPServerConfig) -> AbstractAsyncContextManager[tuple[Any, ...]]:
         """Return an *un-entered* async transport context manager for ``config``.
 
         The caller is expected to ``async with`` the returned object inside
@@ -326,7 +324,8 @@ class MCPManager:
                 raise MCPError(f"MCP server '{config.name}' requires a command for stdio transport.")
             params = StdioServerParameters(command=config.command, args=config.args, env=config.env)
             # Suppress subprocess stderr to prevent MCP logs from corrupting TUI
-            return stdio_client(params, errlog=subprocess.DEVNULL)
+            # The SDK annotates errlog as TextIO, but hands it to the subprocess as-is, so DEVNULL works.
+            return stdio_client(params, errlog=subprocess.DEVNULL)  # type: ignore[arg-type]
 
         if not config.url:
             raise MCPError(f"MCP server '{config.name}' requires a URL for {config.transport} transport.")
@@ -368,9 +367,7 @@ class MCPManager:
 
         with self._tool_lock:
             self._tool_registry = {
-                tool_name: entry
-                for tool_name, entry in self._tool_registry.items()
-                if entry.server != config.name
+                tool_name: entry for tool_name, entry in self._tool_registry.items() if entry.server != config.name
             }
             self._tool_registry.update(entries)
         if self._observability_bus:
@@ -403,7 +400,7 @@ class MCPManager:
         return content or "success"
 
     async def _read_resource(self, session: ClientSession, server_name: str, uri: str) -> dict[str, str] | None:
-        response = await session.read_resource(uri)
+        response = await session.read_resource(AnyUrl(uri))
         contents = self._extract_list(response, "contents")
         text = self._render_contents(contents)
         if not text:
@@ -423,7 +420,7 @@ class MCPManager:
             future.cancel()
             logger.warning(f"MCP: resource '{uri}' from {server_name} timed out.")
             return None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failing MCP server must not block the caller
             future.cancel()
             logger.warning(f"MCP: failed to fetch resource '{uri}' from {server_name}: {exc}")
             return None
@@ -439,7 +436,7 @@ class MCPManager:
             message = await self._fetch_resource_async(server_name, uri)
             if message:
                 self._cache_resource(server_name, uri, message, ttl)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failing MCP server must not block the caller
             logger.warning(f"MCP: failed to refresh resource '{uri}' from {server_name}: {exc}")
         finally:
             self._mark_resource_refresh_complete(server_name, uri)
@@ -496,9 +493,7 @@ class MCPManager:
     def _remove_tools_for_server(self, server_name: str) -> None:
         with self._tool_lock:
             self._tool_registry = {
-                tool_name: entry
-                for tool_name, entry in self._tool_registry.items()
-                if entry.server != server_name
+                tool_name: entry for tool_name, entry in self._tool_registry.items() if entry.server != server_name
             }
 
     def _tool_entry_to_definition(self, tool_name: str, entry: MCPToolEntry) -> dict[str, Any]:
@@ -536,7 +531,7 @@ class MCPManager:
         return True
 
     @staticmethod
-    def _get_field(obj: Any, *fields: str) -> Any:
+    def _get_field(obj: object, *fields: str) -> Any:  # noqa: ANN401 - MCP SDK objects and plain dicts alike
         if isinstance(obj, dict):
             for field in fields:
                 if field in obj:
@@ -548,7 +543,7 @@ class MCPManager:
         return None
 
     @staticmethod
-    def _extract_list(obj: Any, field: str) -> list[Any]:
+    def _extract_list(obj: object, field: str) -> list[Any]:
         value = MCPManager._get_field(obj, field)
         if value is None:
             return []
@@ -561,7 +556,7 @@ class MCPManager:
         return list(value) if isinstance(value, Iterable) else []
 
     @staticmethod
-    def _coerce_dict(value: Any) -> dict[str, Any] | None:
+    def _coerce_dict(value: object) -> dict[str, Any] | None:
         if value is None:
             return None
         if isinstance(value, dict):

@@ -7,20 +7,20 @@ Uses LLM for semantic search ranking (LLM-first principle).
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 import json
 import logging
 import os
-import time
-import uuid
-
-from glados.core.memory_records import append_record
-from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any
+import uuid
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+from glados.core.memory_records import append_record
 
 logger.remove()
 logging.getLogger().setLevel(logging.CRITICAL)
@@ -47,7 +47,7 @@ class Fact:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Fact":
+    def from_dict(cls, data: dict[str, Any]) -> Fact:
         return cls(**data)
 
 
@@ -66,7 +66,7 @@ class Summary:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Summary":
+    def from_dict(cls, data: dict[str, Any]) -> Summary:
         return cls(**data)
 
 
@@ -133,11 +133,13 @@ def store_fact(fact: str, source: str = "user", importance: float = 0.5) -> str:
     importance = max(0.0, min(1.0, importance))
     new_fact = Fact(content=fact, source=source, importance=importance)
     _save_fact(new_fact)
-    return json.dumps({
-        "status": "stored",
-        "id": new_fact.id,
-        "fact": fact,
-    })
+    return json.dumps(
+        {
+            "status": "stored",
+            "id": new_fact.id,
+            "fact": fact,
+        }
+    )
 
 
 @mcp.tool()
@@ -180,13 +182,15 @@ def search_memory(query: str, limit: int = 5) -> str:
 
     results = []
     for _score, fact in scored[:limit]:
-        results.append({
-            "id": fact.id,
-            "content": fact.content,
-            "source": fact.source,
-            "importance": fact.importance,
-            "created_at": datetime.fromtimestamp(fact.created_at).isoformat(),
-        })
+        results.append(
+            {
+                "id": fact.id,
+                "content": fact.content,
+                "source": fact.source,
+                "importance": fact.importance,
+                "created_at": datetime.fromtimestamp(fact.created_at).isoformat(),
+            }
+        )
 
     return json.dumps({"facts": results, "total_stored": len(facts)})
 
@@ -211,13 +215,15 @@ def list_facts(limit: int = 20, min_importance: float = 0.0) -> str:
 
     results = []
     for fact in filtered[:limit]:
-        results.append({
-            "id": fact.id,
-            "content": fact.content,
-            "source": fact.source,
-            "importance": fact.importance,
-            "created_at": datetime.fromtimestamp(fact.created_at).isoformat(),
-        })
+        results.append(
+            {
+                "id": fact.id,
+                "content": fact.content,
+                "source": fact.source,
+                "importance": fact.importance,
+                "created_at": datetime.fromtimestamp(fact.created_at).isoformat(),
+            }
+        )
 
     return json.dumps({"facts": results, "total_stored": len(facts)})
 
@@ -246,11 +252,13 @@ def store_summary(summary: str, period: str, start_time: str, end_time: str) -> 
         end_time=end_time,
     )
     _save_summary(new_summary)
-    return json.dumps({
-        "status": "stored",
-        "id": new_summary.id,
-        "period": period,
-    })
+    return json.dumps(
+        {
+            "status": "stored",
+            "id": new_summary.id,
+            "period": period,
+        }
+    )
 
 
 @mcp.tool()
@@ -275,14 +283,16 @@ def get_summaries(period: str = "all", limit: int = 5) -> str:
 
     results = []
     for summary in summaries[:limit]:
-        results.append({
-            "id": summary.id,
-            "content": summary.content,
-            "period": summary.period,
-            "start_time": summary.start_time,
-            "end_time": summary.end_time,
-            "created_at": datetime.fromtimestamp(summary.created_at).isoformat(),
-        })
+        results.append(
+            {
+                "id": summary.id,
+                "content": summary.content,
+                "period": summary.period,
+                "start_time": summary.start_time,
+                "end_time": summary.end_time,
+                "created_at": datetime.fromtimestamp(summary.created_at).isoformat(),
+            }
+        )
 
     return json.dumps({"summaries": results, "total_stored": len(_load_summaries())})
 
@@ -308,13 +318,15 @@ def memory_stats() -> str:
 
     avg_importance = sum(f.importance for f in facts) / len(facts) if facts else 0
 
-    return json.dumps({
-        "total_facts": len(facts),
-        "total_summaries": len(summaries),
-        "facts_by_source": source_counts,
-        "summaries_by_period": period_counts,
-        "average_importance": round(avg_importance, 2),
-    })
+    return json.dumps(
+        {
+            "total_facts": len(facts),
+            "total_summaries": len(summaries),
+            "facts_by_source": source_counts,
+            "summaries_by_period": period_counts,
+            "average_importance": round(avg_importance, 2),
+        }
+    )
 
 
 def main() -> None:

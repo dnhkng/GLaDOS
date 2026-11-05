@@ -72,7 +72,12 @@ class SessionStore:
         session = secrets.token_urlsafe(32)
         now = time.time()
         with self._lock:
-            self._sessions[self._key(session)] = {"label": label, "address": address, "paired_at": now, "last_seen": now}
+            self._sessions[self._key(session)] = {
+                "label": label,
+                "address": address,
+                "paired_at": now,
+                "last_seen": now,
+            }
             self._save()
         return session
 
@@ -93,8 +98,10 @@ class SessionStore:
 
     def devices(self) -> list[dict[str, Any]]:
         with self._lock:
-            return sorted(({"id": key[:16], **entry} for key, entry in self._sessions.items()),
-                          key=lambda device: -device["last_seen"])
+            return sorted(
+                ({"id": key[:16], **entry} for key, entry in self._sessions.items()),
+                key=lambda device: -device["last_seen"],
+            )
 
     def revoke(self, device_id: str | None = None) -> int:
         """Forget one device (by id) or, with no id, every device."""
@@ -137,8 +144,14 @@ def session_cookie(session: str, secure: bool) -> str:
 
 
 def device_label(user_agent: str) -> str:
-    for needle, name in (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"), ("Mac OS", "Mac"),
-                         ("Windows", "Windows"), ("Linux", "Linux")):
+    for needle, name in (
+        ("iPhone", "iPhone"),
+        ("iPad", "iPad"),
+        ("Android", "Android"),
+        ("Mac OS", "Mac"),
+        ("Windows", "Windows"),
+        ("Linux", "Linux"),
+    ):
         if needle in user_agent:
             browser = next((b for b in ("Firefox", "Edg", "Chrome", "Safari") if b in user_agent), "Browser")
             return f"{name} · {'Edge' if browser == 'Edg' else browser}"

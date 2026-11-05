@@ -6,9 +6,9 @@ which subagents can read to customize their behavior.
 """
 
 import json
-import queue
 from typing import Any
 
+from .protocol import MessageSink
 
 get_preferences_definition = {
     "type": "function",
@@ -48,7 +48,7 @@ set_preference_definition = {
 class GetPreferences:
     def __init__(
         self,
-        llm_queue: queue.Queue[dict[str, Any]],
+        llm_queue: MessageSink,
         tool_config: dict[str, Any] | None = None,
     ) -> None:
         self.llm_queue = llm_queue
@@ -73,7 +73,7 @@ class GetPreferences:
 class SetPreference:
     def __init__(
         self,
-        llm_queue: queue.Queue[dict[str, Any]],
+        llm_queue: MessageSink,
         tool_config: dict[str, Any] | None = None,
     ) -> None:
         self.llm_queue = llm_queue

@@ -3,6 +3,7 @@
 from pathlib import Path
 import re
 import threading
+from typing import Any
 from urllib.parse import urlsplit
 
 from loguru import logger
@@ -64,7 +65,7 @@ class SearchPreferences:
         with self._lock:
             return self._sources.model_dump()
 
-    def update(self, values: dict) -> dict[str, list[str]]:
+    def update(self, values: dict[str, Any]) -> dict[str, list[str]]:
         if set(values) != set(SearchSources.model_fields):
             raise ValueError("Provide weather, news, reddit and general lists")
         validated = SearchSources.model_validate(values)
@@ -84,6 +85,6 @@ class SearchPreferences:
             "reddit": r"\b(?:reddit|subreddits?)\b|reddit\.com/r/",
         }
         for category, pattern in terms.items():
-            if sources[category] and re.search(pattern, request, re.I):
+            if sources[category] and re.search(pattern, request, re.IGNORECASE):
                 selected[category] = sources[category]
         return selected

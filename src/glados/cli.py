@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 import sys
@@ -8,13 +9,14 @@ from typing import Any
 import httpx
 from rich import print as rprint
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
-import sounddevice as sd  # type: ignore
+import sounddevice as sd
 
 from .core.engine import Glados, GladosConfig
 from .TTS import tts_glados
 from .utils import spoken_text_converter as stc
 from .utils.resources import resource_path
 from .webapp import WebappServer
+from .webapp.config import WebappConfig
 
 # Type aliases for clarity
 type FileHash = str
@@ -113,8 +115,8 @@ async def download_with_progress(
             progress.update(task_id, status="[bold green]OK")
             return True
 
-    except Exception as e:
-        progress.update(task_id, status=f"[bold red]Error: {str(e)}")
+    except Exception as e:  # noqa: BLE001 - any download failure is shown in the progress bar
+        progress.update(task_id, status=f"[bold red]Error: {e!s}")
         return False
 
 
@@ -253,7 +255,7 @@ def tui(
 
     import sys
 
-    import glados.tui as tui
+    from glados import tui
 
     try:
         app = tui.GladosUI(
@@ -332,8 +334,14 @@ def run_webapp(
     from .webapp.auth import SessionStore
 
     server = WebappServer(
-        glados, host=webapp_config.host, port=webapp_config.port, allowed_hosts=webapp_config.allowed_hosts,
-        tls=tls, token=token, sessions=SessionStore() if token else None, authority=authority,
+        glados,
+        host=webapp_config.host,
+        port=webapp_config.port,
+        allowed_hosts=webapp_config.allowed_hosts,
+        tls=tls,
+        token=token,
+        sessions=SessionStore() if token else None,
+        authority=authority,
     )
     server.start()
     if server.is_running and token is not None:
@@ -357,7 +365,7 @@ def run_webapp(
         server.shutdown()
 
 
-def pairing_links(webapp_config: Any, token: str, port: int | None = None) -> list[str]:
+def pairing_links(webapp_config: WebappConfig, token: str, port: int | None = None) -> list[str]:
     from .webapp.config import local_addresses
     from .webapp.tls import certifiable
 
@@ -401,12 +409,20 @@ def parser_add_config(parser: argparse.ArgumentParser) -> None:
     Args:
         parser: parse to add the config argument to.
     """
+
     class ReplaceDefaultArgsAction(argparse.Action):
         """
         A argparse action similar to 'append', but if any argument is specified, the default value is ignored
         instead of the default argparse behaviour of appending to the default value.
         """
-        def __call__(self, p: argparse.ArgumentParser, namespace: argparse.Namespace, values, option_string=None) -> None:
+
+        def __call__(
+            self,
+            p: argparse.ArgumentParser,
+            namespace: argparse.Namespace,
+            values: str | Sequence[Any] | None,
+            option_string: str | None = None,
+        ) -> None:
             current_list = getattr(namespace, self.dest)
             if current_list is self.default:
                 # same by identity - ignore default values, new value is the first element of the list
@@ -422,7 +438,8 @@ def parser_add_config(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=[DEFAULT_CONFIG],
         action=ReplaceDefaultArgsAction,
-        help=f"Path to configuration file (default: {DEFAULT_CONFIG}). You may specify this option more than once; the configuration settings in the later files override those in earlier ones.",
+        help=f"Path to configuration file (default: {DEFAULT_CONFIG}). You may specify this option more than once; "
+        "the configuration settings in the later files override those in earlier ones.",
     )
 
 
@@ -515,9 +532,7 @@ def main() -> int:
     )
 
     # Webapp console command
-    webapp_parser = subparsers.add_parser(
-        "webapp", help="Start GLaDOS with the browser-based observability console"
-    )
+    webapp_parser = subparsers.add_parser("webapp", help="Start GLaDOS with the browser-based observability console")
     parser_add_common_tui_cli_args(webapp_parser)
 
     # Say command

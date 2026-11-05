@@ -21,11 +21,37 @@ from tests.test_webapp import _FakeEngine
 def audio(monkeypatch):
     vad = Mock(return_value=np.array([0.9], dtype=np.float32))
     monkeypatch.setattr("glados.audio_io.sounddevice_io.VAD", lambda: vad)
-    rows = [dict(name="Microphone", hostapi=0, max_input_channels=2, max_output_channels=0, default_samplerate=44100),
-            dict(name="Speakers", hostapi=0, max_input_channels=0, max_output_channels=2, default_samplerate=48000),
-            dict(name="USB microphone", hostapi=0, max_input_channels=2, max_output_channels=0, default_samplerate=44100)]
+    rows = [
+        {
+            "name": "Microphone",
+            "hostapi": 0,
+            "max_input_channels": 2,
+            "max_output_channels": 0,
+            "default_samplerate": 44100,
+        },
+        {
+            "name": "Speakers",
+            "hostapi": 0,
+            "max_input_channels": 0,
+            "max_output_channels": 2,
+            "default_samplerate": 48000,
+        },
+        {
+            "name": "USB microphone",
+            "hostapi": 0,
+            "max_input_channels": 2,
+            "max_output_channels": 0,
+            "default_samplerate": 44100,
+        },
+    ]
+
     def query(device=None, kind=None):
-        return rows if device is None and kind is None else rows[device if device is not None else (0 if kind == "input" else 1)]
+        return (
+            rows
+            if device is None and kind is None
+            else rows[device if device is not None else (0 if kind == "input" else 1)]
+        )
+
     monkeypatch.setattr(sd, "query_devices", query)
     monkeypatch.setattr(sd, "query_hostapis", lambda: [{"name": "ALSA"}])
     monkeypatch.setattr(sd, "check_input_settings", Mock())
@@ -36,12 +62,14 @@ def audio(monkeypatch):
 def test_audio_inventory_filters_directions_and_switches_capture_with_rollback(audio, monkeypatch):
     streams = []
     fail = False
+
     def stream(**kwargs):
         value = Mock()
         if fail and kwargs["device"] == 2:
             value.start.side_effect = sd.PortAudioError("Device disconnected")
         streams.append((kwargs, value))
         return value
+
     monkeypatch.setattr(sd, "InputStream", stream)
     state = audio.device_snapshot()
     assert [d["id"] for d in state["input"]] == [0, 2]
@@ -65,13 +93,14 @@ def test_native_rate_stereo_microphone_feeds_exact_mono_vad_chunks(audio, monkey
     def check(**kwargs):
         if kwargs["samplerate"] != 44100 or kwargs["channels"] != 2:
             raise sd.PortAudioError("Unsupported rate/channel count")
+
     monkeypatch.setattr(sd, "check_input_settings", check)
     parameters = {}
     monkeypatch.setattr(sd, "InputStream", lambda **kw: parameters.update(kw) or Mock())
     audio.select_device("microphone", 2)
     audio.start_listening()
     assert parameters["samplerate"] == 44100 and parameters["channels"] == 2
-    samples = np.column_stack((np.ones(1764, np.float32)*0.2, np.ones(1764, np.float32)*0.4))
+    samples = np.column_stack((np.ones(1764, np.float32) * 0.2, np.ones(1764, np.float32) * 0.4))
     for _ in range(4):
         parameters["callback"](samples, 1764, None, False)
     chunks = [audio._sample_queue.get_nowait() for _ in range(audio._sample_queue.qsize())]
@@ -85,17 +114,21 @@ def test_selected_speaker_controls_resampling_and_output_stream(audio, monkeypat
     audio.start_speaking(data, 16000)
     assert audio._pending_sample_rate == 48000 and len(audio._pending_audio) == 4800
     parameters = {}
+
     class Output:
         def __init__(self, **kwargs):
             parameters.update(kwargs)
+
         def __enter__(self):
             try:
                 parameters["callback"](np.zeros((4800, 1), np.float32), 4800, None, False)
             except sd.CallbackStop:
                 pass
             return self
+
         def __exit__(self, *args):
             pass
+
     monkeypatch.setattr(sd, "OutputStream", Output)
     assert audio.measure_percentage_spoken(1600) == (False, 100)
     assert parameters["device"] == 1 and parameters["samplerate"] == 48000
@@ -111,10 +144,12 @@ def test_stalled_or_inactive_capture_recovers_but_intentional_stop_stays_off(aud
     clock = [100.0]
     monkeypatch.setattr("glados.audio_io.sounddevice_io.time.monotonic", lambda: clock[0])
     streams = []
+
     def create(**kwargs):
         stream = Mock(active=True)
         streams.append(stream)
         return stream
+
     monkeypatch.setattr(sd, "InputStream", create)
     audio.start_listening()
     assert audio.capture_health()["connected"] and not audio.ensure_listening()
@@ -161,9 +196,11 @@ def test_recovery_retries_with_backoff_after_device_returns(audio, monkeypatch):
 
 def test_linux_system_default_uses_desktop_routing_for_both_directions(audio, monkeypatch):
     monkeypatch.setattr("glados.audio_io.sounddevice_io.sys.platform", "linux")
-    rows = [dict(name="default", max_input_channels=2, max_output_channels=2),
-            dict(name="pulse", max_input_channels=2, max_output_channels=2),
-            dict(name="pipewire", max_input_channels=2, max_output_channels=2)]
+    rows = [
+        {"name": "default", "max_input_channels": 2, "max_output_channels": 2},
+        {"name": "pulse", "max_input_channels": 2, "max_output_channels": 2},
+        {"name": "pipewire", "max_input_channels": 2, "max_output_channels": 2},
+    ]
     monkeypatch.setattr(sd, "query_devices", lambda: rows)
     assert audio._resolve_device(None, "input") == 1
     assert audio._resolve_device(None, "output") == 1
@@ -175,6 +212,7 @@ def test_camera_switch_releases_capture_and_discards_old_frames(monkeypatch):
     old, new = Mock(), Mock()
     old.release.side_effect = old_released.set
     count = 0
+
     def read_old():
         nonlocal count
         count += 1
@@ -182,6 +220,7 @@ def test_camera_switch_releases_capture_and_discards_old_frames(monkeypatch):
             block_read.set()
             resume_read.wait(2)
         return True, np.zeros((32, 32, 3), dtype=np.uint8)
+
     old.read.side_effect = read_old
     new.read.return_value = (True, np.full((32, 32, 3), 200, dtype=np.uint8))
     monkeypatch.setattr("glados.vision.frame_picker.cv2.VideoCapture", lambda spec: old if spec == 0 else new)
@@ -211,18 +250,28 @@ def test_device_api_validates_inventory_and_preserves_microphone_mute(audio, mon
     engine.set_asr_muted = lambda value: engine.asr_muted_event.set() if value else engine.asr_muted_event.clear()
     camera = SimpleNamespace(snapshot=lambda: {"device": 0})
     engine.vision_agent = SimpleNamespace(camera=camera, settings=SimpleNamespace(camera_spec=0), select_camera=Mock())
-    monkeypatch.setattr(devices, "camera_devices", lambda: [{"id": "/dev/video0", "name": "Webcam"}, {"id": "/dev/video2", "name": "Other"}])
+    monkeypatch.setattr(
+        devices,
+        "camera_devices",
+        lambda: [{"id": "/dev/video0", "name": "Webcam"}, {"id": "/dev/video2", "name": "Other"}],
+    )
     server = WebappServer(engine, port=0)
     server.start()
+
     def request(method, body=None, headers=None):
         conn = http.client.HTTPConnection("127.0.0.1", server.bound_port, timeout=3)
         try:
-            conn.request(method, "/api/devices", json.dumps(body) if body else None,
-                         headers or {"Content-Type": "application/json"})
+            conn.request(
+                method,
+                "/api/devices",
+                json.dumps(body) if body else None,
+                headers or {"Content-Type": "application/json"},
+            )
             response = conn.getresponse()
             return response.status, json.loads(response.read())
         finally:
             conn.close()
+
     try:
         assert request("GET")[1]["camera"]["selected"] == "/dev/video0"
         assert request("POST", {"kind": "camera", "device": "/dev/video2"})[0] == 200
@@ -233,10 +282,21 @@ def test_device_api_validates_inventory_and_preserves_microphone_mute(audio, mon
         engine.asr_muted_event.set()
         assert request("POST", {"kind": "microphone", "device": 2})[0] == 200
         assert engine.asr_muted_event.is_set()
-        for body in ({"kind": "microphone", "device": 999}, {"kind": "microphone", "device": True},
-                     {"kind": "camera", "device": 1}, {"kind": "unknown"}):
+        for body in (
+            {"kind": "microphone", "device": 999},
+            {"kind": "microphone", "device": True},
+            {"kind": "camera", "device": 1},
+            {"kind": "unknown"},
+        ):
             assert request("POST", body)[0] == 400
-        assert request("POST", {"kind": "speaker", "device": 1}, {"Content-Type": "application/json", "Origin": "https://other.example"})[0] == 403
+        assert (
+            request(
+                "POST",
+                {"kind": "speaker", "device": 1},
+                {"Content-Type": "application/json", "Origin": "https://other.example"},
+            )[0]
+            == 403
+        )
     finally:
         engine.shutdown_event.set()
         server.shutdown()
