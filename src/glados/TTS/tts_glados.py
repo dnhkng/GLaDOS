@@ -13,7 +13,6 @@ from ..utils.resources import resource_path
 from ..utils.safe_pickle import load_data_pickle
 from .espeak import EspeakPhonemizer
 from .phonemizer import Phonemizer
-from .voice_effect import GladosEffect
 
 # Default OnnxRuntime is way to verbose, only show fatal errors
 ort.set_default_logger_severity(4)
@@ -130,7 +129,6 @@ class SpeechSynthesizer:
         phoneme_path: Path = PHONEME_TO_ID_PATH,
         speaker_id: int | None = None,
         language: str = "en",
-        effect: GladosEffect | None = None,
     ) -> None:
         """
         Initialize the text-to-speech synthesizer with a specified model and optional speaker configuration.
@@ -144,7 +142,6 @@ class SpeechSynthesizer:
         # English uses the bundled ONNX phonemizer; other languages need espeak-ng (the voice uses its IPA set).
         self.language = language
         self._espeak = None if language == "en" else EspeakPhonemizer(language)
-        self.effect = effect
 
         self.ort_sess = ort.InferenceSession(
             model_path,
@@ -215,14 +212,11 @@ class SpeechSynthesizer:
         """
         phonemes = self._phonemizer(text)
         phoneme_ids_list = [self._phonemes_to_ids(sentence) for sentence in phonemes]
-        length_scale = self.config.length_scale * (self.effect.pitch if self.effect else 1.0)
-        audio_chunks = [
-            self._synthesize_ids_to_audio(phoneme_ids, length_scale=length_scale) for phoneme_ids in phoneme_ids_list
-        ]
+        audio_chunks = [self._synthesize_ids_to_audio(phoneme_ids) for phoneme_ids in phoneme_ids_list]
 
         if audio_chunks:
             audio: NDArray[np.float32] = np.concatenate(audio_chunks, axis=1).T
-            return self.effect.apply(audio, self.sample_rate) if self.effect else audio
+            return audio
         return np.array([], dtype=np.float32)
 
     def _phonemizer(self, input_text: str) -> list[str]:

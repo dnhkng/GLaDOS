@@ -38,33 +38,15 @@ def test_only_english_voices_use_the_english_text_converter() -> None:
         assert TextToSpeechSynthesizer._spoken(synth, "14") == expected
 
 
-def test_glados_effect_raises_pitch_keeps_shape_and_never_clips() -> None:
-    import numpy as np
-
-    from glados.TTS.voice_effect import GladosEffect
-
-    rate = 22050
-    t = np.arange(rate * 4 // 10) / rate
-    tone = (0.99 * np.sin(2 * np.pi * 200 * t)).astype(np.float32).reshape(-1, 1)  # Piper returns (n, 1)
-    out = GladosEffect(flutter_depth=0).apply(tone, rate)
-    assert out.ndim == 2 and out.shape[1] == 1 and out.dtype == np.float32
-    assert abs(len(out) - len(tone) / 1.06) < 2, "Pitch is raised by resampling down"
-    assert np.abs(out).max() <= 0.95 + 1e-6
-    spectrum = np.abs(np.fft.rfft(out.reshape(-1)[2000:-2000]))
-    peak_hz = np.argmax(spectrum) * rate / (len(out) - 4000)
-    assert abs(peak_hz - 212) < 5, peak_hz
-
-
 @needs_espeak
 @pytest.mark.skipif(
-    not __import__("pathlib").Path("models/TTS/fr_FR-siwis-medium.onnx").exists(), reason="French voice not downloaded"
+    not __import__("pathlib").Path("models/TTS/fr_FR-glados-medium.onnx").exists(), reason="French voice not downloaded"
 )
-def test_french_uses_the_native_voice_with_the_glados_effect() -> None:
+def test_french_uses_glados_french_voice() -> None:
     from glados.TTS import get_speech_synthesizer
 
     voice = get_speech_synthesizer("glados", language="fr")
-    assert voice.effect is not None and "siwis" in str(voice.ort_sess._model_path)
-    assert get_speech_synthesizer("glados").effect is None
+    assert "fr_FR-glados" in str(voice.ort_sess._model_path)
     assert voice.generate_speech_audio("Bonjour.").size > 1000
 
 

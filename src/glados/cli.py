@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 import sys
+import tarfile
 from typing import Any
 
 import httpx
@@ -64,11 +65,14 @@ MODEL_DETAILS: dict[FileName, dict[FileURL, FileHash]] = {
         "url": "https://github.com/dnhkng/GlaDOS/releases/download/0.1/phomenizer_en.onnx",
         "checksum": "b64dbbeca8b350927a0b6ca5c4642e0230173034abd0b5bb72c07680d700c5a0",
     },
-    # Native French voice for `language: "fr"` (the GLaDOS model only speaks English); its config,
-    # fr_FR-siwis-medium.json, is tracked in git. Voice: SIWIS corpus, Piper (rhasspy/piper-voices).
-    "models/TTS/fr_FR-siwis-medium.onnx": {
-        "url": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
-        "checksum": "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
+    # GLaDOS's French voice for `language: "fr"` (glados.onnx only speaks English): a Piper model fine-tuned
+    # from SIWIS on the French GLaDOS lines, by TazzerMAN (MIT). Its config, fr_FR-glados-medium.json, is
+    # tracked in git. Shipped only inside an archive: `archive_checksum` checks the download, `checksum` the model.
+    "models/TTS/fr_FR-glados-medium.onnx": {
+        "url": "https://raw.githubusercontent.com/TazzerMAN/piper-voice-glados-fr/main/models/fr_FR-glados-medium.tar.gz",
+        "archive_member": "./fr_FR-glados-medium.onnx",
+        "archive_checksum": "2bc220c9ef36ba3acc163369f4caf3f56f919cd66b6d9d174d770822cd69edc9",
+        "checksum": "07abe15eefacbfaa91cde1bb4996fe33590e4b2daa29a18d9423549b94287198",
     },
 }
 
@@ -121,6 +125,28 @@ async def download_with_progress(
         return False
 
 
+async def download_model(client: httpx.AsyncClient, path: Path, info: dict[str, str], progress: Progress) -> bool:
+    """Download one model file, unpacking it from its archive when it ships inside one."""
+    member = info.get("archive_member")
+    if member is None:
+        return await download_with_progress(client, info["url"], path, info["checksum"], progress)
+    archive = path.with_name(path.name + ".tar.gz")
+    if not await download_with_progress(client, info["url"], archive, info["archive_checksum"], progress):
+        return False
+    try:
+        with tarfile.open(archive) as bundle:
+            source = bundle.extractfile(member)
+            if source is None:
+                return False
+            data = source.read()
+    finally:
+        archive.unlink(missing_ok=True)
+    if sha256(data).hexdigest() != info["checksum"]:
+        return False
+    path.write_bytes(data)
+    return True
+
+
 async def download_models() -> int:
     """
     Main async controller for downloading all the specified models:
@@ -141,9 +167,7 @@ async def download_models() -> int:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             # Create a download task for each file
             tasks = [
-                asyncio.create_task(
-                    download_with_progress(client, model_info["url"], Path(path), model_info["checksum"], progress)
-                )
+                asyncio.create_task(download_model(client, Path(path), model_info, progress))
                 for path, model_info in MODEL_DETAILS.items()
             ]
             results: list[bool] = await asyncio.gather(*tasks)

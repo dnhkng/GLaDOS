@@ -1,6 +1,6 @@
 Glados:
   llm_model: "qwen3:4b-instruct"
-  language: "fr"                     # French replies, native French voice (Piper siwis) with a GLaDOS effect
+  language: "fr"                     # French replies, GLaDOS's French voice (Piper, TazzerMAN)
   announcement: "Tous les modules de réseau neuronal sont chargés. Système opérationnel."
   wake_word: "glados"                # Ollama cannot tell who is being addressed: only answer speech that names her
   wake_word_follow_up_s: 0           # Off: during voice chats a 15 s window let her answer (and act on) overheard friends
