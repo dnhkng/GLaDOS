@@ -264,6 +264,120 @@
     'and install it once on a phone to remove the security warning for good. Android: Settings › Security › Encryption & credentials › Install a certificate › CA certificate. iPhone: open the file, install the profile, then enable it under Settings › General › About › Certificate Trust Settings. It only covers local addresses, never public websites.':
       "et installez-le une fois sur le téléphone pour supprimer définitivement l'alerte de sécurité. Android : Paramètres › Sécurité › Chiffrement et identifiants › Installer un certificat › Certificat CA. iPhone : ouvrez le fichier, installez le profil, puis activez-le dans Réglages › Général › Informations › Réglages des certificats. Il ne couvre que les adresses locales, jamais les sites publics.",
     'capacity unknown': 'capacité inconnue', 'Reply latency trend': 'Évolution de la latence de réponse', 'End-of-speech silence': 'Silence de fin de phrase', 'Engine unavailable': 'Moteur indisponible',
+    // Rendered by scripts
+    'Active list': 'Liste active', 'All choices and descriptions': 'Tous les choix et descriptions', 'Expand all': 'Tout déplier',
+    'Overview': "Vue d'ensemble", 'Mermaid source': 'Source Mermaid', 'Download Mermaid': 'Télécharger le Mermaid',
+    'Show latest route': 'Afficher la dernière route', 'Test without executing': 'Tester sans exécuter', 'Test': 'Tester',
+    'Edit': 'Modifier', 'Delete': 'Supprimer', 'Cancel': 'Annuler', 'Device': 'Appareil', 'Unavailable': 'Indisponible',
+    'Selected': 'Sélectionné', 'Unknown': 'Inconnu', 'Capacity': 'Capacité', 'Scene': 'Scène', 'Not rated': 'Non évalué',
+    'CONFIDENCE': 'CONFIANCE', 'LOW': 'FAIBLE', 'MEDIUM': 'MOYEN', 'HIGH': 'ÉLEVÉ', 'YES': 'OUI', 'no': 'non', 'hot': 'actif', 'idle': 'inactif',
+    'report': 'rapport', 'open': 'ouverte', 'done': 'terminée', 'running': 'en cours', 'active': 'actif', 'monitoring': 'surveillance',
+    'online': 'en ligne', 'offline': 'hors ligne', 'background': 'arrière-plan', 'never': 'jamais', 'paused': 'en pause',
+    'no schedule': 'pas de planification', 'single step': 'étape unique', 'capability → action': 'capacité → action',
+    'input level': "niveau d'entrée", 'inspect core →': 'inspecter le noyau →', 'in inference': 'en inférence',
+    'collapse −': 'replier −', 'expand +': 'déplier +', 'Decision': 'Décision', 'Fallback': 'Repli',
+    'Ready for a command.': 'Prêt pour une commande.', 'Ready for inference.': "Prêt pour l'inférence.",
+    'Ready for requested research': 'Prêt pour une recherche demandée', 'Routing disabled in Settings.': 'Routage désactivé dans les réglages.',
+    'Background inference waiting for user response': 'Inférence de fond en attente de votre réponse',
+    'Transcribed audio': 'Audio transcrit', 'Direct audio': 'Audio direct', 'Listening gate': "Filtre d'écoute",
+    'transcript pending': 'transcription en attente', 'no transcript kept': 'pas de transcription conservée',
+    'no response recorded': 'aucune réponse enregistrée', 'no reply selected': 'aucune réponse choisie', 'timing unavailable': 'chronométrage indisponible',
+    'text delivered (voice muted)': 'texte affiché (voix coupée)', 'playback requested': 'lecture demandée', 'user response': 'votre réponse',
+    'Input accepted; waiting for a recorded response event.': "Entrée acceptée ; en attente d'un événement de réponse.",
+    'No context sections match this search.': 'Aucune section du contexte ne correspond à cette recherche.',
+    'No core reports yet.': 'Aucun rapport de noyau pour le moment.', 'No core state available.': 'Aucun état de noyau disponible.',
+    'Some saved memory could not be read.': "Une partie de la mémoire n'a pas pu être lue.", 'Delete this saved memory?': 'Supprimer ce souvenir ?',
+    'Memory text': 'Texte du souvenir', 'Excerpt': 'Extrait', 'The index includes the newest memories within its size limit.':
+      "L'index contient les souvenirs les plus récents dans la limite de sa taille.",
+    'Operator console ↗': 'Console opérateur ↗', 'Tools · separate from message order': 'Outils · hors ordre des messages',
+    'GLaDOS’s modeled mood, from −1 to +1. PAD updates before each reply and directs its tone and expression.':
+      "Humeur modélisée de GLaDOS, de −1 à +1. Le PAD se met à jour avant chaque réponse et oriente son ton et son expression.",
+    // Core titles and roles reported by the engine
+    'Answers your requests and uses tools. Works on tracked tasks when asked.':
+      'Répond à vos demandes et utilise les outils. Travaille sur les tâches suivies quand on le lui demande.',
+    'Behavior Observer Core': 'Noyau Observateur', 'Behavior Observer': 'Observateur', 'Hacker News Core': 'Noyau Hacker News',
+    'Conversation and facility control': 'Conversation et contrôle du centre', 'One-token intent classification': "Classification d'intention en un jeton",
+    'Independent attention review and Central Core handoffs': "Revue d'attention indépendante et transferts au noyau central",
+    'Recall and context management': 'Rappel et gestion du contexte', 'Requested research and source verification': 'Recherches demandées et vérification des sources',
+    'System status and alerts': 'État du système et alertes', 'External advisors and API base model': 'Conseillers externes et modèle de base API',
+    'emotional regulation': 'régulation émotionnelle', 'meta supervision': 'méta-supervision', 'news monitor': 'veille actualités', 'weather monitor': 'veille météo',
+    'Periodic autonomy ticks': "Cycles d'autonomie périodiques", 'Thread active': 'Thread actif', 'Initializing': 'Initialisation', 'Shutdown': 'Arrêté',
+    'No summary yet': 'Pas encore de résumé', 'Autonomy mode changed': "Mode d'autonomie modifié", 'cancelled': 'annulé',
+    'Requested microphone capture is disconnected': 'La capture micro demandée est déconnectée',
+    // Routing tree steps
+    'Speech routing': 'Routage vocal', 'Capability area': 'Domaine de capacité', 'Local system': 'Système local', 'MCP services': 'Services MCP',
+    'Memory': 'Mémoire', 'Tasks': 'Tâches', 'Other tools': 'Autres outils', 'Quiet command confirmation': 'Confirmation des commandes de silence',
+    // Drawers, decision-list editor and routing tester
+    'Status': 'Statut', 'Step': 'Étape', 'Task': 'Tâche', 'Time': 'Heure', 'Title': 'Titre', 'Tool': 'Outil', 'Function': 'Fonction',
+    'Input': 'Entrée', 'Inputs': 'Entrées', 'Inference': 'Inférence', 'Lane': 'Voie', 'Model': 'Modèle', 'Motion': 'Mouvement',
+    'Delay': 'Délai', 'Elapsed': 'Écoulé', 'Enter': 'Entrée', 'Observed': 'Observé', 'Recall': 'Rappel', 'Report': 'Rapport',
+    'Running': 'En cours', 'Schedule': 'Planification', 'Sources': 'Sources', 'Capability': 'Capacité', 'Background': 'Arrière-plan',
+    'Voice': 'Voix', 'Core memory': 'Mémoire du noyau', 'Latest output': 'Dernière sortie', 'Latest question': 'Dernière question',
+    'Research round': 'Tour de recherche', 'Observation timing': 'Rythme des observations', 'Speech + interaction': 'Parole + interaction',
+    'What I see': 'Ce que je vois', 'What changed since the previous image': "Ce qui a changé depuis l'image précédente",
+    'Recent events · last four observations': 'Événements récents · quatre dernières observations', 'no visual feed': "pas d'image",
+    'none configured': 'aucun configuré', 'Facility settings': 'Réglages', 'Facility tools': 'Outils', 'Routing structure': 'Structure du routage',
+    'Run once now': 'Exécuter une fois', 'Run command': 'Lancer la commande', 'Select a tool': 'Choisir un outil',
+    'Run once queues work on this core’s worker, including while paused. A current run is allowed to finish.':
+      "Exécuter une fois met une tâche en file sur l'exécuteur de ce noyau, même en pause. Une exécution en cours peut se terminer.",
+    'Ask GLaDOS to research a topic to start a search. Suspending this core cancels its current research.':
+      'Demandez à GLaDOS de rechercher un sujet pour lancer une recherche. Suspendre ce noyau annule la recherche en cours.',
+    'Ask GLaDOS to use this capability from the Enrichment Center.': "Demandez à GLaDOS d'utiliser cette capacité depuis l'Accueil.",
+    'Uses the tools listed in Facility Tools. Your response instructions apply to this core.':
+      "Utilise les outils listés dans Outils. Vos consignes de réponse s'appliquent à ce noyau.",
+    'Reviews independent core slots and conversation evidence, then asks Central Core to deliver useful new notifications.':
+      'Examine les noyaux indépendants et la conversation, puis demande au noyau central de transmettre les nouvelles notifications utiles.',
+    'Searches, reviews source evidence and follows up to resolve gaps. Citations use returned URLs; quoted findings are checked against the source excerpts.':
+      'Cherche, examine les sources et approfondit pour combler les lacunes. Les citations utilisent les URL renvoyées ; les passages cités sont vérifiés dans les extraits.',
+    'Recalls relevant saved facts into its slot for the current topic. Keeps recent messages intact and merges older context into progressively coarser summaries. Runs quietly; it never initiates speech.':
+      "Rappelle les faits pertinents pour le sujet en cours. Garde les messages récents intacts et fusionne l'ancien contexte en résumés de plus en plus condensés. Tourne en silence ; ne prend jamais la parole.",
+    'Background processing is unavailable. The Central Core and test assignments remain available.':
+      'Le traitement de fond est indisponible. Le noyau central et les tâches restent disponibles.',
+    'Choose a fixed read-only task. The assistant uses this same execution slot.': "Choisissez une tâche fixe en lecture seule. L'assistant utilise ce même emplacement d'exécution.",
+    'Applied to the next request. These session instructions reset when the engine restarts.':
+      "Appliquées à la prochaine requête. Ces consignes de session sont réinitialisées au redémarrage du moteur.",
+    'Edit instructions': 'Modifier les consignes', 'Save instructions': 'Enregistrer les consignes', 'Use default': 'Par défaut', 'Use defaults': 'Valeurs par défaut',
+    'Ask GLaDOS to work on this': 'Demander à GLaDOS de s’en occuper', 'Assignment or current summary': 'Mission ou résumé actuel',
+    'Save assignment': 'Enregistrer la mission', 'Loading task…': 'Chargement de la tâche…', 'Loading latest report and memory…': 'Chargement du dernier rapport et de la mémoire…',
+    'Saved in this session’s shared context. Creating an assignment does not start background work.':
+      "Enregistrée dans le contexte partagé de la session. Créer une mission ne lance pas de travail de fond.",
+    'No assignments.': 'Aucune mission.', 'No assignments yet. Create one here, or ask GLaDOS to save a task.':
+      'Aucune mission pour le moment. Créez-en une ici ou demandez à GLaDOS d’enregistrer une tâche.',
+    'No cores connected.': 'Aucun noyau connecté.', 'No memory entries yet.': 'Aucun souvenir pour le moment.',
+    'No API key set.': 'Aucune clé API.', 'No API key is set, so Nexus stays inactive.': 'Aucune clé API : Nexus reste inactif.',
+    'Edit decision lists': 'Modifier les listes de décision', 'New decision list': 'Nouvelle liste de décision', 'Save list': 'Enregistrer la liste',
+    'Delete list': 'Supprimer la liste', 'Add option': 'Ajouter une option', 'Delete option': "Supprimer l'option", 'Score options': 'Noter les options',
+    'No decision lists. Create one to get started.': 'Aucune liste de décision. Créez-en une pour commencer.',
+    'Delete this list and its options? If it is active, GLaDOS switches to another enabled list or restores the default list.':
+      'Supprimer cette liste et ses options ? Si elle est active, GLaDOS passe à une autre liste activée ou rétablit la liste par défaut.',
+    'Classifier instructions': 'Consignes du classifieur', 'Options · letters assigned automatically': 'Options · lettres attribuées automatiquement',
+    'Choose the option that best matches the user’s intent. Quoted and negated commands are not action requests.':
+      "Choisissez l'option qui correspond le mieux à l'intention. Les commandes citées ou niées ne sont pas des demandes d'action.",
+    'One output token selects an option from your active decision list. Runs on completed turns, before speech or tools.':
+      'Un seul jeton de sortie choisit une option de votre liste active. Tourne sur les tours terminés, avant la parole ou les outils.',
+    'The active list uses one flat choice.': 'La liste active utilise un choix unique à plat.', 'List enabled': 'Liste activée',
+    'How should GLaDOS respond?': 'Comment GLaDOS doit-elle répondre ?', 'Ignore spoken input': "Ignorer l'entrée vocale",
+    'Ask a specific clarification': 'Demander une précision', 'Let GLaDOS answer (read-only tools)': 'Laisser GLaDOS répondre (outils en lecture seule)',
+    'Automatic from tool': "Automatique selon l'outil", 'Capability, then action': 'Capacité, puis action', 'Single flat choice': 'Choix unique à plat',
+    'Ordinary conversation': 'Conversation ordinaire', 'Unclear request': 'Demande peu claire', 'Uncertain decision': 'Décision incertaine',
+    'Every routing step passed': 'Toutes les étapes du routage validées', 'Preview only. No tool executes and no speech plays.':
+      "Aperçu seulement. Aucun outil n'est exécuté et rien n'est dit.", 'Treat text as spoken input': 'Traiter le texte comme une entrée vocale',
+    'Record speech (max 30 s)': 'Enregistrer la voix (30 s max)', 'Or choose audio': 'Ou choisir un audio', 'Clear audio': "Effacer l'audio",
+    'Displayed context may be stale.': 'Le contexte affiché peut être périmé.', 'Disconnected': 'Déconnecté',
+    'DUMMY DATA — attach to a live engine for real telemetry': 'DONNÉES FICTIVES — connectez un moteur pour la vraie télémétrie',
+    'autonomy lane armed (2 workers)': "voie d'autonomie armée (2 exécuteurs)", 'Partly cloudy, 16–19 °C.': 'Partiellement nuageux, 16–19 °C.',
+    'Next nudge due in ~27 min.': 'Prochain rappel dans ~27 min.', 'Syncing calendar; found a clash tomorrow 14:00–15:30.':
+      'Synchronisation du calendrier ; conflit demain 14:00–15:30.', 'room lighting dimmed': 'éclairage de la pièce tamisé',
+    'priority lane worker': 'exécuteur de la voie prioritaire', 'autonomy pool worker': "exécuteur du groupe d'autonomie",
+    // Hardware tier recommendations (core/hardware.py)
+    'Ultra high-end workstation. Fits 14B-32B models effortlessly with large context.':
+      'Station de travail très haut de gamme. Fait tourner sans effort des modèles 14B-32B avec un grand contexte.',
+    'Dedicated GPU / Apple Silicon High Tier. Excellent for 7B-14B models (e.g. Qwen2.5-14B, Llama-3.1-8B).':
+      'GPU dédié / Apple Silicon haut de gamme. Excellent pour les modèles 7B-14B (ex. Qwen2.5-14B, Llama-3.1-8B).',
+    'Intel Arc / Mid-range GPU. Best suited for 3B-7B models (e.g. Qwen3-4B-Instruct, Gemma4-E4B) with 8k context.':
+      'Intel Arc / GPU milieu de gamme. Idéal pour les modèles 3B-7B (ex. Qwen3-4B-Instruct, Gemma4-E4B) avec 8k de contexte.',
+    'CPU or low memory system. Recommend compact models (1.5B-3B, e.g. Qwen2.5-3B, Gemma2-2B) with 2k-4k context.':
+      'CPU ou peu de mémoire. Modèles compacts recommandés (1.5B-3B, ex. Qwen2.5-3B, Gemma2-2B) avec 2k-4k de contexte.',
   };
   // Strings that embed a live value.
   const FR_PATTERNS = [
@@ -280,7 +394,54 @@
     [/^(.+) · GLaDOS \| Aperture Science$/, (_, view) => `${translate(view) ?? view} · GLaDOS | Aperture Science`],
     [/^(Microphone|Voice|Transcripts): (on|off)$/, (_, what, on) =>
       ({Microphone: 'Micro', Voice: 'Voix', Transcripts: 'Transcriptions'})[what] + ' : ' + (on === 'on' ? 'activé' : 'désactivé')],
+    [/^(\d+) active$/, (_, n) => `${n} ${n > 1 ? 'actifs' : 'actif'}`], [/^(\d+ \/ \d+) active$/, '$1 actifs'],
+    [/^(\d+) queued$/, '$1 en file'], [/^(\d+) runs$/, '$1 exécutions'], [/^(\d+) configured$/, '$1 configuré(s)'],
+    [/^(\d+) choices$/, '$1 choix'], [/^(\d+) saved choices$/, '$1 choix enregistrés'], [/^(\d+) tools$/, '$1 outils'],
+    [/^(\d+) tokens$/, '$1 jetons'], [/^(\d+) cores$/, '$1 cœurs'], [/^(\d+) threads$/, '$1 threads'],
+    [/^threshold (.+)$/, 'seuil $1'], [/^margin (.+)$/, 'marge $1'], [/^Channel (\d+)$/, 'Canal $1'],
+    [/^([\d.]+) GB total$/, '$1 Go au total'], [/^([\d.]+) GB free$/, '$1 Go libres'],
+    [/^(\d+) tokens · TTFT (.+)s \(scale (.+)\)$/, '$1 jetons · TTFT $2 s (échelle $3)'],
+    [/^([\d.]+[hms]) ago$/, 'il y a $1'], [/^last run (.+)$/, 'dernière exécution $1'],
+    [/^(\d+) reserved for interaction$/, "$1 réservé(s) à l'interaction"], [/^(\d+) pending updates$/, '$1 mise(s) à jour en attente'],
+    [/^([\d,  ]+) text characters$/, '$1 caractères de texte'], [/^(\d+) available tools \(preview\)$/, '$1 outils disponibles (aperçu)'],
+    [/^(\d+) offered tools$/, '$1 outils proposés'], [/^Fixed: (.+)$/, 'Fixe : $1'], [/^Collecting samples \((.+)\)$/, 'Collecte des échantillons ($1)'],
+    [/^Current expression: (.+)$/, (_, e) => 'Expression actuelle : ' + (translate(e) ?? e)], [/^Current topic: (.+)$/, 'Sujet actuel : $1'],
+    [/^GLaDOS aperture: (.+)$/, 'Œil de GLaDOS : $1'], [/^Vision error: (.+)$/, 'Erreur Vision : $1'], [/^Switching (.+)…$/, 'Changement : $1…'],
+    [/^Current device · (.+)$/, 'Appareil actuel · $1'], [/^Disconnected · last known state: (.+)$/, (_, s) => 'Déconnecté · dernier état connu : ' + (translate(s) ?? s)],
+    [/^Voice input · (.+)$/, (_, s) => 'Entrée vocale · ' + (translate(s) ?? s)], [/^Last decision: (\w+)(?: — (.+))?$/, (_, o, r) =>
+      'Dernière décision : ' + (translate(o) ?? o) + (r ? ' — ' + (translate(r) ?? r) : '')],
+    [/^(\w+): (Autonomy mode changed)$/, (_, o, r) => `${translate(o) ?? o} : ${translate(r)}`],
+    [/^Showing (\d+)–(\d+) of (\d+) saved memories\.$/, 'Souvenirs $1–$2 sur $3.'],
+    [/^(Submitted|Preview updated) (.+?)\. Numbered messages follow the API order; tool definitions are a separate field\. Audio\/image bytes are omitted from inspection\.$/,
+      (_, kind, time) => `${kind === 'Submitted' ? 'Envoyée' : 'Aperçu mis à jour'} ${time}. Les messages sont numérotés dans l'ordre de l'API ; les définitions d'outils sont un champ à part. Les octets audio/image sont omis.`],
+    [/^RAM usage is (.+)%$/, 'RAM utilisée à $1 %'], [/^Host temperature is (.+)C$/, 'Température de la machine : $1 °C'],
+    [/^Model server is (.+)$/, 'Serveur de modèle : $1'], [/^MCP (.+) is disconnected$/, 'MCP $1 déconnecté'],
+    [/^Inference queue wait exceeds (.+)s$/, "L'attente de la file d'inférence dépasse $1 s"],
+    [/^Context ~(\d+) tokens$/, 'Contexte ~$1 jetons'], [/^recent history intact$/, 'historique récent intact'],
+    [/^recall: (\d+) saved facts$/, 'rappel : $1 faits enregistrés'], [/^(\d+) relevant facts$/, '$1 faits pertinents'], [/^(\d+) indexed$/, '$1 indexés'],
+    [/^(?:Local first replies (?:now )?estimated at|Local first replies take about) (\d+) s$/, 'Premières réponses locales estimées à $1 s'],
+    [/^Central runs on (\S+) \((.+?)\): (.+?)\.( No API key set\.)?( Local first reply ≈ ([\d.]+) s\.)?( Spent today: \$([\d.]+) \/ \$([\d.]+)\.)?( (\d+) consultation\(s\) running\.)?$/,
+      (...m) => `Le noyau central tourne en ${m[1]} (${m[2]}) : ${translate(m[3]) ?? m[3]}.` + (m[4] ? ' Aucune clé API.' : '') +
+        (m[5] ? ` Première réponse locale ≈ ${m[6]} s.` : '') + (m[7] ? ` Dépensé aujourd'hui : $${m[8]} / $${m[9]}.` : '') +
+        (m[10] ? ` ${m[11]} consultation(s) en cours.` : '')],
+    [/^Consultation (on|off)$/, (_, on) => 'Consultation ' + (on === 'on' ? 'activée' : 'désactivée')],
+    [/^base (\S+) \((.+?)\): (.+)$/, (_, b, m, r) => `base ${b} (${m}) : ${translate(r) ?? r}`],
+    [/^local estimate (.+) s$/, 'estimation locale $1 s'], [/^\$(.+)\/\$(.+) today$/, "$$$1/$$$2 aujourd'hui"],
+    [/^Daily Nexus budget is exhausted$/, 'Budget Nexus du jour épuisé'], [/^No API key for the base model$/, 'Aucune clé API pour le modèle de base'],
+    [/^Base mode is (local|api)$/, 'Mode de base : $1'], [/^Local model server is unreachable$/, 'Serveur de modèle local injoignable'],
+    [/^API base failed \((.+)\)$/, "Échec de la base API ($1)"],
+    [/^Central Core request: (.+)$/s, 'Requête du noyau central : $1'], [/^Microphone in use: (.+) since (.+)\.$/, 'Micro utilisé : $1 depuis $2.'],
+    [/^Motion activity: (\d+)% · next analysis delay: (.+) s$/, 'Activité : $1 % · prochaine analyse dans $2 s'],
+    [/^(\d+)% · next delay (.+) s$/, '$1 % · prochain délai $2 s'], [/^Image analysis delay saved: (.+) seconds\.$/, "Délai d'analyse enregistré : $1 secondes."],
+    [/^Motion-aware delay (.+) (s|seconds)$/, 'Délai selon le mouvement $1 $2'], [/^Delay (.+) (s|seconds) after completion$/, 'Délai $1 $2 après la fin'],
+    [/^Finishing current run$/, "Fin de l'exécution en cours"], [/^idle check in (\d+)s$/, 'vérification dans $1 s'],
+    [/^(.+) fps$/, '$1 i/s'], [/^faces (.+) Hz$/, 'visages $1 Hz'], [/^(\d+) ms old$/, 'il y a $1 ms'], [/^(\d+) candidates$/, '$1 candidates'],
+    [/^([\d.]+) seconds ready$/, '$1 secondes prêtes'], [/^audio takes precedence over text$/, "l'audio prime sur le texte"],
+    [/^(.+)% preference$/, 'préférence $1 %'], [/^lead (.+)$/, 'avance $1'], [/^(\d+) summaries$/, '$1 résumés'],
+    [/^Live updates: (ON|OFF)$/, 'Mises à jour en direct : $1'],
   ];
+  // Compound labels ("title; detail", "a · b"): translate each part on its own.
+  const SEPARATORS = ['; ', ' · '];
   const LANGS = {en: 'English', fr: 'Français'};
   // Free text from GLaDOS, the user, memory and the event log stays as written.
   const SKIP = '#home-wire,#full-wire,#context-sections,#memory-facts,#memory-recall,pre,code,textarea,script,style,[data-no-i18n]';
@@ -294,6 +455,11 @@
     if (!key) return null;
     if (Object.hasOwn(FR, key)) return FR[key];
     for (const [pattern, replacement] of FR_PATTERNS) if (pattern.test(key)) return key.replace(pattern, replacement);
+    for (const separator of SEPARATORS) {
+      if (!key.includes(separator)) continue;
+      const parts = key.split(separator), shown = parts.map(part => translate(part) ?? part);
+      if (shown.some((part, i) => part !== parts[i])) return shown.join(separator);
+    }
     return null;
   };
   const skipped = node => {

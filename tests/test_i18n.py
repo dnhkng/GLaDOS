@@ -83,3 +83,11 @@ def test_live_values_keep_their_numbers() -> None:
         "Médiane des 12 dernières",
         "Unknown text",
     ]
+
+
+def test_compound_labels_translate_each_part() -> None:
+    assert _french(["0 / 2 channels active · 0 queued", "Capability area; 14 choices · collapse −", "online · 4 tools"]) == [
+        "0 / 2 canaux actifs · 0 en file",
+        "Domaine de capacité; 14 choix · replier −",
+        "en ligne · 4 outils",
+    ]
