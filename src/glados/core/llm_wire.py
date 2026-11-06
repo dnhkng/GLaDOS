@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import re
 from typing import Any, ClassVar
 
 from loguru import logger
@@ -68,10 +69,13 @@ class LLMWireFormat:
                 for tool_call in tool_calls:
                     if not isinstance(tool_call, dict):
                         continue
-                    function = tool_call.get("function", {}) if isinstance(tool_call.get("function"), dict) else {}
+                    function = dict(tool_call["function"]) if isinstance(tool_call.get("function"), dict) else {}
                     arguments = function.get("arguments")
                     if not isinstance(arguments, str):
                         function["arguments"] = json.dumps(arguments or {})
+                    # Offered tools are renamed the same way; a dotted MCP name in history fails the whole request.
+                    if isinstance(function.get("name"), str):
+                        function["name"] = re.sub(r"[^a-zA-Z0-9_-]", "_", function["name"])
                     tool_call_id = tool_call.get("id") or ""
                     normalized_calls.append(
                         {

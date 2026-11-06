@@ -620,3 +620,45 @@ def test_a_yes_to_her_search_offer_requires_the_search_call(monkeypatch: pytest.
     processor.run()
     assert bodies[0]["tool_choice"] == "required"
     assert [tool["function"]["name"] for tool in bodies[0]["tools"]] == [SEARCH_TOOL.replace(".", "_")]
+
+
+def test_dotted_tool_names_in_history_are_renamed_like_the_offered_tools() -> None:
+    from glados.core.llm_wire import LLMWireFormat
+
+    call = {"id": "c1", "type": "function", "function": {"name": SEARCH_TOOL, "arguments": {"query": "q"}}}
+    history = [{"role": "assistant", "content": "", "tool_calls": [call]}]
+    sent = LLMWireFormat._sanitize_messages_for_openai(history)
+    assert sent[0]["tool_calls"][0]["function"]["name"] == SEARCH_TOOL.replace(".", "_")
+    assert call["function"]["name"] == SEARCH_TOOL, "the stored history keeps the real name"
+
+
+def test_built_in_lines_follow_the_reply_language() -> None:
+    processor = make_processor()
+    processor._say_fixed("Your search is queued.", "Je lance la recherche.")
+    processor.language_reminder = "Réponds en français."
+    processor._say_fixed("Your search is queued.", "Je lance la recherche.")
+    spoken = [item.text for item in processor.tts_input_queue.queue]
+    assert spoken == ["Your search is queued.", "Je lance la recherche."]
+
+
+def test_finished_search_goes_straight_to_central() -> None:
+    from glados.autonomy.loop import SEARCH_INSTRUCTION
+    from glados.autonomy.slots import TaskSlotStore
+    from tests.test_nexus_core import make_loop
+
+    loop = make_loop()
+    loop._central_queue = queue.Queue()
+    loop._slot_store = slots = loop._slot_store or TaskSlotStore()
+    slots.update_slot(
+        "task_search_abc",
+        "Web search: best seller",
+        "partial",
+        "Requested web search has partial findings: best seller",
+        report="Echo Dot, source https://example.org/top",
+        update_priority="important",
+    )
+    loop._scan_slots()
+    assert loop._deliver_direct()
+    request = loop._central_queue.get_nowait()
+    assert SEARCH_INSTRUCTION in request["content"] and "example.org/top" in request["content"]
+    assert loop._llm_queue.empty(), "the local reviewer no longer delays an awaited result"

@@ -241,7 +241,9 @@ class LanguageModelProcessor(LLMWireFormat):
         tool_calls = [call for call in tool_calls if call.get("function", {}).get("name") in tool_names]
         if not tool_calls:
             if not autonomy_mode:
-                self._process_sentence_for_tts(["I don't have an available tool for that action."])
+                self._say_fixed(
+                    "I don't have an available tool for that action.", "Je n'ai aucun outil pour cette action."
+                )
             return
         for tool_call in tool_calls:
             tool_call.setdefault("type", "function")
@@ -317,6 +319,10 @@ class LanguageModelProcessor(LLMWireFormat):
                 )
             )
             self._response_has_text = True
+
+    def _say_fixed(self, english: str, french: str) -> None:
+        """Speak a built-in line in the reply language."""
+        self._process_sentence_for_tts([french if self.language_reminder else english])
 
     def _build_context_entries(self, autonomy_mode: bool, *, preview: bool = False) -> list[dict[str, Any]]:
         """Assemble real inference messages with provenance kept out of the payload."""
@@ -819,10 +825,10 @@ class LanguageModelProcessor(LLMWireFormat):
             if isinstance(pending, dict) and pending.get("status") in {"queued", "running"}:
                 # A progress acknowledgement needs no inference or unrelated context.
                 self._conversation_store.append(turn.llm_message)
-                acknowledgement = (
-                    "Your search is queued." if pending["status"] == "queued" else "I'm checking that now."
-                )
-                self._process_sentence_for_tts([acknowledgement])
+                if pending["status"] == "queued":
+                    self._say_fixed("Your search is queued.", "Je lance la recherche.")
+                else:
+                    self._say_fixed("I'm checking that now.", "Je vérifie ça.")
                 self.tts_input_queue.put(SpeechText("<EOS>", generation=self._reply_generation))
                 return False
         if self._before_reply and not turn.autonomy_mode and turn.llm_message.get("role") == "user":
@@ -895,7 +901,10 @@ class LanguageModelProcessor(LLMWireFormat):
     def _dispatch_fixed_action(self, turn: ProcessorTurn) -> bool:
         if turn.route and turn.route["action"] == "tool" and self.router:
             if not self.router.store.authorize(turn.route):
-                self._process_sentence_for_tts(["That action changed while I was checking. Please ask again."])
+                self._say_fixed(
+                    "That action changed while I was checking. Please ask again.",
+                    "Cette action a changé pendant que je vérifiais. Redemande-moi.",
+                )
                 self.tts_input_queue.put(SpeechText("<EOS>", generation=self._reply_generation))
                 return True
             call = {
@@ -1245,8 +1254,7 @@ class LanguageModelProcessor(LLMWireFormat):
                 routing_permit=turn.routing_permit,
             )
         elif self.processing_active_event.is_set() and turn.search_planning:
-            failed = "Je n'ai pas pu lancer la recherche." if self.language_reminder else None
-            self._process_sentence_for_tts([failed or "I couldn't start the internet search."])
+            self._say_fixed("I couldn't start the internet search.", "Je n'ai pas pu lancer la recherche.")
         elif self.processing_active_event.is_set() and not turn.autonomy_mode:
             for segment in state.speech_parser.feed("", final=True):
                 if segment.emotion != state.sentence_emotion and state.sentence_buffer:
@@ -1355,25 +1363,39 @@ class LanguageModelProcessor(LLMWireFormat):
         except requests.exceptions.Timeout as e:
             self._autonomy_error = type(e).__name__
             logger.error(f"LLM Processor: Request to LLM timed out: {e}")
-            self._process_sentence_for_tts(["My brain seems to be taking too long to respond. It might be overloaded."])
+            self._say_fixed(
+                "My brain seems to be taking too long to respond. It might be overloaded.",
+                "Mon cerveau met trop de temps à répondre. Il est peut-être surchargé.",
+            )
         except requests.exceptions.HTTPError as e:
             self._autonomy_error = type(e).__name__
             if state.http_error_detail:
                 code, detail = state.http_error_detail
                 logger.error("LLM Processor: HTTP error {} from LLM service: {}", code, detail)
-                self._process_sentence_for_tts([f"I received an error from my thinking module. HTTP status {code}."])
+                self._say_fixed(
+                    f"I received an error from my thinking module. HTTP status {code}.",
+                    f"Mon module de réflexion a renvoyé l'erreur {code}.",
+                )
             else:
                 code = e.response.status_code if e.response is not None else "unknown"
                 logger.error("LLM Processor: HTTP error {} from LLM service: {}", code, e)
-                self._process_sentence_for_tts([f"I received an error from my thinking module. HTTP status {code}."])
+                self._say_fixed(
+                    f"I received an error from my thinking module. HTTP status {code}.",
+                    f"Mon module de réflexion a renvoyé l'erreur {code}.",
+                )
         except requests.exceptions.RequestException as e:
             self._autonomy_error = type(e).__name__
             logger.error(f"LLM Processor: Request to LLM failed: {e}")
-            self._process_sentence_for_tts(["Sorry, I encountered an error trying to reach my brain."])
+            self._say_fixed(
+                "Sorry, I encountered an error trying to reach my brain.",
+                "Désolée, je n'arrive pas à joindre mon cerveau.",
+            )
         except Exception as e:
             self._autonomy_error = type(e).__name__
             logger.exception("LLM Processor: Unexpected error during LLM request/streaming")
-            self._process_sentence_for_tts(["I'm having a little trouble thinking right now."])
+            self._say_fixed(
+                "I'm having a little trouble thinking right now.", "J'ai un peu de mal à réfléchir en ce moment."
+            )
         finally:
             if self._autonomy_error and self._remote_backend and (nexus := self._nexus()):
                 nexus.observe_failure(True, self._autonomy_error)  # The next request returns to the local base.

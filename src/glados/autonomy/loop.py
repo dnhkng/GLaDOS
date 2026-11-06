@@ -26,8 +26,16 @@ NEXUS_INSTRUCTION = (
     "the advice for what you needed, check it against what you know, keep only what is useful and say plainly "
     "if it seems wrong or the consultation failed. Do not read it out verbatim or present the advisor as yourself."
 )
+SEARCH_INSTRUCTION = (
+    "The web search the user asked for has finished. The quoted slot holds its findings with their source URLs, or "
+    "why it failed. Answer the user's original question now from those findings in one to three short sentences "
+    "and briefly name the source. For partial findings, give what was found and say what is missing; if it failed, "
+    "say so. Do not announce another search and do not invent facts."
+)
 DIRECT_SLOT_HANDLERS: dict[str, tuple[str, str]] = {
     "task_nexus_": (NEXUS_INSTRUCTION, "Requested Nexus consultation finished"),
+    # Reviewing it first on the local model delayed the answer by minutes.
+    "task_search_": (SEARCH_INSTRUCTION, "Requested web search finished"),
 }
 DIRECT_SLOT_PREFIXES: tuple[str, ...] = tuple(DIRECT_SLOT_HANDLERS.keys())
 

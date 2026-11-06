@@ -245,7 +245,8 @@ class ToolExecutor:
                 "Requested web search " + description + ": " + requested_query,
                 report=str(result),
                 importance=0.8 if failed else 0.7,
-                update_priority="important",
+                # A cancelled search has nothing left to deliver.
+                update_priority="important" if status != "cancelled" else "regular",
             )
 
         def search_progress(parameters: dict[str, Any] = call.args) -> str:
